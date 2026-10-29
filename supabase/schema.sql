@@ -30,7 +30,6 @@ CREATE TYPE public.app_status AS ENUM (
 );
 
 
-ALTER TYPE public.app_status OWNER TO postgres;
 
 --
 -- Name: assignment_type; Type: TYPE; Schema: public; Owner: postgres
@@ -43,7 +42,6 @@ CREATE TYPE public.assignment_type AS ENUM (
 );
 
 
-ALTER TYPE public.assignment_type OWNER TO postgres;
 
 --
 -- Name: submission_status; Type: TYPE; Schema: public; Owner: postgres
@@ -56,7 +54,6 @@ CREATE TYPE public.submission_status AS ENUM (
 );
 
 
-ALTER TYPE public.submission_status OWNER TO postgres;
 
 --
 -- Name: user_role; Type: TYPE; Schema: public; Owner: postgres
@@ -71,7 +68,6 @@ CREATE TYPE public.user_role AS ENUM (
 );
 
 
-ALTER TYPE public.user_role OWNER TO postgres;
 
 --
 -- Name: add_reward_points(uuid, integer); Type: FUNCTION; Schema: public; Owner: postgres
@@ -86,7 +82,6 @@ CREATE FUNCTION public.add_reward_points(p_student uuid, p_points integer) RETUR
 $$;
 
 
-ALTER FUNCTION public.add_reward_points(p_student uuid, p_points integer) OWNER TO postgres;
 
 --
 -- Name: enforce_staff_share(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -110,7 +105,6 @@ END;
 $$;
 
 
-ALTER FUNCTION public.enforce_staff_share() OWNER TO postgres;
 
 --
 -- Name: force_unverified_on_insert(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -126,7 +120,6 @@ begin
 end; $$;
 
 
-ALTER FUNCTION public.force_unverified_on_insert() OWNER TO postgres;
 
 --
 -- Name: is_admin(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -142,7 +135,6 @@ CREATE FUNCTION public.is_admin() RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public.is_admin() OWNER TO postgres;
 
 --
 -- Name: is_staff(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -158,7 +150,6 @@ CREATE FUNCTION public.is_staff() RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public.is_staff() OWNER TO postgres;
 
 --
 -- Name: next_student_code(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -196,7 +187,6 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.next_student_code() OWNER TO postgres;
 
 --
 -- Name: recompute_attendance(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -216,7 +206,6 @@ begin
 end; $$;
 
 
-ALTER FUNCTION public.recompute_attendance() OWNER TO postgres;
 
 --
 -- Name: recompute_avg_score(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -236,7 +225,6 @@ begin
 end; $$;
 
 
-ALTER FUNCTION public.recompute_avg_score() OWNER TO postgres;
 
 --
 -- Name: student_code_to_email(text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -252,7 +240,6 @@ CREATE FUNCTION public.student_code_to_email(code text) RETURNS text
 $$;
 
 
-ALTER FUNCTION public.student_code_to_email(code text) OWNER TO postgres;
 
 --
 -- Name: tutor_teaches(uuid); Type: FUNCTION; Schema: public; Owner: postgres
@@ -273,7 +260,6 @@ CREATE FUNCTION public.tutor_teaches(student uuid) RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public.tutor_teaches(student uuid) OWNER TO postgres;
 
 
 
@@ -290,7 +276,6 @@ CREATE TABLE public.audit_log (
 );
 
 
-ALTER TABLE public.audit_log OWNER TO postgres;
 
 --
 -- Name: audit_log_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -329,7 +314,6 @@ CREATE TABLE public.board_accounts (
 );
 
 
-ALTER TABLE public.board_accounts OWNER TO postgres;
 
 --
 -- Name: board_lessons; Type: TABLE; Schema: public; Owner: postgres
@@ -350,7 +334,6 @@ CREATE TABLE public.board_lessons (
 );
 
 
-ALTER TABLE public.board_lessons OWNER TO postgres;
 
 --
 -- Name: board_payments; Type: TABLE; Schema: public; Owner: postgres
@@ -367,7 +350,6 @@ CREATE TABLE public.board_payments (
 );
 
 
-ALTER TABLE public.board_payments OWNER TO postgres;
 
 --
 -- Name: class_groups; Type: TABLE; Schema: public; Owner: postgres
@@ -398,7 +380,6 @@ CREATE TABLE public.class_groups (
 );
 
 
-ALTER TABLE public.class_groups OWNER TO postgres;
 
 --
 -- Name: class_students; Type: TABLE; Schema: public; Owner: postgres
@@ -410,7 +391,6 @@ CREATE TABLE public.class_students (
 );
 
 
-ALTER TABLE public.class_students OWNER TO postgres;
 
 --
 -- Name: classes; Type: TABLE; Schema: public; Owner: postgres
@@ -440,7 +420,6 @@ CREATE TABLE public.classes (
 );
 
 
-ALTER TABLE public.classes OWNER TO postgres;
 
 --
 -- Name: game_ai_items; Type: TABLE; Schema: public; Owner: postgres
@@ -458,7 +437,6 @@ CREATE TABLE public.game_ai_items (
 );
 
 
-ALTER TABLE public.game_ai_items OWNER TO postgres;
 
 --
 -- Name: game_assignments; Type: TABLE; Schema: public; Owner: postgres
@@ -474,7 +452,6 @@ CREATE TABLE public.game_assignments (
 );
 
 
-ALTER TABLE public.game_assignments OWNER TO postgres;
 
 --
 -- Name: game_mastery; Type: TABLE; Schema: public; Owner: postgres
@@ -491,7 +468,6 @@ CREATE TABLE public.game_mastery (
 );
 
 
-ALTER TABLE public.game_mastery OWNER TO postgres;
 
 --
 -- Name: game_scores; Type: TABLE; Schema: public; Owner: postgres
@@ -514,7 +490,6 @@ CREATE TABLE public.game_scores (
 );
 
 
-ALTER TABLE public.game_scores OWNER TO postgres;
 
 --
 -- Name: lesson_notes; Type: TABLE; Schema: public; Owner: postgres
@@ -533,7 +508,6 @@ CREATE TABLE public.lesson_notes (
 );
 
 
-ALTER TABLE public.lesson_notes OWNER TO postgres;
 
 --
 -- Name: live_board_inbox; Type: TABLE; Schema: public; Owner: postgres
@@ -551,7 +525,6 @@ CREATE TABLE public.live_board_inbox (
 );
 
 
-ALTER TABLE public.live_board_inbox OWNER TO postgres;
 
 --
 -- Name: live_class_marks; Type: TABLE; Schema: public; Owner: postgres
@@ -571,7 +544,6 @@ CREATE TABLE public.live_class_marks (
 );
 
 
-ALTER TABLE public.live_class_marks OWNER TO postgres;
 
 --
 -- Name: live_quiz_answers; Type: TABLE; Schema: public; Owner: postgres
@@ -590,7 +562,6 @@ CREATE TABLE public.live_quiz_answers (
 );
 
 
-ALTER TABLE public.live_quiz_answers OWNER TO postgres;
 
 --
 -- Name: live_quizzes; Type: TABLE; Schema: public; Owner: postgres
@@ -613,7 +584,6 @@ CREATE TABLE public.live_quizzes (
 );
 
 
-ALTER TABLE public.live_quizzes OWNER TO postgres;
 
 --
 -- Name: live_session_guests; Type: TABLE; Schema: public; Owner: postgres
@@ -633,7 +603,6 @@ CREATE TABLE public.live_session_guests (
 );
 
 
-ALTER TABLE public.live_session_guests OWNER TO postgres;
 
 --
 -- Name: live_session_participants; Type: TABLE; Schema: public; Owner: postgres
@@ -650,7 +619,6 @@ CREATE TABLE public.live_session_participants (
 );
 
 
-ALTER TABLE public.live_session_participants OWNER TO postgres;
 
 --
 -- Name: live_sessions; Type: TABLE; Schema: public; Owner: postgres
@@ -672,7 +640,6 @@ CREATE TABLE public.live_sessions (
 );
 
 
-ALTER TABLE public.live_sessions OWNER TO postgres;
 
 --
 -- Name: notifications; Type: TABLE; Schema: public; Owner: postgres
@@ -689,7 +656,6 @@ CREATE TABLE public.notifications (
 );
 
 
-ALTER TABLE public.notifications OWNER TO postgres;
 
 --
 -- Name: payments; Type: TABLE; Schema: public; Owner: postgres
@@ -712,7 +678,6 @@ CREATE TABLE public.payments (
 );
 
 
-ALTER TABLE public.payments OWNER TO postgres;
 
 --
 -- Name: profiles; Type: TABLE; Schema: public; Owner: postgres
@@ -776,7 +741,6 @@ CREATE TABLE public.profiles (
 );
 
 
-ALTER TABLE public.profiles OWNER TO postgres;
 
 --
 -- Name: push_subscriptions; Type: TABLE; Schema: public; Owner: postgres
@@ -793,7 +757,6 @@ CREATE TABLE public.push_subscriptions (
 );
 
 
-ALTER TABLE public.push_subscriptions OWNER TO postgres;
 
 --
 -- Name: question_bank; Type: TABLE; Schema: public; Owner: postgres
@@ -816,7 +779,6 @@ CREATE TABLE public.question_bank (
 );
 
 
-ALTER TABLE public.question_bank OWNER TO postgres;
 
 --
 -- Name: quiz_sets; Type: TABLE; Schema: public; Owner: postgres
@@ -833,7 +795,6 @@ CREATE TABLE public.quiz_sets (
 );
 
 
-ALTER TABLE public.quiz_sets OWNER TO postgres;
 
 --
 -- Name: reward_events; Type: TABLE; Schema: public; Owner: postgres
@@ -852,7 +813,6 @@ CREATE TABLE public.reward_events (
 );
 
 
-ALTER TABLE public.reward_events OWNER TO postgres;
 
 --
 -- Name: student_code_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -866,7 +826,6 @@ CREATE SEQUENCE public.student_code_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.student_code_seq OWNER TO postgres;
 
 --
 -- Name: teacher_students; Type: TABLE; Schema: public; Owner: postgres
@@ -879,7 +838,6 @@ CREATE TABLE public.teacher_students (
 );
 
 
-ALTER TABLE public.teacher_students OWNER TO postgres;
 
 --
 -- Name: audit_log audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
@@ -1825,6 +1783,44 @@ CREATE POLICY "tutor read own learners" ON public.profiles FOR SELECT USING (pub
 --
 -- PostgreSQL database dump complete
 --
+
+-- Indexes
+CREATE INDEX board_accounts_paid_idx ON public.board_accounts USING btree (paid_until);
+CREATE INDEX board_lessons_owner_idx ON public.board_lessons USING btree (owner_id, updated_at DESC);
+CREATE INDEX board_lessons_shared_idx ON public.board_lessons USING btree (shared, updated_at DESC) WHERE shared;
+CREATE INDEX board_payments_user_idx ON public.board_payments USING btree (user_id, paid_at DESC);
+CREATE INDEX class_groups_track_idx ON public.class_groups USING btree (status, track, subject);
+CREATE INDEX class_groups_tutor_idx ON public.class_groups USING btree (tutor_id, status);
+CREATE INDEX classes_group_idx ON public.classes USING btree (group_id, starts_at);
+CREATE INDEX classes_series ON public.classes USING btree (series_id);
+CREATE INDEX classes_tutor_id ON public.classes USING btree (tutor_id);
+CREATE INDEX game_ai_items_pool_idx ON public.game_ai_items USING btree (kind, difficulty, hidden, created_at DESC);
+CREATE INDEX game_mastery_recent_idx ON public.game_mastery USING btree (student_id, last_fixed_at DESC);
+CREATE INDEX game_scores_board_idx ON public.game_scores USING btree (game_id, level, score DESC);
+CREATE INDEX game_scores_stop_idx ON public.game_scores USING btree (student_id, stop_id) WHERE (stop_id IS NOT NULL);
+CREATE INDEX game_scores_student_idx ON public.game_scores USING btree (student_id, game_id, score DESC);
+CREATE INDEX game_scores_student_time_idx ON public.game_scores USING btree (student_id, created_at DESC);
+CREATE INDEX lesson_notes_class_idx ON public.lesson_notes USING btree (class_id, taught_on DESC);
+CREATE INDEX live_board_inbox_recent ON public.live_board_inbox USING btree (session_id, at);
+CREATE INDEX live_class_marks_session ON public.live_class_marks USING btree (session_id);
+CREATE INDEX live_quizzes_class_idx ON public.live_quizzes USING btree (class_id, created_at DESC);
+CREATE INDEX live_quizzes_session_idx ON public.live_quizzes USING btree (session_id, created_at DESC);
+CREATE INDEX live_session_guests_session_idx ON public.live_session_guests USING btree (session_id);
+CREATE INDEX live_session_participants_student ON public.live_session_participants USING btree (student_id, joined_at DESC);
+CREATE INDEX live_sessions_class_idx ON public.live_sessions USING btree (class_id, created_at DESC);
+CREATE INDEX live_sessions_host_idx ON public.live_sessions USING btree (host_id, created_at DESC);
+CREATE UNIQUE INDEX live_sessions_live_code ON public.live_sessions USING btree (code) WHERE (status = 'live'::text);
+CREATE INDEX notifications_user_created ON public.notifications USING btree (user_id, created_at DESC);
+CREATE INDEX payments_email_idx ON public.payments USING btree (lower(email));
+CREATE INDEX payments_student_idx ON public.payments USING btree (student_id, paid_at DESC);
+CREATE INDEX push_subscriptions_user ON public.push_subscriptions USING btree (user_id);
+CREATE INDEX question_bank_exam_idx ON public.question_bank USING btree (exam);
+CREATE INDEX question_bank_filter_idx ON public.question_bank USING btree (subject, level, topic);
+CREATE INDEX question_bank_group_idx ON public.question_bank USING btree (group_name);
+CREATE INDEX question_bank_recent_idx ON public.question_bank USING btree (created_at DESC);
+CREATE INDEX quiz_sets_owner_idx ON public.quiz_sets USING btree (owner_id, updated_at DESC);
+CREATE INDEX reward_events_day_idx ON public.reward_events USING btree (student_id, source, day);
+CREATE INDEX reward_events_student_idx ON public.reward_events USING btree (student_id, created_at DESC);
 
 -- Storage: slides and pictures put on the board (public read; uploads go
 -- through the server with signed URLs).
