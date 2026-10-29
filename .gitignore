@@ -1,0 +1,14 @@
+node_modules
+.next
+.env
+.env.local
+
+
+# TypeScript incremental build cache (generated)
+tsconfig.tsbuildinfo
+verifyX.log
+
+
+# Playwright
+/test-results/
+/playwright-report/

@@ -1,0 +1,1157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+
+/* ────────────────────────────────────────────────────────────────────
+   DESIGN TOKENS — single reference for a consistent, mature system.
+   Colours live in tailwind.config.ts (ink / board / gold / chalk / line…).
+   These document the type, spacing, radius and elevation rhythm so pages
+   stay visually uniform. Prefer the Tailwind utilities noted alongside.
+   ──────────────────────────────────────────────────────────────────── */
+:root {
+  /* Type scale (Tailwind):  xs .75 · sm .875 · base 1 · lg 1.125 · xl 1.25
+     2xl 1.5 · 3xl 1.875 · 4xl 2.25 · 5xl 3 · 6xl 3.75rem  — body ≥ 15px.   */
+  /* Spacing rhythm: 4/8px grid. Section padding py-16 (mobile) → md:py-20.
+     Card padding p-5/p-6. Gaps: 16px (gap-4) grids, 20–24px feature rows.  */
+  --space-section: 4rem;     /* 64px  */
+  --space-section-lg: 5rem;  /* 80px  */
+  /* Radius: inputs/buttons rounded-xl (12px), cards rounded-2xl (16px),
+     feature panels rounded-3xl (24px).                                     */
+  /* Elevation: one scale — shadow-card (resting) → shadow-lift (hover).    */
+}
+/* Consistent section vertical rhythm — use on marketing content sections. */
+.section-y { padding-top: var(--space-section); padding-bottom: var(--space-section); }
+@media (min-width: 768px) {
+  .section-y { padding-top: var(--space-section-lg); padding-bottom: var(--space-section-lg); }
+}
+
+body { @apply bg-chalk text-ink font-body antialiased; }
+/* Taps act at once on phones: no waiting to see if it's a double-tap zoom,
+   and no grey flash. (Pinch-zoom still works.) */
+a, button, input, select, textarea, label, summary, [role="button"], [role="tab"] { touch-action: manipulation; }
+button, a, [role="button"] { -webkit-tap-highlight-color: transparent; }
+
+/* Signature texture: faint graph-paper grid on dark sections */
+.boardgrid {
+  background-image:
+    linear-gradient(rgba(247,168,75,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(247,168,75,.05) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+@layer components {
+  .btn        { @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl font-bold text-sm min-h-[44px] px-5 transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60; }
+  .btn-gold   { @apply btn bg-gold text-board hover:bg-gold-soft shadow-[0_3px_14px_rgba(245,149,30,.32)]; }
+  .btn-ink    { @apply btn bg-ink text-white hover:bg-[#0F3A6B]; }
+  .btn-ghost  { @apply btn bg-white border border-line text-ink hover:bg-chalk; }
+  .btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700; }
+  .card       { @apply bg-white rounded-2xl shadow-card border border-line/60; }
+  .field      { @apply w-full rounded-xl border border-line bg-white px-4 py-2.5 text-sm outline-none focus:border-gold focus:ring-2 focus:ring-gold/20; }
+  /* Soft, rounded "Terra"-style input used on the login screen. */
+  .terra-field { @apply w-full rounded-2xl border border-gold/20 bg-chalk/60 px-4 py-3.5 text-sm text-ink outline-none transition focus:border-gold focus:bg-white focus:ring-4 focus:ring-gold/15; }
+  .flabel     { @apply block text-[13px] font-bold text-ink/70 mb-1.5; }
+  /* Invalid form control — red border + ring, driven by the aria-invalid attribute. */
+  .field[aria-invalid="true"], .terra-field[aria-invalid="true"] { @apply border-red-400 focus:border-red-500 focus:ring-red-500/20; }
+  /* Consistent portal page title — proportional on mobile, bolder & tighter. */
+  .page-title { @apply font-display text-2xl font-bold tracking-tight md:text-3xl; }
+  .pill       { @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-extrabold tracking-wide; }
+  .pill-amber { @apply pill bg-amber-100 text-amber-900; }
+  .pill-green { @apply pill bg-emerald-100 text-emerald-900; }
+  .pill-red   { @apply pill bg-red-100 text-red-900; }
+  .pill-blue  { @apply pill bg-blue-100 text-blue-900; }
+  .pill-gold  { @apply pill bg-gold-pale text-gold-deep; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ── Page transitions ─────────────────────────────────── */
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-enter { animation: pageEnter .22s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .page-enter { animation: none; }
+}
+
+/* ── Glassmorphism ──────────────────────────────────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 4px 24px rgba(10, 31, 61, 0.06);
+}
+.glass-dark {
+  background: rgba(15, 58, 107, 0.85);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.glass-card {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgba(26,96,171,.05), 0 8px 28px rgba(26,96,171,.08);
+}
+
+/* ── Modern card interactions ───────────────────────────── */
+.card {
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(26,96,171,.06), 0 14px 36px rgba(26,96,171,.12);
+}
+
+/* ── Small, tasteful landing-hero motion ────────────────── */
+@keyframes heroRise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+.hero-rise { animation: heroRise .7s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes heroZoom { from { transform: scale(1.05); } to { transform: scale(1.13); } }
+.hero-zoom { animation: heroZoom 20s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .hero-rise, .hero-zoom { animation: none; }
+}
+
+/* ── Soft tinted backdrop for the marketing site ────────── */
+/* Gives glass cards something to frost over instead of flat white. */
+.marketing-bg {
+  background:
+    radial-gradient(1100px 480px at 88% -6%, rgba(239,174,86,.12), transparent 60%),
+    radial-gradient(900px 460px at -8% 10%, rgba(26,96,171,.08), transparent 55%),
+    radial-gradient(820px 520px at 55% 118%, rgba(239,174,86,.07), transparent 60%),
+    #F7F8FB;
+}
+.glass-card:hover { box-shadow: 0 2px 6px rgba(26,96,171,.07), 0 16px 44px rgba(26,96,171,.13); }
+
+/* ── Soft gradient backdrop for portal pages ────────────── */
+.portal-bg {
+  background:
+    radial-gradient(1200px 500px at 85% -10%, rgba(239,174,86,.10), transparent 60%),
+    radial-gradient(900px 400px at -10% 110%, rgba(26,96,171,.06), transparent 55%),
+    #F6F6F3;
+}
+
+/* ── Better focus rings everywhere ──────────────────────── */
+:focus-visible {
+  outline: 2px solid #F5951E;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* The gold ring disappears against gold buttons and chips — outline those in
+   board navy instead so keyboard focus is never invisible. */
+.btn-gold:focus-visible,
+.bg-gold:focus-visible,
+.bg-gold-soft:focus-visible { outline-color: #0F3A6B; }
+/* A programmatic focus target (the skip link's landing spot) draws no ring —
+   the ring belongs on the control the user actually moved to. */
+#main:focus, #main:focus-visible { outline: none; }
+
+/* ── Skip to content ─────────────────────────────────────
+   Off-screen until it is focused, then it drops in as the first stop for a
+   keyboard user so they can jump past the whole navigation. */
+.skip-link {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 200;
+  transform: translateY(-150%);
+  padding: 0.6rem 1rem;
+  border-radius: 0.75rem;
+  background: #F5951E;
+  color: #0F3A6B;
+  font-size: 0.85rem;
+  font-weight: 800;
+  box-shadow: 0 8px 24px rgba(10, 31, 61, 0.25);
+  transition: transform 0.15s ease-out;
+}
+.skip-link:focus { transform: translateY(0); }
+
+/* ── Smooth scrolling ───────────────────────────────────── */
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .card:hover { transform: none; }
+}
+
+/* ── Dark mode ──────────────────────────────────────────── */
+.dark body { background: #0A2A4F; color: #E8EDF5; }
+.dark .portal-bg {
+  background:
+    radial-gradient(1200px 500px at 85% -10%, rgba(239,174,86,.10), transparent 60%),
+    radial-gradient(900px 400px at -10% 110%, rgba(255,255,255,.03), transparent 55%),
+    #0A2A4F;
+}
+.dark .card,
+.dark .glass-card {
+  background: rgba(15, 58, 107, 0.55);
+  border-color: rgba(255,255,255,0.08);
+  color: #E8EDF5;
+}
+.dark .field {
+  background: #0F3A6B;
+  border-color: rgba(255,255,255,0.12);
+  color: #E8EDF5;
+}
+.dark .field::placeholder { color: rgba(232,237,245,0.35); }
+.dark .text-ink\/45,
+.dark .text-ink\/40,
+.dark .text-ink\/50 { color: rgba(232,237,245,0.5) !important; }
+.dark .text-ink,
+.dark .text-ink\/75,
+.dark .text-ink\/70 { color: #E8EDF5 !important; }
+.dark .bg-chalk { background: #142138 !important; }
+.dark .border-line { border-color: rgba(255,255,255,0.1) !important; }
+.dark .glass-dark { background: rgba(10, 42, 79, 0.9); }
+
+/* ── Dark-mode legibility inside the app shells (portal / admin / tutor /
+   parent all live under .portal-bg) ─────────────────────────────────────
+   The base dark rules only remapped a handful of text-ink opacities, so the
+   many others (55/60/35/30/65/25…) stayed dark-navy on dark cards and
+   vanished. Cover the full range, and darken white inner tiles so the
+   now-light text sits on a dark surface instead of glaring white. */
+.dark .portal-bg .text-ink\/80,
+.dark .portal-bg .text-ink\/75,
+.dark .portal-bg .text-ink\/70,
+.dark .portal-bg .text-ink\/65 { color: #E8EDF5 !important; }
+.dark .portal-bg .text-ink\/60,
+.dark .portal-bg .text-ink\/55,
+.dark .portal-bg .text-ink\/50 { color: rgba(232,237,245,0.72) !important; }
+.dark .portal-bg .text-ink\/45,
+.dark .portal-bg .text-ink\/40,
+.dark .portal-bg .text-ink\/35 { color: rgba(232,237,245,0.58) !important; }
+.dark .portal-bg .text-ink\/30,
+.dark .portal-bg .text-ink\/25,
+.dark .portal-bg .text-ink\/15 { color: rgba(232,237,245,0.44) !important; }
+.dark .portal-bg .bg-white { background: #123a5f; }
+
+/* ── "Paper" surfaces that must stay light in dark mode ──────────────────
+   Printable certificate / report-card documents and the marketing phone
+   mock. They opt out with the .doc-light class so their white sheets and
+   dark ink survive the global dark overrides. */
+.dark .doc-light .bg-white { background: #ffffff !important; }
+.dark .doc-light .bg-chalk { background: #F4F1EA !important; }
+.dark .doc-light .border-line { border-color: #E3E8EE !important; }
+.dark .doc-light [class*="text-ink"] { color: #1A2233 !important; }
+.dark .doc-light .text-board { color: #0F3A6B !important; }
+
+/* ── Landing page polish ────────────────────────────────── */
+@keyframes revealUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes floatY {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+.reveal { opacity: 0; animation: revealUp .7s cubic-bezier(.16,.84,.44,1) forwards; }
+.reveal-1 { animation-delay: .05s; }
+.reveal-2 { animation-delay: .15s; }
+.reveal-3 { animation-delay: .25s; }
+.reveal-4 { animation-delay: .35s; }
+.float { animation: floatY 5s ease-in-out infinite; }
+
+/* ── Character mascots (login hero, dashboard heroes) ─────── */
+@keyframes mascotIn {
+  from { opacity: 0; transform: translateY(16px) scale(.9); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes mascotBob {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50%      { transform: translateY(-7px) rotate(1.5deg); }
+}
+.mascot-in { animation: mascotIn .6s cubic-bezier(.16,.84,.44,1) both; }
+/* the bob starts after the entrance settles */
+.mascot-bob { animation: mascotBob 4s ease-in-out .6s infinite; }
+/* login hero: entrance, then a continuous gentle bob */
+.mascot-greet { animation: mascotIn .6s cubic-bezier(.16,.84,.44,1) both, mascotBob 4s ease-in-out .7s infinite; }
+/* (the global prefers-reduced-motion rule disables both, leaving them visible) */
+
+/* ── Celebration confetti (components/ui/Confetti) ───────── */
+@keyframes confettiFall {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(105vh) rotate(720deg); opacity: 0; }
+}
+.confetti-piece { animation: confettiFall linear forwards; }
+@media (prefers-reduced-motion: reduce) { .confetti-piece { display: none; } }
+
+/* ── Loading skeletons (route-level loading.tsx) ─────────── */
+.skeleton { position: relative; overflow: hidden; background: rgba(26,96,171,.08); }
+.skeleton::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+  animation: skeletonSweep 1.4s ease infinite;
+}
+@keyframes skeletonSweep { to { transform: translateX(100%); } }
+.dark .skeleton { background: rgba(255,255,255,.06); }
+.dark .skeleton::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,.09), transparent); }
+@media (prefers-reduced-motion: reduce) { .skeleton::after { animation: none; } }
+
+/* ── Hero image orbit — decorative chips circling 360° around the image.
+   The layer spins; each chip counter-spins so its glyph stays upright. */
+@keyframes heroOrbit { to { transform: rotate(360deg); } }
+@keyframes heroOrbitCounter { to { transform: rotate(-360deg); } }
+.hero-orbit { animation: heroOrbit 28s linear infinite; }
+.hero-orbit__chip { animation: heroOrbitCounter 28s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .hero-orbit, .hero-orbit__chip { animation: none; }
+}
+
+/* gold diagonal accent stroke (brand logo motif) */
+.accent-stroke { position: relative; }
+.accent-stroke::after {
+  content: ""; position: absolute; left: 0; bottom: -6px;
+  height: 4px; width: 56px; border-radius: 4px;
+  background: linear-gradient(90deg, #F5951E, #F9B24E);
+}
+
+/* dotted grid texture for light sections */
+.dotgrid {
+  background-image: radial-gradient(rgba(26,96,171,.10) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* hover lift for feature cards */
+.hovlift { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+.hovlift:hover { transform: translateY(-4px); box-shadow: 0 18px 44px rgba(26,96,171,.14); }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .float { animation: none; opacity: 1; }
+}
+
+/* ── Scroll-triggered reveal (IntersectionObserver) ─────── */
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity .6s cubic-bezier(.16,.84,.44,1), transform .6s cubic-bezier(.16,.84,.44,1);
+}
+.reveal-on-scroll.in-view {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal-on-scroll { opacity: 1; transform: none; transition: none; }
+}
+
+/* ── Hero image glow ────────────────────────────────────── */
+.hero-glow {
+  background: radial-gradient(ellipse 70% 60% at 60% 50%, rgba(239,174,86,.18), transparent 70%);
+}
+
+/* ── Animated progress bar (grows from left on mount) ──── */
+@keyframes bar-expand {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.bar-animate {
+  transform-origin: left;
+  transform: scaleX(0);
+  animation: bar-expand 1s cubic-bezier(.4,0,.2,1) .45s forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bar-animate { animation: none; transform: scaleX(1); }
+}
+
+/* ── Frosted glass for dark hero stat chips ─────────────── */
+.glass-hero-chip {
+  background: rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.875rem;
+}
+
+/* ── Stat card shimmer on hover ─────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+.stat-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.35) 50%, transparent 60%);
+  background-size: 200% 100%;
+  opacity: 0;
+  transition: opacity .2s;
+  pointer-events: none;
+}
+.stat-shimmer:hover::after {
+  opacity: 1;
+  animation: shimmer .6s ease forwards;
+}
+
+/* ── Shimmering gradient text (headline accent word) ────── */
+@keyframes textShimmer {
+  to { background-position: 200% center; }
+}
+.text-shimmer {
+  background: linear-gradient(90deg, #F5951E 0%, #FFE7C8 50%, #F5951E 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: textShimmer 3.5s linear infinite;
+}
+
+/* ── Attention pulse for promo badges ───────────────────── */
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(239,174,86,.55); }
+  50%      { transform: scale(1.06); box-shadow: 0 0 0 7px rgba(239,174,86,0); }
+}
+.badge-pulse { animation: badgePulse 2.4s ease-in-out infinite; }
+/* The global prefers-reduced-motion rule (top of file) disables both. */
+
+/* ── Ken Burns (slow zoom/pan) for app onboarding slide photos ─── */
+@keyframes kenburns {
+  0%   { transform: scale(1.05) translate(0, 0); }
+  100% { transform: scale(1.18) translate(-2%, -2%); }
+}
+.kenburns { animation: kenburns 12s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .kenburns { animation: none; transform: scale(1.05); }
+}
+
+/* ── Drifting math symbols (homepage "math in motion") ──── */
+/* Gentle vertical + slight horizontal float with a small rotation —
+   distinct from .float (vertical-only). Used by <FloatingMath>. */
+@keyframes drift {
+  0%, 100% { transform: translate(0, 0) rotate(-4deg); }
+  50%      { transform: translate(6px, -14px) rotate(4deg); }
+}
+.drift { animation: drift 9s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .drift { animation: none; }
+}
+
+/* ── Aurora (soft drifting colour wash behind dashboard heroes) ── */
+@keyframes auroraShift {
+  0%, 100% { transform: translate3d(-6%, -4%, 0) scale(1.1);  opacity: .7; }
+  50%      { transform: translate3d(6%, 6%, 0)  scale(1.28); opacity: 1;  }
+}
+.aurora {
+  background:
+    radial-gradient(38% 50% at 26% 28%, rgba(239,174,86,.18), transparent 68%),
+    radial-gradient(46% 56% at 78% 64%, rgba(123,163,202,.20), transparent 70%);
+  filter: blur(30px);
+  animation: auroraShift 16s ease-in-out infinite;
+}
+
+/* ── Interactive card: lift + gold ring + icon "pop" on hover ──── */
+.card-interactive { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+.card-interactive:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 44px rgba(26,96,171,.16);
+  border-color: rgba(239,174,86,.55);
+}
+.card-interactive .ci-icon { transition: transform .25s ease; }
+.card-interactive:hover .ci-icon { transform: scale(1.12) rotate(-6deg); }
+/* tactile press — the card dips slightly when tapped/clicked */
+.card-interactive:active { transform: translateY(-1px) scale(.988); }
+
+/* Smooth pop-in for menus/dropdowns/popovers. */
+@keyframes popIn { from { opacity: 0; transform: scale(.96) translateY(-4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+.pop-in { animation: popIn .16s cubic-bezier(.16,.84,.44,1); transform-origin: top right; }
+.pop-in-left { animation: popIn .16s cubic-bezier(.16,.84,.44,1); transform-origin: top left; }
+
+/* Chat panel entrance (slides up from its launcher) + per-message entrance. */
+@keyframes chatIn { from { opacity: 0; transform: translateY(16px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.chat-in { animation: chatIn .22s cubic-bezier(.16,.84,.44,1); transform-origin: bottom right; }
+@keyframes msgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.msg-in { animation: msgIn .2s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) { .pop-in, .pop-in-left, .chat-in, .msg-in { animation: none; } }
+
+/* ── Modal / pop-up entrance ─────────────────────────────
+   A centered dialog fades its dim backdrop in while the panel pops up with a
+   soft overshoot. Opt in: add `modal-backdrop` to the dim/blur overlay and
+   `modal-pop` to the panel inside it. */
+@keyframes modalBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalPopIn {
+  from { opacity: 0; transform: scale(.92) translateY(12px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modal-backdrop { animation: modalBackdropIn .2s ease-out both; }
+.modal-pop { animation: modalPopIn .26s cubic-bezier(.18,.89,.32,1.08) both; transform-origin: center; }
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop, .modal-pop { animation: none; }
+}
+
+/* ── Tour spotlight ring (pulses around the highlighted element) ── */
+@keyframes tourPulse {
+  0%, 100% { outline-color: rgba(239,174,86,.95); }
+  50%      { outline-color: rgba(239,174,86,.35); }
+}
+.tour-ring {
+  outline: 3px solid rgba(239,174,86,.95);
+  outline-offset: 2px;
+  animation: tourPulse 1.8s ease-in-out infinite;
+}
+
+/* ── Crisp text over busy/dark backdrops (text-shadow inherits) ── */
+.text-crisp { text-shadow: 0 1px 3px rgba(7,22,44,.55); }
+
+/* ── Slow decorative rotating ring (behind hero imagery) ───────── */
+@keyframes ringSpin { to { transform: rotate(360deg); } }
+.ring-spin { animation: ringSpin 32s linear infinite; }
+
+/* ── Shine sweep across an image/card on hover ─────────────────── */
+.sheen { position: relative; overflow: hidden; }
+.sheen::after {
+  content: "";
+  position: absolute; inset: 0; z-index: 2;
+  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.38) 50%, transparent 60%);
+  transform: translateX(-130%);
+  transition: transform .9s ease;
+  pointer-events: none;
+}
+.sheen:hover::after { transform: translateX(130%); }
+
+/* ── Loot effects for the rewards shop ──────────────────────────── */
+/* Continuous coloured glow pulse for high-rarity cards. Colour is set per
+   card via the --loot-glow custom property. */
+@keyframes lootPulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--loot-glow, rgba(239,174,86,.0)); }
+  50%      { box-shadow: 0 0 34px -6px var(--loot-glow, rgba(239,174,86,.7)); }
+}
+.loot-pulse { animation: lootPulse 2.8s ease-in-out infinite; }
+
+/* Auto shine sweep (no hover needed) — for the rarest cards. */
+@keyframes lootShine { 0% { transform: translateX(-140%); } 60%, 100% { transform: translateX(140%); } }
+.loot-shine { position: relative; overflow: hidden; }
+.loot-shine::before {
+  content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: linear-gradient(105deg, transparent 42%, rgba(255,255,255,.5) 50%, transparent 58%);
+  animation: lootShine 4.5s ease-in-out infinite;
+}
+
+/* A slow-rotating conic halo behind a card (rarity aura). */
+@keyframes lootSpin { to { transform: rotate(360deg); } }
+.loot-aura::after {
+  content: ""; position: absolute; z-index: 0; pointer-events: none;
+  inset: -40%;
+  background: conic-gradient(from 0deg, transparent, var(--loot-glow, rgba(239,174,86,.5)), transparent 40%);
+  animation: lootSpin 6s linear infinite;
+  opacity: .5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loot-pulse, .loot-shine::before, .loot-aura::after { animation: none; }
+}
+
+/* ── Chat typing indicator (three bouncing dots) ────────────────── */
+@keyframes typingBlink {
+  0%, 80%, 100% { opacity: .25; transform: translateY(0); }
+  40%           { opacity: 1;   transform: translateY(-3px); }
+}
+.typing-dot { animation: typingBlink 1.2s ease-in-out infinite; }
+.typing-dot:nth-child(2) { animation-delay: .15s; }
+.typing-dot:nth-child(3) { animation-delay: .3s; }
+
+/* ── Neumorphism (soft-UI) for dashboard surfaces ───────────────── */
+/* Cards look gently extruded from the page: near-background fill with a
+   light top-left + dark bottom-right shadow pair. Dark mode gets its own
+   tuned pair (never an automatic flip). */
+.neu-card {
+  background: linear-gradient(145deg, #fdfdfb 0%, #eff0ec 100%);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow:
+    7px 7px 14px rgba(166, 175, 195, 0.34),
+    -7px -7px 14px rgba(255, 255, 255, 0.9);
+}
+.neu-card:hover {
+  box-shadow:
+    9px 9px 18px rgba(166, 175, 195, 0.42),
+    -9px -9px 18px rgba(255, 255, 255, 1);
+}
+.dark .neu-card {
+  background: linear-gradient(145deg, #114073 0%, #0B2B50 100%);
+  border-color: rgba(255, 255, 255, 0.07);
+  box-shadow:
+    7px 7px 14px rgba(3, 12, 24, 0.55),
+    -7px -7px 14px rgba(74, 122, 180, 0.16);
+}
+/* Sunken well (icon chips, tracks, inputs) */
+.neu-inset {
+  background: #eef0ec;
+  box-shadow:
+    inset 4px 4px 8px rgba(166, 175, 195, 0.35),
+    inset -4px -4px 8px rgba(255, 255, 255, 0.95);
+}
+.dark .neu-inset {
+  background: #0B2B50;
+  box-shadow:
+    inset 4px 4px 8px rgba(3, 12, 24, 0.6),
+    inset -4px -4px 8px rgba(74, 122, 180, 0.14);
+}
+/* The global prefers-reduced-motion rule (top of file) disables all of the above. */
+
+/* ══════════════════════════════════════════════════════════════════
+   PREMIUM LANDING UTILITIES
+   High-end marketing polish for the public pages. All motion is disabled
+   by the global prefers-reduced-motion rule at the top of this file.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Rich multi-point gradient mesh for hero / CTA backdrops. */
+.mesh-premium {
+  background:
+    radial-gradient(40% 55% at 15% 20%, rgba(239,174,86,.22), transparent 70%),
+    radial-gradient(45% 55% at 85% 15%, rgba(123,163,202,.22), transparent 72%),
+    radial-gradient(50% 60% at 60% 95%, rgba(239,174,86,.14), transparent 72%),
+    radial-gradient(40% 50% at 35% 80%, rgba(26,96,171,.10), transparent 70%);
+}
+/* Dark navy mesh — for full-bleed contrast bands. */
+.mesh-dark {
+  background:
+    radial-gradient(45% 60% at 12% 18%, rgba(239,174,86,.24), transparent 66%),
+    radial-gradient(50% 65% at 88% 22%, rgba(123,163,202,.20), transparent 70%),
+    radial-gradient(60% 70% at 55% 100%, rgba(239,174,86,.14), transparent 72%),
+    linear-gradient(160deg, #0F3A6B 0%, #0A2A4F 55%, #071F3B 100%);
+}
+
+/* Light frosted glass card for premium sections. */
+.glass-lite {
+  background: rgba(255,255,255,.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,.7);
+  box-shadow: 0 1px 2px rgba(26,96,171,.05), 0 18px 50px rgba(26,96,171,.12);
+}
+
+/* Card with a gradient hairline that glows on hover. */
+.card-premium {
+  position: relative;
+  background: #fff;
+  border: 1px solid var(--tw-prose-hr, #D6E3E9);
+  transition: transform .3s ease, box-shadow .3s ease;
+}
+.card-premium::before {
+  content: "";
+  position: absolute; inset-inline: 1.25rem; top: 0; height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #F5951E, #C56A12);
+  opacity: 0; transition: opacity .3s ease;
+}
+.card-premium:hover { transform: translateY(-6px); box-shadow: 0 24px 60px rgba(26,96,171,.18); }
+.card-premium:hover::before { opacity: 1; }
+
+/* Gradient text — gold sweep, no animation (crisper than shimmer for big headings). */
+.text-gradient-gold {
+  background: linear-gradient(120deg, #F5951E 0%, #C56A12 60%, #F5951E 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
+
+/* Infinite marquee for the exam-board trust strip. */
+@keyframes marqueeScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.marquee { overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
+.marquee-track { display: inline-flex; width: max-content; animation: marqueeScroll 30s linear infinite; }
+.marquee:hover .marquee-track { animation-play-state: paused; }
+
+/* Thin gradient divider between sections. */
+.divider-fade { height: 1px; background: linear-gradient(90deg, transparent, rgba(26,96,171,.18), transparent); }
+
+/* Avatar stack ring for social proof. */
+.avatar-ring { box-shadow: 0 0 0 2px #fff; }
+
+/* ══════════════════════════════════════════════════════════════════
+   SHARED PRIMITIVE POLISH
+   Subtle depth + life on the base classes every page already uses
+   (buttons, inputs, pills), so the whole app lifts at once. Raw CSS on
+   purpose — it layers on top of the @apply component definitions above
+   (same pattern as the .card hover higher up). All motion is disabled by
+   the global prefers-reduced-motion rule at the top of the file.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Buttons — a warm, top-lit sheen and a lively micro-lift on hover. */
+.btn { transition: transform .18s ease, box-shadow .18s ease, filter .18s ease, background-color .18s ease; }
+.btn-gold {
+  background-image: linear-gradient(180deg, #F9B24E 0%, #F5951E 52%, #E7841A 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 4px 16px rgba(239,174,86,.36);
+}
+.btn-gold:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 9px 24px rgba(239,174,86,.5);
+}
+.btn-ink {
+  background-image: linear-gradient(180deg, #1E6AB8 0%, #14508F 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 4px 16px rgba(15,58,107,.26);
+}
+.btn-ink:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 9px 24px rgba(15,58,107,.36); }
+.btn-ghost { box-shadow: 0 1px 2px rgba(26,96,171,.05); }
+.btn-ghost:hover { transform: translateY(-1px); box-shadow: 0 7px 20px rgba(26,96,171,.11); border-color: rgba(239,174,86,.45); }
+.btn:active { transform: translateY(0) scale(.96); }
+
+/* Inputs — smooth focus, and a hint of gold on hover so fields feel alive. */
+.field, .terra-field { transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease; }
+.field:hover:not(:focus) { border-color: rgba(239,174,86,.5); }
+
+/* Pills — a faint hairline ring for crisper, more defined edges. */
+.pill { box-shadow: inset 0 0 0 1px rgba(15,58,107,.06); }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-gold:hover, .btn-ink:hover, .btn-ghost:hover { transform: none; }
+}
+
+/* Code playground editor is CodeMirror 6 (see components/code/Editor.tsx);
+   it ships its own theme, so no editor token CSS is needed here. */
+
+/* ── Muted-text contrast (light mode) ────────────────────
+   The brand ink (#1A60AB) only reaches 5.1:1 on white at full strength, so the
+   faint tiers — the 10–13px hints, captions and timestamps — were landing
+   around 2:1 and were genuinely hard to read for anyone with less than perfect
+   sight, on a phone, or outdoors. Remap the four faintest tiers to a neutral
+   slate that keeps the "quiet" look but clears WCAG AA (4.5:1) for small text.
+   Dark mode is untouched: those rules are more specific and use !important. */
+.text-ink\/45 { color: #566B85; }  /* ≈5.3:1 on white */
+.text-ink\/40 { color: #5C6E88; }
+.text-ink\/35 { color: #64758C; }  /* ≈4.7:1 on white */
+.text-ink\/30 { color: #6B7B92; }  /* ≈4.5:1 — the faintest we allow for text */
+/* Placeholders follow the same floor. */
+.placeholder\:text-ink\/35::placeholder { color: #64758C; }
+.placeholder\:text-ink\/40::placeholder { color: #5C6E88; }
+
+/* ── Novelia app splash — animated launch overlay (installed app) ─────── */
+@keyframes noveliaPop {
+  0%   { opacity: 0; transform: scale(.82) translateY(6px); }
+  60%  { opacity: 1; transform: scale(1.04) translateY(0); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes noveliaBreathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+@keyframes noveliaGlow {
+  0%, 100% { opacity: .30; transform: scale(1); }
+  50%      { opacity: .60; transform: scale(1.15); }
+}
+@keyframes noveliaBar { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+@keyframes noveliaDot { 0%, 80%, 100% { transform: scale(.5); opacity: .4; } 40% { transform: scale(1); opacity: 1; } }
+.novelia-splash-logo { animation: noveliaPop .7s cubic-bezier(.2,.8,.2,1) both, noveliaBreathe 2.6s ease-in-out 1s infinite; }
+.novelia-splash-glow { animation: noveliaGlow 2.6s ease-in-out infinite; }
+.novelia-splash-track { position: relative; overflow: hidden; }
+.novelia-splash-track > span { position: absolute; inset: 0; width: 40%; animation: noveliaBar 1.15s ease-in-out infinite; }
+.novelia-splash-dot { animation: noveliaDot 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .novelia-splash-logo, .novelia-splash-glow, .novelia-splash-track > span, .novelia-splash-dot { animation: none !important; }
+}
+
+/* ══ E-LABORATORY ═══════════════════════════════════════════════════════
+   The e-lab has its own look — a dark, glowing lab console with a faint
+   graph-paper grid — independent of the portal theme. Everything is scoped
+   under `.elab`. */
+.elab {
+  color: #E6EDF7;
+  background:
+    radial-gradient(900px 420px at 8% -12%, rgba(56, 189, 248, .20), transparent 60%),
+    radial-gradient(800px 420px at 100% 0%, rgba(168, 85, 247, .18), transparent 60%),
+    radial-gradient(760px 520px at 50% 120%, rgba(16, 185, 129, .14), transparent 60%),
+    linear-gradient(rgba(255, 255, 255, .035) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px) 0 0 / 28px 28px,
+    #070B1A;
+}
+.elab-panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .025));
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 1.25rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 20px 50px -24px rgba(0, 0, 0, .6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.elab-glow { box-shadow: 0 0 0 1px var(--c, #38BDF8), 0 0 28px -4px var(--c, #38BDF8); }
+.elab-card { transition: transform .25s cubic-bezier(.2, .8, .2, 1), box-shadow .25s ease, border-color .25s ease; }
+.elab-card:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--c, #38BDF8) 60%, transparent); box-shadow: 0 24px 60px -24px var(--c, #38BDF8); }
+
+/* Custom range slider — the filled track uses --p (percent) and --c (colour). */
+.elab-range {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 6px; border-radius: 999px; outline: none; cursor: pointer;
+  background: linear-gradient(90deg, var(--c, #38BDF8) var(--p, 50%), rgba(255, 255, 255, .12) var(--p, 50%));
+}
+.elab-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  box-shadow: 0 0 0 4px var(--c, #38BDF8), 0 4px 14px rgba(0, 0, 0, .45);
+}
+.elab-range::-moz-range-thumb {
+  width: 20px; height: 20px; border: 0; border-radius: 50%; background: #fff;
+  box-shadow: 0 0 0 4px var(--c, #38BDF8), 0 4px 14px rgba(0, 0, 0, .45);
+}
+.elab-range:focus-visible { outline: 2px solid var(--c, #38BDF8); outline-offset: 6px; }
+
+/* Lab animations */
+@keyframes elabFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+.elab-float { animation: elabFloat 5s ease-in-out infinite; }
+@keyframes elabBubble {
+  0% { transform: translate(0, 0) scale(.6); opacity: 0; }
+  12% { opacity: .95; }
+  100% { transform: translate(var(--dx, 0), -150px) scale(1.1); opacity: 0; }
+}
+.elab-bubble { animation: elabBubble var(--dur, 2.4s) ease-in infinite; }
+@keyframes elabFlow { to { stroke-dashoffset: -40; } }
+.elab-flow { animation: elabFlow var(--dur, 1s) linear infinite; }
+@keyframes elabPop { 0% { transform: scale(.6); opacity: 0; } 60% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
+.elab-pop { animation: elabPop .35s cubic-bezier(.2, .9, .3, 1.2) both; }
+@keyframes elabDrip { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(70px); opacity: 0; } }
+.elab-drip { animation: elabDrip .6s ease-in both; }
+@media (prefers-reduced-motion: reduce) {
+  .elab-float, .elab-bubble, .elab-flow, .elab-pop, .elab-drip { animation: none; }
+  .elab-card:hover { transform: none; }
+}
+
+/* ══ CLASS GAMES ARCADE ═════════════════════════════════════════════════
+   Bright, chunky, candy-coloured — the games have their own look, separate
+   from the portal and the e-lab. Each game sets --g1/--g2 for its gradient. */
+.arcade {
+  --g1: #7C3AED; --g2: #EC4899;
+  color: #1E1B4B;
+  background:
+    radial-gradient(600px 300px at 10% 0%, rgba(255, 255, 255, .35), transparent 60%),
+    radial-gradient(500px 300px at 100% 100%, rgba(255, 255, 255, .25), transparent 60%),
+    linear-gradient(135deg, var(--g1), var(--g2));
+}
+.arcade-dots {
+  background-image: radial-gradient(rgba(255, 255, 255, .22) 1.5px, transparent 1.5px);
+  background-size: 22px 22px;
+}
+.arcade-card { background: #fff; border-radius: 1.75rem; box-shadow: 0 10px 0 rgba(30, 27, 75, .12), 0 30px 60px -20px rgba(30, 27, 75, .45); }
+.arcade-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  min-height: 52px; padding: 0 1.4rem; border-radius: 1.1rem;
+  font-weight: 900; letter-spacing: .01em; color: #fff;
+  background: var(--btn, #1E1B4B);
+  box-shadow: 0 6px 0 var(--btn-shadow, rgba(0, 0, 0, .35));
+  transition: transform .08s ease, box-shadow .08s ease, filter .15s;
+  cursor: pointer; user-select: none;
+}
+.arcade-btn:hover { filter: brightness(1.08); }
+.arcade-btn:active { transform: translateY(5px); box-shadow: 0 1px 0 var(--btn-shadow, rgba(0, 0, 0, .35)); }
+.arcade-btn:disabled { opacity: .5; pointer-events: none; }
+.arcade-key {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 56px; border-radius: 1rem; font-size: 1.4rem; font-weight: 900;
+  background: #F1F0FF; color: #1E1B4B; box-shadow: 0 5px 0 #CFCBF5;
+  transition: transform .06s, box-shadow .06s; user-select: none;
+}
+.arcade-key:active { transform: translateY(4px); box-shadow: 0 1px 0 #CFCBF5; }
+
+@keyframes arcadeShake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-9px); } 40%, 80% { transform: translateX(9px); } }
+.arcade-shake { animation: arcadeShake .35s ease; }
+@keyframes arcadePop { 0% { transform: scale(.5); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
+.arcade-pop { animation: arcadePop .3s cubic-bezier(.2, .9, .3, 1.3) both; }
+@keyframes arcadeBurst { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.8); opacity: 0; } }
+.arcade-burst { animation: arcadeBurst .3s ease-out forwards; }
+@keyframes arcadeRise { from { transform: translateY(0); } to { transform: translateY(var(--rise, -520px)); } }
+.arcade-rise { animation: arcadeRise var(--dur, 7s) linear forwards; }
+@keyframes arcadeBob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
+.arcade-bob { animation: arcadeBob 2.4s ease-in-out infinite; }
+@keyframes arcadeFlame { 0%, 100% { transform: scale(1) rotate(-4deg); } 50% { transform: scale(1.15) rotate(4deg); } }
+.arcade-flame { animation: arcadeFlame .6s ease-in-out infinite; display: inline-block; }
+@keyframes arcadeCount { 0% { transform: scale(2.2); opacity: 0; } 30% { transform: scale(1); opacity: 1; } 100% { transform: scale(.8); opacity: 0; } }
+.arcade-count { animation: arcadeCount .9s ease-out both; }
+.arcade-flip { transform-style: preserve-3d; transition: transform .35s cubic-bezier(.2, .8, .2, 1); }
+.arcade-flip.is-up { transform: rotateY(180deg); }
+.arcade-face { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.arcade-face-back { transform: rotateY(180deg); }
+/* Game celebrations: banners, lightning glow, rank-up (off in low-data mode and reduced motion) */
+@keyframes fxBanner { 0% { transform: translateY(-14px) scale(.7); opacity: 0; } 18% { transform: translateY(0) scale(1.08); opacity: 1; } 30% { transform: scale(1); } 85% { opacity: 1; } 100% { transform: translateY(-6px); opacity: 0; } }
+.fx-banner { animation: fxBanner 1.7s cubic-bezier(.2, .9, .3, 1.2) both; }
+@keyframes fxGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, .0); } 50% { box-shadow: 0 0 18px 4px rgba(250, 204, 21, .75); } }
+.fx-glow { animation: fxGlow 1s ease-in-out infinite; }
+.fx-lightning { box-shadow: 0 0 0 4px #FACC15, 0 0 28px 6px rgba(250, 204, 21, .55); animation: fxGlow 1s ease-in-out infinite; }
+@keyframes fxLevelUp { 0% { transform: scale(.2) rotate(-30deg); opacity: 0; } 55% { transform: scale(1.25) rotate(8deg); opacity: 1; } 75% { transform: scale(.95) rotate(-3deg); } 100% { transform: scale(1) rotate(0); } }
+.fx-levelup { animation: fxLevelUp .9s cubic-bezier(.2, .9, .3, 1.3) both; }
+@media (prefers-reduced-motion: reduce) {
+  .arcade-shake, .arcade-pop, .arcade-burst, .arcade-bob, .arcade-flame, .arcade-count, .fx-glow, .fx-levelup, .fx-lightning { animation: none; }
+  .fx-banner { animation: none; }
+  .arcade-rise { animation-duration: calc(var(--dur, 7s) * 1.4); }
+  .arcade-flip { transition: none; }
+}
+
+/* ══ HOMEPAGE — "sky" landing ═══════════════════════════════════════════
+   Airy sky, soft drifting clouds, Novelia-blue pill CTAs, deep-blue headings
+   and orange highlights (the brand colours: blue #1657C9, orange #F5951E).
+   Used across the public site (homepage, marketing, legal and auth pages). */
+.sky-hero {
+  background:
+    radial-gradient(520px 340px at 100% 0%, rgba(245, 149, 30, .28), transparent 70%),
+    linear-gradient(180deg, #8DC0F2 0%, #B6D8F8 30%, #DAEBFD 62%, #F4F9FF 88%, #FFFFFF 100%);
+}
+.sky-soft { background: linear-gradient(180deg, #FFFFFF 0%, #F1F8FF 45%, #D7EBFC 100%); }
+/* A soft blue band that fades back to white — for mid-page sections. */
+.sky-band { background: linear-gradient(180deg, #FFFFFF 0%, #EAF4FF 30%, #EAF4FF 70%, #FFFFFF 100%); }
+.sky-ink { color: #0E3A8A; }  /* deep Novelia blue for headings */
+
+/* Clouds are blurred white blobs; they drift slowly side to side. */
+@keyframes skyDrift { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(var(--drift, 48px), 0, 0); } }
+.sky-cloud { animation: skyDrift var(--dur, 38s) ease-in-out infinite alternate; will-change: transform; }
+
+/* Hero art bobs very gently. */
+@keyframes skyBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.sky-bob { animation: skyBob 6s ease-in-out infinite; }
+
+/* Logo/exam marquee — two copies of the track scroll by half their width. */
+@keyframes skyMarquee { to { transform: translate3d(-50%, 0, 0); } }
+.sky-marquee { display: flex; width: max-content; animation: skyMarquee 36s linear infinite; }
+.sky-marquee-wrap:hover .sky-marquee,
+.sky-marquee-wrap:focus-within .sky-marquee { animation-play-state: paused; }
+.sky-fade-x {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+/* Highlighted words in a heading — a soft orange marker box. */
+.sky-hl {
+  background: linear-gradient(180deg, #FFEBCF, #FDDCAE);
+  box-shadow: inset 0 0 0 1.5px rgba(245, 149, 30, .45);
+  border-radius: .4rem; padding: 0 .28em;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  /* Poppins' content box is taller than tight heading line-heights, so the
+     marker would cover the line above — paint it beneath the heading's text. */
+  position: relative; z-index: -1;
+}
+:where(h1, h2, h3, p):has(> .sky-hl) { isolation: isolate; }
+
+/* The main pill CTA — Novelia blue. */
+.pill-dark {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  min-height: 48px; padding: 0 1.6rem; border-radius: 999px;
+  background: #1657C9; color: #fff; font-weight: 700; font-size: .95rem;
+  box-shadow: 0 12px 28px -10px rgba(22, 87, 201, .65), inset 0 1px 0 rgba(255, 255, 255, .18);
+  transition: transform .18s ease, box-shadow .18s ease, background-color .18s ease;
+}
+.pill-dark:hover { transform: translateY(-1px); background: #0F4AB0; box-shadow: 0 16px 34px -10px rgba(22, 87, 201, .7); }
+.pill-dark:active { transform: translateY(0) scale(.98); }
+.pill-light {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  min-height: 48px; padding: 0 1.4rem; border-radius: 999px;
+  background: rgba(255, 255, 255, .78); color: #0E3A8A; font-weight: 700; font-size: .95rem;
+  box-shadow: 0 8px 22px -12px rgba(11, 18, 32, .35), inset 0 0 0 1px rgba(255, 255, 255, .9);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  transition: transform .18s ease, background-color .18s ease;
+}
+.pill-light:hover { transform: translateY(-1px); background: #fff; }
+
+/* Glassy floating chip used around the hero art. */
+.sky-chip {
+  align-items: center; gap: .5rem;
+  border-radius: 999px; padding: .45rem .85rem .45rem .5rem;
+  background: rgba(255, 255, 255, .82); color: #0E3A8A; font-size: .8rem; font-weight: 700;
+  box-shadow: 0 14px 30px -14px rgba(11, 18, 32, .45), inset 0 0 0 1px rgba(255, 255, 255, .95);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+
+/* White card with a soft lifted shadow — the default surface on sky pages. */
+.sky-card {
+  border-radius: 1.6rem; background: #fff;
+  box-shadow: 0 18px 40px -28px rgba(11, 18, 32, .5), inset 0 0 0 1px rgba(15, 23, 42, .06);
+}
+a.sky-card, .sky-card-hover { transition: transform .2s ease, box-shadow .2s ease; }
+a.sky-card:hover, .sky-card-hover:hover { transform: translateY(-3px); box-shadow: 0 26px 50px -28px rgba(11, 18, 32, .55), inset 0 0 0 1px rgba(15, 23, 42, .06); }
+/* Pastel card — set --p1/--p2 inline for the gradient. */
+.sky-pastel {
+  border-radius: 1.6rem;
+  background: linear-gradient(160deg, var(--p1, #E4F0FF), var(--p2, #C9DFFF));
+  box-shadow: 0 22px 44px -30px rgba(11, 18, 32, .55), inset 0 0 0 1px rgba(255, 255, 255, .7);
+}
+/* Small numbered / icon bubble. */
+.sky-num {
+  display: flex; align-items: center; justify-content: center; height: 2.5rem; width: 2.5rem;
+  border-radius: 999px; background: #1657C9; color: #fff; font-weight: 700; font-size: .9rem;
+  box-shadow: 0 10px 22px -10px rgba(22, 87, 201, .6), inset 0 0 0 2px rgba(245, 149, 30, .55);
+}
+/* Long-form copy on sky pages (legal, blog). */
+.sky-prose a { color: #1657C9; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sky-card-hover:hover, a.sky-card:hover { transform: none; }
+  .sky-cloud, .sky-bob { animation: none; }
+  .sky-marquee { animation: none; flex-wrap: wrap; justify-content: center; width: auto; }
+  .pill-dark:hover, .pill-light:hover { transform: none; }
+}
+
+/* ══ STUDENT PORTAL — "sky" theme ═══════════════════════════════════════════
+   Turned on by <PortalShell theme="sky"> (student portal only). Restyles the
+   shared building blocks — cards, buttons, fields, titles, the page hero —
+   inside .portal-sky in light mode, so every student page picks up the
+   website's look without touching each page. Dark mode keeps its own rules. */
+html:not(.dark) .portal-sky {
+  background:
+    radial-gradient(900px 420px at 92% -8%, rgba(255, 255, 255, .9), transparent 60%),
+    linear-gradient(180deg, #C9E2FA 0, #DDEDFD 180px, #EEF6FF 420px, #F6FAFF 760px, #F8FBFF 100%);
+  background-attachment: fixed;
+  color: #0B1220;
+}
+html:not(.dark) .portal-sky .card {
+  background: #fff;
+  border: 0;
+  border-radius: 1.5rem;
+  box-shadow: 0 1px 2px rgba(11, 18, 32, .04), 0 18px 40px -28px rgba(11, 18, 32, .45), inset 0 0 0 1px rgba(15, 23, 42, .06);
+}
+html:not(.dark) .portal-sky .card:hover {
+  box-shadow: 0 1px 2px rgba(11, 18, 32, .05), 0 26px 50px -28px rgba(11, 18, 32, .5), inset 0 0 0 1px rgba(15, 23, 42, .07);
+}
+/* Primary actions become the website's blue pill; secondary ones go white. */
+html:not(.dark) .portal-sky .btn-gold {
+  background: #1657C9; color: #fff; border-radius: 999px;
+  box-shadow: 0 12px 26px -12px rgba(22, 87, 201, .7), inset 0 1px 0 rgba(255, 255, 255, .18);
+}
+html:not(.dark) .portal-sky .btn-gold:hover { background: #0F4AB0; }
+html:not(.dark) .portal-sky .btn-gold:focus-visible { outline-color: #1657C9; }
+html:not(.dark) .portal-sky .btn-ghost {
+  border-radius: 999px; border-color: transparent; background: #fff; color: #0E3A8A;
+  box-shadow: 0 6px 16px -12px rgba(11, 18, 32, .45), inset 0 0 0 1px rgba(15, 23, 42, .1);
+}
+html:not(.dark) .portal-sky .btn-ghost:hover { background: #EEF6FF; }
+html:not(.dark) .portal-sky .btn-ink { border-radius: 999px; background: #1657C9; }
+html:not(.dark) .portal-sky .btn-ink:hover { background: #0F4AB0; }
+html:not(.dark) .portal-sky .btn-danger { border-radius: 999px; }
+html:not(.dark) .portal-sky .field {
+  border-radius: .9rem; border-color: #D6E3F3; background: #fff; min-height: 44px;
+}
+html:not(.dark) .portal-sky .field:focus { border-color: #1657C9; box-shadow: 0 0 0 4px rgba(22, 87, 201, .12); }
+html:not(.dark) .portal-sky .flabel { color: #334155; }
+html:not(.dark) .portal-sky .page-title { color: #0E3A8A; letter-spacing: -.02em; }
+html:not(.dark) .portal-sky a.text-gold-deep, html:not(.dark) .portal-sky button.text-gold-deep { color: #1657C9; }
+html:not(.dark) .portal-sky :focus-visible { outline-color: #1657C9; }
+
+/* Page header (components/portal/PageHero) — sky instead of navy. */
+html:not(.dark) .portal-sky .page-hero {
+  background: linear-gradient(135deg, #FFFFFF 0%, #EAF4FF 55%, #D7EAFD 100%) !important;
+  color: #0E3A8A;
+  box-shadow: 0 18px 40px -30px rgba(11, 18, 32, .45), inset 0 0 0 1px rgba(255, 255, 255, .9);
+}
+html:not(.dark) .portal-sky .page-hero .page-hero-glow { background: radial-gradient(circle, rgba(255, 255, 255, .95), transparent 70%) !important; }
+html:not(.dark) .portal-sky .page-hero .page-hero-badge { background: #1657C9; color: #fff; box-shadow: 0 10px 22px -12px rgba(22, 87, 201, .7); }
+html:not(.dark) .portal-sky .page-hero .page-hero-sub { color: #475569; }
+html:not(.dark) .portal-sky .page-hero .page-hero-decor { color: rgba(22, 87, 201, .25); }
+
+/* Staggered entrance for dashboard sections (transform/opacity only). */
+@keyframes skyRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.sky-rise { animation: skyRise .45s cubic-bezier(.2, .8, .2, 1) both; }
+@media (prefers-reduced-motion: reduce) { .sky-rise { animation: none; } }
+
+/* Text: near-black for reading, slate for secondary — blue is kept for links
+   and accents only (the shared `ink` colour is Novelia blue). */
+html:not(.dark) .portal-sky .text-ink { color: #0B1220; }
+html:not(.dark) .portal-sky .text-ink\/90,
+html:not(.dark) .portal-sky .text-ink\/85,
+html:not(.dark) .portal-sky .text-ink\/80,
+html:not(.dark) .portal-sky .text-ink\/75,
+html:not(.dark) .portal-sky .text-ink\/70,
+html:not(.dark) .portal-sky .text-ink\/65 { color: #1E293B; }
+html:not(.dark) .portal-sky .text-ink\/60,
+html:not(.dark) .portal-sky .text-ink\/55,
+html:not(.dark) .portal-sky .text-ink\/50 { color: #475569; }
+html:not(.dark) .portal-sky .text-ink\/45,
+html:not(.dark) .portal-sky .text-ink\/40,
+html:not(.dark) .portal-sky .text-ink\/35 { color: #64748B; }
+html:not(.dark) .portal-sky .text-ink\/30,
+html:not(.dark) .portal-sky .text-ink\/25,
+html:not(.dark) .portal-sky .text-ink\/15 { color: #94A3B8; }
+/* Cool, sky-tinted surfaces instead of the warm chalk grey. */
+html:not(.dark) .portal-sky .bg-chalk { background-color: #F1F6FD; }
+html:not(.dark) .portal-sky .bg-chalk\/60,
+html:not(.dark) .portal-sky .bg-chalk\/50,
+html:not(.dark) .portal-sky .bg-chalk\/40 { background-color: rgba(241, 246, 253, .7); }
+html:not(.dark) .portal-sky .border-line { border-color: #E3ECF7; }
+
+/* Sky portal — page headers that used the dark "arena" look. Any root tagged
+   .page-hero turns light; text, chips and accents inside are remapped so they
+   stay readable (gold → amber-700 for 4.5:1 on white). Light mode only. */
+html:not(.dark) .portal-sky .page-hero > div[aria-hidden].rounded-full,
+html:not(.dark) .portal-sky .page-hero > div.pointer-events-none[style*="radial-gradient"] {
+  background: radial-gradient(circle, rgba(255, 255, 255, .95), transparent 70%) !important; opacity: 1;
+}
+html:not(.dark) .portal-sky .page-hero .text-white,
+html:not(.dark) .portal-sky .page-hero.text-white { color: #0B1220; }
+html:not(.dark) .portal-sky .page-hero .text-white\/85,
+html:not(.dark) .portal-sky .page-hero .text-white\/80,
+html:not(.dark) .portal-sky .page-hero .text-white\/70 { color: #334155; }
+html:not(.dark) .portal-sky .page-hero .text-white\/60,
+html:not(.dark) .portal-sky .page-hero .text-white\/55,
+html:not(.dark) .portal-sky .page-hero .text-white\/50,
+html:not(.dark) .portal-sky .page-hero .text-white\/45 { color: #475569; }
+html:not(.dark) .portal-sky .page-hero .text-white\/40,
+html:not(.dark) .portal-sky .page-hero .text-white\/35,
+html:not(.dark) .portal-sky .page-hero .text-white\/30 { color: #64748B; }
+html:not(.dark) .portal-sky .page-hero .text-gold,
+html:not(.dark) .portal-sky .page-hero .text-amber-300 { color: #B45309; }
+html:not(.dark) .portal-sky .page-hero .text-gold\/30,
+html:not(.dark) .portal-sky .page-hero .text-gold\/25,
+html:not(.dark) .portal-sky .page-hero .text-gold\/20 { color: rgba(22, 87, 201, .25); }
+html:not(.dark) .portal-sky .page-hero .bg-white\/5,
+html:not(.dark) .portal-sky .page-hero .bg-white\/10,
+html:not(.dark) .portal-sky .page-hero .bg-white\/15,
+html:not(.dark) .portal-sky .page-hero .glass-hero-chip {
+  background: rgba(255, 255, 255, .85); box-shadow: 0 1px 2px rgba(11, 18, 32, .06);
+  --tw-ring-color: rgba(15, 23, 42, .06); border-color: rgba(15, 23, 42, .06); backdrop-filter: none;
+}
+html:not(.dark) .portal-sky .page-hero .ring-white\/10,
+html:not(.dark) .portal-sky .page-hero .ring-white\/15,
+html:not(.dark) .portal-sky .page-hero .ring-white\/20 { --tw-ring-color: rgba(15, 23, 42, .08); }
+html:not(.dark) .portal-sky .page-hero .border-white\/10 { border-color: rgba(15, 23, 42, .08); }
+/* the icon badge in a header becomes the dark pill used in the sidebar */
+html:not(.dark) .portal-sky .page-hero > span.bg-gold\/15,
+html:not(.dark) .portal-sky .page-hero > div > span.bg-gold\/15 {
+  background: #0B1220; color: #fff; --tw-ring-color: transparent; box-shadow: 0 10px 22px -12px rgba(11, 18, 32, .7);
+}
+html:not(.dark) .portal-sky { color: #0B1220; }
+
+/* ── Live quiz stage (Kahoot-style) ───────────────────── */
+.quiz-stage { background: radial-gradient(120% 90% at 20% 0%, #6D28D9 0%, #4C1D95 45%, #2E1065 100%); }
+@keyframes quizRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.quiz-rise { animation: quizRise .35s cubic-bezier(.16,.84,.44,1) both; }
+@keyframes quizPop { 0% { opacity: 0; transform: scale(.8); } 70% { transform: scale(1.04); } 100% { opacity: 1; transform: scale(1); } }
+.quiz-pop { animation: quizPop .4s cubic-bezier(.16,.84,.44,1) both; }
+@keyframes quizGrow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.quiz-grow { animation: quizGrow .6s cubic-bezier(.16,.84,.44,1) both; transform-origin: bottom; }
+@keyframes quizBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.quiz-bob { animation: quizBob 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .quiz-rise, .quiz-pop, .quiz-grow, .quiz-bob { animation: none; } }
+
+/* ── Low-data mode (lib/lowData.tsx) ─────────────────────────────
+   No animation, transitions, blur or decorative extras — less work for the
+   phone and nothing extra to download. */
+[data-lowdata] *, [data-lowdata] *::before, [data-lowdata] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+[data-lowdata] .reveal-on-scroll { opacity: 1 !important; transform: none !important; }
+[data-lowdata] [class*="backdrop-blur"] { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+[data-lowdata] .lowdata-hide { display: none !important; }
+
+/* E-Lab heart-rate practical: the heart beats at the simulated pulse rate */
+@keyframes elabBeat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.18); } 30% { transform: scale(1); } }
+.elab-beat { display: inline-block; animation: elabBeat 1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .elab-beat { animation: none; } }
+
+/* ── D-Maths Board brand: deep teal, lime accent, pill buttons ── */
+@layer components {
+.dmb-btn { @apply inline-flex min-h-[48px] cursor-pointer items-center justify-center gap-2 rounded-full bg-dmb-lime px-6 font-dmbBody text-[15px] font-semibold text-dmb-ink transition-colors duration-150 hover:bg-dmb-chalkSoft disabled:cursor-not-allowed disabled:opacity-50; }
+.dmb-btn-ghost { @apply inline-flex min-h-[48px] cursor-pointer items-center justify-center gap-2 rounded-full border border-dmb-rule bg-white px-6 font-dmbBody text-[15px] font-semibold text-dmb-ink transition-colors duration-150 hover:border-dmb-ink/30; }
+.dmb-btn-dark { @apply inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-full bg-dmb-ink px-5 font-dmbBody text-sm font-semibold text-white transition-colors hover:bg-black; }
+.dmb-field { @apply w-full rounded-xl border border-dmb-rule bg-white px-4 py-3 font-dmbBody text-base text-dmb-ink outline-none transition placeholder:text-dmb-muted/70 focus:border-dmb-teal focus:ring-4 focus:ring-dmb-teal/10; }
+/* Plain white panels with a hairline edge (names kept from older designs). */
+.dmb-glass, .dmb-glass-light { @apply rounded-2xl border border-dmb-rule bg-white; box-shadow: 0 1px 2px rgba(15,35,38,.04); }
+}
+.dmb-btn:focus-visible, .dmb-btn-ghost:focus-visible, .dmb-btn-dark:focus-visible, .dmb-link:focus-visible { outline: 2px solid #0E6E72; outline-offset: 3px; }
+.dmb-sky { background-color: #F4F8F8; }
+.dmb-gradient-text { color: #0E6E72; }
+/* The teal hero: a deep gradient with a faint grid. */
+.dmb-hero {
+  background-color: #0E6E72;
+  background-image:
+    linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px),
+    linear-gradient(160deg, #13878B 0%, #0E6E72 45%, #0A5558 100%);
+  background-size: 96px 96px, 96px 96px, 100% 100%;
+}
+.font-dmbDisplay { font-weight: 500; letter-spacing: -0.025em; }
