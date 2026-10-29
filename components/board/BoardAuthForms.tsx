@@ -114,6 +114,8 @@ export function BoardLoginForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       {params.get("created") && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">Your account is ready — sign in to confirm your email.</p>}
+      {params.get("reset") === "done" && <p role="status" className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">Your password is updated — sign in with the new one.</p>}
+      {params.get("error") === "reset" && <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">That reset link is invalid or has expired. Ask for a new one below.</p>}
       <label className="block text-sm font-bold text-dmb-ink">Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" inputMode="email" className="dmb-field mt-1" /></label>
       <PasswordField value={password} onChange={setPassword} autoComplete="current-password" />
       {err && <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{err}</p>}
