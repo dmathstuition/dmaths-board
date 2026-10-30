@@ -3,6 +3,7 @@ import type { HostBase } from "@/lib/liveSession";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LiveChannelProvider, useLive } from "@/components/live/LiveChannel";
+import { useHostVoice } from "@/components/live/ClassVoice";
 import Whiteboard from "@/components/live/Whiteboard";
 import QuizHostStage from "@/components/live/QuizHostStage";
 import ClassResults from "@/components/live/ClassResults";
@@ -57,6 +58,7 @@ function Host({ id, base }: { id: string; base: HostBase }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const send = useLive({ joined: () => load(), hand: () => load() });
   const onQuizActive = useCallback((active: boolean) => { if (active) setTab("quiz"); }, []);
+  const voice = useHostVoice({ classId: id, me: { id: room?.me.id ?? "", name: room?.me.name ?? "Teacher" }, people: room?.people ?? [] });
 
   // Buttons change the screen the moment they're tapped; the server catches
   // up in the background (and the screen is put right if it says no).
@@ -169,7 +171,7 @@ function Host({ id, base }: { id: string; base: HostBase }) {
             <div ref={stageRef} className="rounded-[1.75rem] bg-[#F4F9FF] [&:fullscreen]:overflow-y-auto [&:fullscreen]:p-6">
               <div hidden={tab !== "board"}>
                 <Whiteboard sessionId={id} host myId={room.me.id} myName={room.me.name} canDraw writers={room.writers} canLog={!!s.classId} people={room.people}
-                  onQuizLaunched={() => setTab("quiz")}
+                  onQuizLaunched={() => setTab("quiz")} extra={voice.controls}
                   roster={{
                     people: room.people, allCanWrite: s.allCanWrite,
                     onWrite: (studentId, value) => act({ action: "write", studentId, value }),

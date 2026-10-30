@@ -13,6 +13,8 @@ export default function LessonLibrary({ base }: { base: HostBase }) {
   const [error, setError] = useState("");
   const [title, setTitle] = useState(""); const [subject, setSubject] = useState("");
   const [busy, setBusy] = useState("");
+  const [ai, setAi] = useState({ topic: "", level: "", subject: "" });
+  const [aiDone, setAiDone] = useState("");
 
   const load = () => fetch("/api/board-lessons").then(async (r) => {
     const j = await r.json().catch(() => ({}));
@@ -31,6 +33,16 @@ export default function LessonLibrary({ base }: { base: HostBase }) {
     setBusy("new"); setError("");
     try { const j = await post({ action: "save", title: title || "Untitled lesson", subject }); router.push(`${base}/lessons/${j.id}`); }
     catch (e) { setError(e instanceof Error ? e.message : "Couldn't create the lesson"); setBusy(""); }
+  }
+  async function makeWithAi(e: React.FormEvent) {
+    e.preventDefault();
+    if (ai.topic.trim().length < 3) { setError("Type the topic first, e.g. Quadratic equations."); return; }
+    setBusy("ai"); setError(""); setAiDone("");
+    try {
+      const j = await post({ action: "ai", ...ai });
+      setAiDone(`Your lesson is ready: ${j.pages} board pages${j.questions ? ` and a ${j.questions}-question quiz (in Quizzes)` : ""}. Opening it…`);
+      router.push(`${base}/lessons/${j.id}`);
+    } catch (err) { setError(err instanceof Error ? err.message : "The A.I couldn't make the lesson"); setBusy(""); }
   }
   async function act(id: string, what: "copy" | "share" | "unshare" | "delete") {
     if (what === "delete" && !confirm("Delete this lesson? This can't be undone.")) return;
@@ -55,6 +67,18 @@ export default function LessonLibrary({ base }: { base: HostBase }) {
           <button type="button" onClick={create} disabled={!!busy} className="btn-ink">{busy === "new" ? "Creating…" : "Create lesson"}</button>
         </div>
       </div>
+      <form onSubmit={makeWithAi} className={`${card} bg-gradient-to-br from-white to-[#E2F3F2]`}>
+        <p className="font-display text-lg font-black text-ink">Make a lesson with A.I</p>
+        <p className="mt-1 text-sm text-ink/60">Type a topic and get ready board pages — explanations, worked examples step by step, &ldquo;Try it&rdquo; questions, practice — plus a quiz. You can change anything before class.</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <input value={ai.topic} onChange={(e) => setAi({ ...ai, topic: e.target.value })} maxLength={120} placeholder="Topic, e.g. Quadratic equations" aria-label="Topic" className="field min-w-[220px] flex-[2] !w-auto" />
+          <input value={ai.level} onChange={(e) => setAi({ ...ai, level: e.target.value })} maxLength={40} placeholder="Class, e.g. SS2" aria-label="Class" className="field !w-36" />
+          <input value={ai.subject} onChange={(e) => setAi({ ...ai, subject: e.target.value })} maxLength={40} placeholder="Subject (optional)" aria-label="Subject" className="field !w-44" />
+          <button type="submit" disabled={!!busy} className="btn-ink">{busy === "ai" ? "Writing your lesson…" : "Make lesson"}</button>
+        </div>
+        {busy === "ai" && <p role="status" className="mt-2 text-sm text-ink/60">This takes about 20–40 seconds.</p>}
+        {aiDone && <p role="status" className="mt-2 text-sm font-bold text-emerald-700">{aiDone}</p>}
+      </form>
       {error && <p className="rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700" role="alert">{error}</p>}
       {!lists && !error && <div className="card h-40 animate-pulse" />}
       {lists && (base === "/app" ? (["mine"] as const) : (["mine", "shared"] as const)).map((k) => (

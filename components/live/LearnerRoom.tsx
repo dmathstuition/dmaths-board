@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { LiveChannelProvider, useLive } from "@/components/live/LiveChannel";
+import { useLearnerVoice } from "@/components/live/ClassVoice";
 import Whiteboard from "@/components/live/Whiteboard";
 import QuizPlayer from "@/components/live/QuizPlayer";
 import { useRoom } from "@/components/live/HostRoom";
@@ -43,6 +44,7 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
     load();
   }
   const onState = useCallback((s: { id: string; status: string } | null) => setQuiz(s), []);
+  const voice = useLearnerVoice({ classId: id, me: { id: room?.me.id ?? "" } });
 
   if (err) {
     return (
@@ -96,7 +98,7 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
       )}
       <div hidden={showQuiz}>
         <Whiteboard sessionId={id} host={false} myId={room.me.id} myName={room.me.name} canDraw={room.me.canWrite} writers={room.writers} readOnly={ended}
-          hand={ended ? undefined : { up: handUp, onToggle: toggleHand, note: handNote }} />
+          hand={ended ? undefined : { up: handUp, onToggle: toggleHand, note: handNote }} extra={ended ? undefined : voice.controls} />
       </div>
       <p className="text-center text-xs text-ink/45">{guest ? "Follow your teacher's board and take part here. Keep this page open." : "Watch your tutor's shared screen in the call and take part here. Keep this page open."}</p>
     </div>

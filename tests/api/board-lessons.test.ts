@@ -65,3 +65,30 @@ describe("lesson library", () => {
     expect((await res.json()).error).toMatch(/migration-board-lessons\.sql/);
   });
 });
+
+describe("A.I lesson maker", () => {
+  it("writes a lesson and its quiz into my library", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/ai", async (orig) => ({ ...(await orig<any>()), aiChat: async () => JSON.stringify({
+      title: "Photosynthesis", subject: "Biology", objectives: ["Explain photosynthesis"],
+      pages: [{ heading: "What plants need", points: ["Light", "Water", "Carbon dioxide"] }],
+      practice: ["Name the gas plants give out"],
+      quiz: [{ q: "Plants give out…", options: ["Oxygen", "Nitrogen", "Helium", "Neon"], answer: 0 }],
+    }) }));
+    const { POST: AIPOST } = await import("@/app/api/board-lessons/route");
+    staff.mockResolvedValue({ id: "t1", role: "board_teacher" });
+    mockAdmin._qb.single.mockResolvedValueOnce({ data: { id: "L5" }, error: null }).mockResolvedValueOnce({ data: { id: "Q5" }, error: null });
+    const res = await AIPOST(post({ action: "ai", topic: "Photosynthesis", level: "JSS2" }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id: "L5", quizId: "Q5", questions: 1 });
+    const [lessonRow, quizRow] = mockAdmin._qb.insert.mock.calls.map((c: any[]) => c[0]);
+    expect(lessonRow).toMatchObject({ owner_id: "t1", title: "Photosynthesis · JSS2", subject: "Biology", shared: false });
+    expect(lessonRow.pages).toBeGreaterThanOrEqual(3);
+    expect(quizRow).toMatchObject({ owner_id: "t1", title: "Photosynthesis quiz" });
+    vi.doUnmock("@/lib/ai");
+  });
+  it("asks for a topic", async () => {
+    staff.mockResolvedValue({ id: "t1", role: "board_teacher" });
+    expect((await POST(post({ action: "ai", topic: " " }))).status).toBe(400);
+  });
+});

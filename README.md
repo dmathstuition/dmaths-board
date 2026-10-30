@@ -39,6 +39,8 @@ Old links under `/board/...` redirect to the same page without `/board`.
 | `DEEPSEEK_API_KEY` (optional) | AI game questions and the lab tutor |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` (optional) | Shared rate limits |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (optional) | Push notifications |
+| `CF_REALTIME_APP_ID`, `CF_REALTIME_APP_TOKEN` (optional) | Class voice: Cloudflare dashboard → Realtime → SFU → create an app. Without them the voice buttons stay hidden |
+| `CF_TURN_KEY_ID`, `CF_TURN_KEY_TOKEN` (optional) | Cloudflare → Realtime → TURN Server: helps voice through strict school/office networks |
 
 3. **Admin:** sign up on `/signup`, then in the SQL Editor run
    `update profiles set role = 'admin' where email = 'you@example.com';`

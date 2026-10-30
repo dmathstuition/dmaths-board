@@ -105,7 +105,7 @@ export function classServer() {
     await ctx.route("**/api/live-sessions/diag", (r) => r.fulfill({ json: { ok: true } }));
     for (const pat of ["**/api/live-quiz**", "**/api/quiz-sets**", "**/api/board-lessons**"]) await ctx.route(pat, (r) => r.fulfill({ json: {} }));
   }
-  return { attach, stats };
+  return { attach, stats, saved: () => savedBoard as { pages?: { kind?: string; pts: number[] }[][] } | null };
 }
 
 export async function agree(p: Page) {

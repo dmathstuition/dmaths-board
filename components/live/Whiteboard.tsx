@@ -1,4 +1,5 @@
 "use client";
+import { recognizeShape } from "@/lib/shapeNeat";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { RECONNECTED, useLive, useLiveStatus } from "@/components/live/LiveChannel";
@@ -119,12 +120,13 @@ function paperStyle(p: Paper, boxW: number): CSSProperties {
 // often in big classes), and the
 // host's copy autosaves so late joiners and the class log get the board.
 // `lessonId`: preparing a lesson-library board instead of a live class (saves to the lesson).
-export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "Learner", canDraw, writers, readOnly = false, canLog = false, people = [], roster, onQuizLaunched, hand }: {
+export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "Learner", canDraw, writers, readOnly = false, canLog = false, people = [], roster, onQuizLaunched, hand, extra }: {
   sessionId: string; lessonId?: string; host: boolean; myId: string; myName?: string; canDraw: boolean;
   writers: string[] | "all"; readOnly?: boolean; canLog?: boolean; people?: Person[];
   roster?: RosterProps; // the host's class list, shown beside the full-screen board
   onQuizLaunched?: () => void; // a ready-made quiz was launched from the Games panel: show the quiz
   hand?: { up: boolean; onToggle: () => void; note?: string }; // a learner's raise-hand button (on the board, so it works in full screen too)
+  extra?: (full: boolean) => React.ReactNode; // more buttons for the toolbar (class voice), shown in full screen too
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   // The element the board's full-screen panels open in (see `labLayer`).
@@ -173,6 +175,11 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const [color, setColor] = useState<string>(COLORS[2]);
   const [size, setSize] = useState<number>(SIZES[1]);
   const [fill, setFill] = useState(false);
+  // Neat shapes: a big rough line, circle, triangle or box drawn with the pen is
+  // tidied into a clean one. Off until switched on; this device remembers it.
+  const [neat, setNeat] = useState(false);
+  useEffect(() => { try { setNeat(localStorage.getItem("board-neat-shapes") === "1"); } catch { /* storage blocked */ } }, []);
+  const toggleNeat = () => setNeat((v) => { try { localStorage.setItem("board-neat-shapes", v ? "0" : "1"); } catch { /* storage blocked */ } return !v; });
   const [noteColor, setNoteColor] = useState<string>(NOTE_COLORS[0]);
   const [widgets, setWidgets] = useState<Widgets>(DEFAULT_WIDGETS);
   const [box, setBox] = useState({ w: 800, h: 500 });
@@ -799,7 +806,8 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
     if (!s) return;
     drawing.current = null;
     if (s.kind && isBoxTool(s.kind) && Math.hypot(s.pts[2] - s.pts[0], s.pts[3] - s.pts[1]) < 0.004) { redraw(); return; }
-    commit(s);
+    const tidy = neat && tool === "pen" ? recognizeShape(s) : null;
+    commit(tidy ? tidy.item : s); // same id, so everyone's preview of the rough line is replaced
   }
   // A second finger arrived: drop the line just started (and tell the others).
   function cancelDrawing() {
@@ -1291,6 +1299,10 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
           <span className="rounded-full bg-current" style={{ width: Math.min(22, sz + 3), height: Math.min(22, sz + 3) }} />
         </button>
       ))}
+      {tool === "pen" && (
+        <button type="button" onClick={toggleNeat} aria-pressed={neat} title="Tidy big rough lines, circles, triangles and boxes into clean shapes"
+          className={`${btn} ${neat ? on : idle} text-xs`}>{neat ? "Neat shapes: on" : "Neat shapes"}</button>
+      )}
       {FILLABLE.includes(tool as ItemKind) && (
         <button type="button" onClick={() => setFill((f) => !f)} aria-pressed={fill} className={`${btn} ${fill ? on : idle} text-xs`}>{fill ? "Filled" : "Outline"}</button>
       )}
@@ -1421,6 +1433,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
       )}
       <button type="button" onClick={download} className={`${btn} ${idle}`} title="Download this page" aria-label="Download this page as an image"><BoardIcon name="download" /></button>
       <button type="button" onClick={downloadAll} className={`${btn} ${idle}`} title="Download every page as a PDF" aria-label="Download every page as a PDF"><BoardIcon name="pages" />{full ? "" : "PDF"}</button>
+      {!readOnly && extra?.(full)}
       {hand && !readOnly && (
         <button type="button" onClick={hand.onToggle} aria-pressed={hand.up}
           className={`${btn} ${hand.up ? "bg-amber-400 text-ink ring-2 ring-amber-500" : full ? "bg-amber-400/20 text-amber-200 ring-1 ring-amber-300/60" : "bg-amber-50 text-amber-900 ring-1 ring-amber-300"}`}

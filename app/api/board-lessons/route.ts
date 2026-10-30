@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireBoardOrStaff } from "@/lib/boardAccess";
-import { rateLimit } from "@/lib/ratelimit";
+import { rateLimit, limit } from "@/lib/ratelimit";
+import { aiChat, aiErrorResponse, extractJson } from "@/lib/ai";
+import { AI_LESSON_SYSTEM, cleanAiLesson, lessonToBoard } from "@/lib/aiLesson";
+import { cleanQuestions } from "@/lib/liveQuiz";
 import { cleanBoard, itemCount } from "@/lib/whiteboard";
 import { cleanWidgets } from "@/lib/boardTools";
 
@@ -10,8 +13,10 @@ import { cleanWidgets } from "@/lib/boardTools";
 //   GET ?id=         → one lesson with its board (owner, admin, or shared)
 //   POST { action: "save", id?, title, subject, shared, board?, widgets? } → create / update (owner or admin)
 //   POST { action: "copy", id } → a copy of a lesson I can open, in my library
+//   POST { action: "ai", topic, level?, subject? } → the A.I writes a lesson (and its quiz) into my library
 //   DELETE ?id=      → delete (owner or admin)
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // the A.I lesson maker can take ~30 seconds
 
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
 const MISSING = /board_lessons/i;
@@ -76,6 +81,7 @@ export async function POST(req: Request) {
       if (error) throw new Error(error.message);
       return NextResponse.json({ id: data.id });
     }
+    if (body?.action === "ai") return await makeWithAi(me, body);
     if (body?.action !== "save") return bad("Unknown action.");
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (body.title !== undefined) patch.title = cleanTitle(body.title);
@@ -113,4 +119,40 @@ export async function DELETE(req: Request) {
     if (error) throw new Error(error.message);
     return NextResponse.json({ ok: true });
   } catch (e) { return fail(e); }
+}
+
+const short = (v: unknown, n: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+
+// The A.I lesson maker: a topic in, a ready board lesson (and a quiz) out.
+async function makeWithAi(me: { id: string; role: string }, body: any) {
+  const topic = short(body?.topic, 120);
+  if (topic.length < 3) return bad("Type the topic, e.g. \"Quadratic equations\".");
+  if (!(await limit(`lesson-ai:${me.id}`, 4, 60_000))) return bad("Give the A.I a minute before the next lesson.", 429);
+  if (me.role === "board_teacher" && !(await limit(`lesson-ai-day:${me.id}`, 20, 86_400_000))) return bad("That's today's A.I lesson limit — try again tomorrow.", 429);
+  const level = short(body?.level, 40), subject = short(body?.subject, 40);
+  let lesson;
+  try {
+    const reply = await aiChat({
+      system: AI_LESSON_SYSTEM, maxTokens: 4000,
+      user: `Class: ${level || "secondary school"}. Subject: ${subject || "work it out from the topic"}. Topic: ${topic}.`,
+    });
+    lesson = cleanAiLesson(extractJson(reply));
+  } catch (e) { return aiErrorResponse(e); }
+  if (!lesson) return bad("The A.I reply wasn't usable — try again, or word the topic differently.", 502);
+
+  const admin = supabaseAdmin();
+  const board = cleanBoard(lessonToBoard(lesson, me.id));
+  const title = cleanTitle(`${lesson.title}${level ? ` · ${level}` : ""}`);
+  const { data, error } = await admin.from("board_lessons").insert({
+    owner_id: me.id, title, subject: subject || lesson.subject, shared: false,
+    board, pages: board.pages.length, items: itemCount(board),
+  }).select("id").single();
+  if (error) throw new Error(error.message);
+  let quizId: string | null = null;
+  const questions = cleanQuestions(lesson.quiz.map((q) => ({ ...q, seconds: 20 })));
+  if (questions?.length) {
+    const { data: q } = await admin.from("quiz_sets").insert({ owner_id: me.id, title: cleanTitle(`${lesson.title} quiz`), subject: subject || lesson.subject, questions }).select("id").single();
+    quizId = q?.id ?? null;
+  }
+  return NextResponse.json({ id: data.id, quizId, pages: board.pages.length, questions: questions?.length ?? 0 });
 }
