@@ -261,7 +261,9 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const paintInk = useCallback(() => {
     const c = inkRef.current;
     if (!c) return;
-    const ctx = c.getContext("2d", { desynchronized: true }) as CanvasRenderingContext2D | null;
+    // A plain 2D context: "desynchronized" (low-latency) canvases show as solid
+    // black on some phones and graphics chips, hiding the whole board.
+    const ctx = c.getContext("2d");
     if (!ctx) return;
     const d = drawing.current;
     if (!d || d.erase) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, c.width, c.height); return; }
