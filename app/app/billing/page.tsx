@@ -15,7 +15,7 @@ export default async function BoardBillingPage() {
       <div className="mx-auto max-w-2xl rounded-2xl border border-dmb-rule bg-dmb-sheet p-6">
         <h1 className="font-dmbDisplay text-2xl font-bold text-dmb-ink">You&apos;re signed in as an admin</h1>
         <p className="mt-2 text-dmb-muted">Admins use D-Maths Board free — there&apos;s nothing to pay. Teachers&apos; subscriptions, payments and revenue are on the subscribers page.</p>
-        <Link href="/admin/board" className="dmb-btn mt-5">Open subscribers</Link>
+        <Link href="/admin" className="dmb-btn mt-5">Open the admin dashboard</Link>
       </div>
     );
   }

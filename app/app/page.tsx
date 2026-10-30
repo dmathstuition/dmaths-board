@@ -46,7 +46,7 @@ export default async function BoardHomePage({ searchParams }: { searchParams: { 
       {t.isAdmin && (
         <section className={panel}>
           <p className="min-w-0 flex-1 text-sm text-dmb-muted"><b className="text-dmb-ink">You&apos;re in as an admin.</b> Classes you start here are D-Maths Board classes — students join with the PIN and their name. Track teachers, trials and payments on the subscribers page.</p>
-          <Link href="/admin/board" className="dmb-btn !min-h-[44px]">Subscribers</Link>
+          <Link href="/admin" className="dmb-btn !min-h-[44px]">Admin dashboard</Link>
         </section>
       )}
       {t.access.state === "trial" && (

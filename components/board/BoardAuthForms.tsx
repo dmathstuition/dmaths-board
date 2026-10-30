@@ -90,7 +90,7 @@ export function BoardLoginForm() {
     if (p?.role === "admin") {
       // Admins use the board too. If their account has two-step sign-in, finish it on the academy login, which then returns here.
       const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
-      window.location.assign(aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2" ? "/login?next=/app" : "/app");
+      window.location.assign(aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2" ? "/login?next=/admin" : "/admin");
       return;
     }
     if (p?.role !== "board_teacher") {

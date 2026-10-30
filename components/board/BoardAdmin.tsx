@@ -65,7 +65,7 @@ export default function BoardAdmin() {
     <div className="space-y-5">
       <div className="page-hero relative overflow-hidden rounded-3xl bg-gradient-to-br from-board to-boardDeep p-7 text-white sm:p-9">
         <p className="text-xs font-black uppercase tracking-[.2em] text-gold">D-Maths Board</p>
-        <h1 className="mt-2 font-display text-3xl font-black sm:text-4xl">Board subscribers</h1>
+        <h1 className="mt-2 font-display text-3xl font-black sm:text-4xl">Teachers</h1>
         <p className="mt-2 max-w-2xl text-white/75">Teachers outside the academy using the interactive board at <a href="/" className="font-bold underline">dmaths.academy</a>.</p>
         <div className="mt-5 flex flex-wrap gap-2">
           <a href="/app" className="btn-gold !min-h-[44px]">Open D-Maths Board</a>

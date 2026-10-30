@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { requireBoardAdmin } from "@/lib/boardAdmin";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { BOARD_MIGRATION_MSG, BOARD_MISSING } from "@/lib/boardAccess";
 import { boardAccess } from "@/lib/boardPlan";
@@ -10,12 +10,7 @@ import { boardAccess } from "@/lib/boardPlan";
 export const dynamic = "force-dynamic";
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
 
-async function requireAdmin() {
-  const { data: { user } } = await supabaseServer().auth.getUser();
-  if (!user) return null;
-  const { data: p } = await supabaseAdmin().from("profiles").select("role").eq("id", user.id).maybeSingle();
-  return p?.role === "admin" ? user.id : null;
-}
+const requireAdmin = requireBoardAdmin;
 
 export async function GET() {
   if (!(await requireAdmin())) return bad("Admins only.", 403);

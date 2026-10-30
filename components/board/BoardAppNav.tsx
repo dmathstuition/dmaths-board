@@ -26,7 +26,7 @@ export default function BoardAppNav({ name, badge, isAdmin = false }: { name: st
         {badge && <span className="rounded-full bg-dmb-mint px-2.5 py-1 text-xs font-bold text-dmb-board">{badge}</span>}
         <div className="ml-auto flex items-center gap-2">
           <span className="hidden text-sm font-medium text-dmb-muted sm:inline">{name}</span>
-          {isAdmin && <Link href="/admin/board" className="dmb-link min-h-[36px] rounded-lg px-3 py-2 text-sm font-semibold text-dmb-ink ring-1 ring-dmb-rule hover:bg-dmb-paper">Subscribers</Link>}
+          {isAdmin && <Link href="/admin" className="dmb-link min-h-[36px] rounded-lg px-3 py-2 text-sm font-semibold text-dmb-ink ring-1 ring-dmb-rule hover:bg-dmb-paper">Admin</Link>}
           <button type="button" onClick={signOut} className="dmb-link min-h-[36px] rounded-lg px-3 text-sm font-semibold text-dmb-ink ring-1 ring-dmb-rule hover:bg-dmb-paper">Sign out</button>
         </div>
         <nav className="-mb-px flex w-full gap-1 overflow-x-auto" aria-label="D-Maths Board">
