@@ -133,6 +133,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const laserRef = useRef<HTMLCanvasElement>(null);
+  const inkRef = useRef<HTMLCanvasElement>(null); // the line being drawn right now, on its own layer
   const pages = useRef<Stroke[][]>([[]]);
   const live = useRef(new Map<string, { page: number; s: Stroke }>());
   const drawing = useRef<Stroke | null>(null);
@@ -227,13 +228,21 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
     }
     return im.complete && im.naturalWidth ? im : null;
   }, []);
-  const redraw = useCallback(() => {
+  // Painting happens at most once per screen frame. The page (everything already
+  // on it) is only repainted when it changes; the line being drawn right now is
+  // painted on its own transparent layer on top, so each pen movement costs one
+  // line however full the page is. (An eraser line has to cut the page itself,
+  // so it is painted with the page.)
+  const frame = useRef(0);
+  const needBase = useRef(true);
+  const paintBase = useCallback(() => {
     const c = canvasRef.current, ctx = c?.getContext("2d");
     if (!c || !ctx) return;
     const p = pageRef.current;
     const liveHere = [...live.current.values()].filter((l) => l.page === p).map((l) => l.s);
     const m = viewMatrix(viewRef.current, c.width, c.height);
-    drawStrokes(ctx, [...(pages.current[p] ?? []), ...liveHere, ...(drawing.current ? [drawing.current] : [])], c.width, c.height, getImg, m);
+    const d = drawing.current;
+    drawStrokes(ctx, [...(pages.current[p] ?? []), ...liveHere, ...(d?.erase ? [d] : [])], c.width, c.height, getImg, m);
     const sel = selRef.current;
     if (sel) {
       const b = itemBounds(sel), pad = 6 * (c.width / BOARD_W);
@@ -242,6 +251,31 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
       ctx.restore();
     }
   }, [getImg]);
+  const paintInk = useCallback(() => {
+    const c = inkRef.current;
+    if (!c) return;
+    const ctx = c.getContext("2d", { desynchronized: true }) as CanvasRenderingContext2D | null;
+    if (!ctx) return;
+    const d = drawing.current;
+    if (!d || d.erase) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, c.width, c.height); return; }
+    drawStrokes(ctx, [d], c.width, c.height, getImg, viewMatrix(viewRef.current, c.width, c.height));
+  }, [getImg]);
+  const paint = useCallback(() => {
+    frame.current = 0;
+    if (needBase.current) { needBase.current = false; paintBase(); }
+    paintInk();
+  }, [paintBase, paintInk]);
+  const schedule = useCallback(() => {
+    if (!frame.current) frame.current = requestAnimationFrame(paint);
+  }, [paint]);
+  // Repaint the page (and the line being drawn) on the next frame.
+  const redraw = useCallback(() => { needBase.current = true; schedule(); }, [schedule]);
+  // Only the line being drawn changed.
+  const redrawInk = useCallback(() => {
+    if (drawing.current?.erase) needBase.current = true;
+    schedule();
+  }, [schedule]);
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
   redrawRef.current = redraw;
   useEffect(() => { redraw(); }, [page, redraw, view]);
 
@@ -257,13 +291,15 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
       if (lc) { lc.width = c.width; lc.height = c.height; }
-      redraw();
+      const ic = inkRef.current;
+      if (ic) { ic.width = c.width; ic.height = c.height; }
+      cancelAnimationFrame(frame.current); needBase.current = true; paint(); // resizing blanked them: paint now
     };
     fit();
     const ro = new ResizeObserver(fit);
     if (stageRef.current) ro.observe(stageRef.current);
     return () => ro.disconnect();
-  }, [redraw, full]);
+  }, [paint, full]);
 
   // Mouse wheel / trackpad: pinch or Ctrl+wheel zooms at the pointer; wheel moves when zoomed in.
   useEffect(() => {
@@ -621,7 +657,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   useEffect(() => () => cancelAnimationFrame(laserRaf.current), []);
 
   // ── Drawing ──
-  function point(e: React.PointerEvent): [number, number] {
+  function point(e: { clientX: number; clientY: number }): [number, number] {
     const [sx, sy] = localPoint(canvasRef.current!, e.clientX, e.clientY);
     const [x, y] = toBoard(viewRef.current, sx, sy);
     return [roundPt(x), roundPt(y)];
@@ -714,16 +750,24 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
     }
     const d = drawing.current;
     if (!d) return;
-    const [x, y] = point(e);
     const shape = isBoxTool(tool);
-    if (shape) { d.pts[2] = x; d.pts[3] = y; }
+    if (shape) { const [x, y] = point(e); d.pts[2] = x; d.pts[3] = y; }
     else {
-      // Skip points too close to the last one: the same line, far less to send.
-      const L = d.pts.length;
-      if (Math.hypot(x - d.pts[L - 2], (y - d.pts[L - 1]) * (BOARD_H / BOARD_W)) < 0.0015) return;
-      d.pts.push(x, y);
+      // A pen or stylus reports more points than there are screen frames; the
+      // browser hands them over together. Use them all so quick writing stays round.
+      const native = e.nativeEvent as PointerEvent;
+      const all = typeof native.getCoalescedEvents === "function" ? native.getCoalescedEvents() : [];
+      let added = false;
+      for (const ev of all.length ? all : [e]) {
+        const [x, y] = point(ev);
+        // Skip points too close to the last one: the same line, far less to send.
+        const L = d.pts.length;
+        if (Math.hypot(x - d.pts[L - 2], (y - d.pts[L - 1]) * (BOARD_H / BOARD_W)) < 0.0015) continue;
+        d.pts.push(x, y); added = true;
+      }
+      if (!added) return;
     }
-    redraw();
+    redrawInk();
     if (now - lastLive.current > streamEvery) {
       lastLive.current = now;
       const { pts, ...head } = d;
@@ -1425,6 +1469,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
         <canvas ref={canvasRef} className={`absolute inset-0 block h-full w-full touch-none ${cursor}`}
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={(e) => { if (!e.buttons) gesture.current.pts.delete(e.pointerId); }}
           role="img" aria-label={`Shared class board, page ${page + 1} of ${pageCount}`} />
+        <canvas ref={inkRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />
         <canvas ref={laserRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />
         {selected && tool === "select" && (host || selected.by === myId) && (() => {
           const ib = itemBounds(selected), [x1, y1] = toScreen(view, ib.x1, ib.y1), [, y2] = toScreen(view, ib.x2, ib.y2);
