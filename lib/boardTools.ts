@@ -2,6 +2,8 @@
 // broadcast so every learner sees the same timer, dice, chosen name, screen
 // shade, ruler and protractor.
 
+import { isSolid, type SolidKind } from "@/lib/solids";
+
 export type Timer = { seconds: number; endsAt: number | null; left: number | null; mode: "down" | "up"; startedAt: number | null };
 export type Placed = { on: boolean; x: number; y: number; rot: number }; // x,y = centre as a fraction of the board
 export type Panel = { on: boolean; x: number; y: number }; // x,y = top-left as a fraction of the board
@@ -24,6 +26,10 @@ export type SentenceState = Panel & { words: string[]; order: number[]; built: n
 export type SpellState = Panel & { word: string; guessed: string[]; reveal: boolean };
 export type SpotState = { on: boolean; x: number; y: number; r: number }; // centre, radius as fractions of the board width
 export type GroupsState = Panel & { size: number; groups: string[][] };
+// Compasses: the needle at x,y (fractions of the board), opened `r` cm, the pencil at `rot` degrees.
+export type CompassState = { on: boolean; x: number; y: number; r: number; rot: number };
+// A 3D shape the class can turn: its kind and measurements (cm), how it's turned, and whether its net shows.
+export type SolidState = Panel & { shape: SolidKind; a: number; b: number; c: number; yaw: number; pitch: number; net: boolean; facts: boolean };
 export type Widgets = {
   timer: Timer | null;
   dice: { values: number[]; at: number } | null;
@@ -43,6 +49,8 @@ export type Widgets = {
   spell: SpellState;
   spotlight: SpotState;
   groups: GroupsState;
+  compass: CompassState;
+  solid: SolidState;
 };
 
 export const DEFAULT_WIDGETS: Widgets = {
@@ -62,6 +70,8 @@ export const DEFAULT_WIDGETS: Widgets = {
   spell: { on: false, x: 0.5, y: 0.32, word: "", guessed: [], reveal: false },
   spotlight: { on: false, x: 0.5, y: 0.5, r: 0.14 },
   groups: { on: false, x: 0.3, y: 0.08, size: 3, groups: [] },
+  compass: { on: false, x: 0.5, y: 0.55, r: 5, rot: 0 },
+  solid: { on: false, x: 0.55, y: 0.04, shape: "cuboid", a: 6, b: 4, c: 3, yaw: 35, pitch: 20, net: false, facts: true },
 };
 
 export const WORD_KINDS = ["noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection"] as const;
@@ -101,6 +111,16 @@ export function cleanWidgets(v: unknown): Widgets {
       ...panel(w?.groups, DEFAULT_WIDGETS.groups), size: Math.round(clamp(w?.groups?.size, 2, 10, 3)),
       groups: (Array.isArray(w?.groups?.groups) ? w.groups.groups : []).slice(0, 12)
         .map((g: unknown) => (Array.isArray(g) ? g.slice(0, 40).map((n) => String(n).slice(0, 60)).filter(Boolean) : [])),
+    },
+    compass: {
+      on: !!w?.compass?.on, x: clamp(w?.compass?.x, 0, 1, 0.5), y: clamp(w?.compass?.y, 0, 1, 0.55),
+      r: Math.round(clamp(w?.compass?.r, 0.5, 20, 5) * 10) / 10, rot: ((Math.round(clamp(w?.compass?.rot, -720, 720, 0)) % 360) + 360) % 360,
+    },
+    solid: {
+      ...panel(w?.solid, DEFAULT_WIDGETS.solid), shape: isSolid(w?.solid?.shape) ? w.solid.shape : "cuboid",
+      a: Math.round(clamp(w?.solid?.a, 0.5, 50, 6) * 10) / 10, b: Math.round(clamp(w?.solid?.b, 0.5, 50, 4) * 10) / 10, c: Math.round(clamp(w?.solid?.c, 0.5, 50, 3) * 10) / 10,
+      yaw: ((Math.round(clamp(w?.solid?.yaw, -720, 720, 35)) % 360) + 360) % 360, pitch: Math.round(clamp(w?.solid?.pitch, -89, 89, 20)),
+      net: !!w?.solid?.net, facts: w?.solid?.facts !== false,
     },
   };
 }

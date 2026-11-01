@@ -1,8 +1,10 @@
+import { drawMath, mathExtent, mathSize, MATH_MAX } from "@/lib/mathType";
+
 // Shared whiteboard — item format, validation and drawing. Points are stored
 // normalised (0–1) so the board looks the same on a phone, a laptop and a
 // projector. A board has several pages, each with its own paper.
 
-export type ItemKind = "pen" | "hl" | "line" | "arrow" | "rect" | "ellipse" | "text" | "note" | "tri" | "dline" | "darrow" | "stamp" | "image" | "card" | "zone" | "cover";
+export type ItemKind = "pen" | "hl" | "line" | "arrow" | "rect" | "ellipse" | "text" | "note" | "tri" | "dline" | "darrow" | "stamp" | "image" | "card" | "zone" | "cover" | "math";
 // Freehand strokes keep `pts` as x,y,x,y…; shapes use two corners [x1,y1,x2,y2];
 // text and notes use one point [x,y] plus `text` (w = size step).
 // Activities: a `card` learners drag into a `zone`; both carry `group` (which
@@ -35,7 +37,7 @@ export const isSlideUrl = (v: unknown): v is string =>
 // saved and re-sent as one piece, so keep this modest for learners on mobile data.
 export const BOARD_MAX_PAGES = 50;
 const MAX_STROKES = 4000, MAX_POINTS = 4000, MAX_PAGES = BOARD_MAX_PAGES, MAX_TEXT = 500;
-const KINDS: ItemKind[] = ["pen", "hl", "line", "arrow", "rect", "ellipse", "text", "note", "tri", "dline", "darrow", "stamp", "image", "card", "zone", "cover"];
+const KINDS: ItemKind[] = ["pen", "hl", "line", "arrow", "rect", "ellipse", "text", "note", "tri", "dline", "darrow", "stamp", "image", "card", "zone", "cover", "math"];
 export const SHAPE_KINDS: ItemKind[] = ["line", "dline", "arrow", "darrow", "rect", "ellipse", "tri"];
 export const FILLABLE: ItemKind[] = ["rect", "ellipse", "tri"];
 export const STAMPS = ["tick", "cross", "star", "heart", "smiley", "question"] as const;
@@ -77,8 +79,8 @@ export function cleanStroke(v: unknown): Stroke | null {
     out.text = String(s.text); out.pts = pts.slice(0, 2); out.erase = false;
     return out;
   }
-  if (kind === "text" || kind === "note") {
-    const text = String(s.text ?? "").replace(/\r/g, "").slice(0, MAX_TEXT);
+  if (kind === "text" || kind === "note" || kind === "math") {
+    const text = String(s.text ?? "").replace(/\r/g, "").slice(0, kind === "math" ? MATH_MAX : MAX_TEXT);
     if (!text.trim() || pts.length < 2) return null;
     out.text = text; out.pts = pts.slice(0, 2); out.erase = false;
     return out;
@@ -200,6 +202,8 @@ export function drawItem(ctx: CanvasRenderingContext2D, s: Stroke, w: number, h:
     drawActivity(ctx, s, X(0), Y(0), X(2), Y(2), scale);
   } else if (kind === "stamp" && s.text) {
     drawStamp(ctx, s.text as StampId, X(0), Y(0), stampSize(s.w) * scale);
+  } else if (kind === "math" && s.text) {
+    drawMath(ctx, s.text, X(0), Y(0), mathSize(s.w) * scale, s.color);
   } else if (kind === "text" && s.text) {
     const size = fontFor(s.w) * scale;
     ctx.font = `600 ${size}px Poppins, system-ui, sans-serif`;
@@ -272,6 +276,10 @@ export function itemBounds(s: Stroke): Bounds {
     const hw = stampSize(s.w) / 2 / BOARD_W, hh = stampSize(s.w) / 2 / BOARD_H;
     return { x1: s.pts[0] - hw, y1: s.pts[1] - hh, x2: s.pts[0] + hw, y2: s.pts[1] + hh };
   }
+  if (kind === "math") {
+    const e = mathExtent(String(s.text ?? ""), mathSize(s.w));
+    return { x1: s.pts[0], y1: s.pts[1], x2: Math.min(1, s.pts[0] + e.w / BOARD_W), y2: Math.min(1, s.pts[1] + e.h / BOARD_H) };
+  }
   if (kind === "text") {
     const f = fontFor(s.w), lines = String(s.text ?? "").split("\n");
     const longest = Math.max(1, ...lines.map((l) => l.length));
@@ -315,7 +323,7 @@ export function moveItem(s: Stroke, dx: number, dy: number): Stroke {
 // Make an item bigger or smaller (k > 1 grows), about its centre.
 export function scaleItem(s: Stroke, k: number): Stroke {
   const kind = s.kind ?? "pen";
-  if (kind === "text" || kind === "stamp") return { ...s, w: Math.max(1, Math.min(60, Math.round(s.w * k * 10) / 10)) };
+  if (kind === "text" || kind === "stamp" || kind === "math") return { ...s, w: Math.max(1, Math.min(60, Math.round(s.w * k * 10) / 10)) };
   if (kind === "note") return s;
   const b = itemBounds(s), cx = (b.x1 + b.x2) / 2, cy = (b.y1 + b.y2) / 2;
   const grown = { ...s, pts: s.pts.map((v, i) => roundPt(i % 2 ? cy + (v - cy) * k : cx + (v - cx) * k)) };

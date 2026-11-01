@@ -16,6 +16,7 @@ import { checkCards, isAnswerCard } from "@/lib/boardActivities";
 import ActivityDialog from "@/components/live/board/ActivityDialog";
 import Replay from "@/components/live/board/Replay";
 import AnswerBoards from "@/components/live/board/AnswerBoards";
+import EquationEditor from "@/components/live/board/EquationEditor";
 import PulsePoll from "@/components/live/board/PulsePoll";
 import GroupBoards from "@/components/live/board/GroupBoards";
 import dynamic from "next/dynamic";
@@ -30,7 +31,7 @@ const LabPanel = dynamic(() => import("@/components/live/board/LabPanel"), { ssr
 const GamesPanel = dynamic(() => import("@/components/live/board/GamesPanel"), { ssr: false });
 
 export type { Paper } from "@/lib/whiteboard";
-type Tool = "hand" | "select" | "pen" | "hl" | "eraser" | "line" | "dline" | "arrow" | "darrow" | "rect" | "ellipse" | "tri" | "text" | "note" | "stamp" | "laser" | "cover";
+type Tool = "hand" | "select" | "pen" | "hl" | "eraser" | "line" | "dline" | "arrow" | "darrow" | "rect" | "ellipse" | "tri" | "text" | "note" | "stamp" | "laser" | "cover" | "math";
 type Person = { id: string; name: string; online?: boolean };
 
 const TOOLS: { id: Tool; label: string; key: string; icon: BoardIconName }[] = [
@@ -47,6 +48,7 @@ const TOOLS: { id: Tool; label: string; key: string; icon: BoardIconName }[] = [
   { id: "ellipse", label: "Circle", key: "o", icon: "circle" },
   { id: "tri", label: "Triangle", key: "g", icon: "triangle" },
   { id: "text", label: "Text", key: "t", icon: "text" },
+  { id: "math", label: "Equation (type maths)", key: "q", icon: "equation" },
   { id: "note", label: "Sticky note", key: "n", icon: "note" },
   { id: "stamp", label: "Stamp", key: "s", icon: "stamp" },
   { id: "laser", label: "Laser pointer", key: "k", icon: "laser" },
@@ -55,13 +57,13 @@ const TOOLS: { id: Tool; label: string; key: string; icon: BoardIconName }[] = [
 const MATH_SYMBOLS = ["√", "π", "²", "³", "½", "¼", "¾", "×", "÷", "±", "≤", "≥", "≠", "≈", "°", "∠", "θ", "∞", "→"];
 const SHAPE_TOOLS: Tool[] = ["line", "dline", "arrow", "darrow", "rect", "ellipse", "tri"];
 // The toolbar shows one Shapes button; the shape row appears when it is picked.
-const MAIN_TOOLS: (Tool | "shapes")[] = ["select", "pen", "hl", "eraser", "shapes", "text", "note", "stamp", "laser"];
+const MAIN_TOOLS: (Tool | "shapes")[] = ["select", "pen", "hl", "eraser", "shapes", "text", "math", "note", "stamp", "laser"];
 const STAMP_LOOK: Record<StampId, { label: string; bg: string; icon: BoardIconName }> = {
   tick: { label: "Tick", bg: "#16A34A", icon: "tick" }, cross: { label: "Cross", bg: "#DC2626", icon: "close" },
   star: { label: "Star", bg: "#EAB308", icon: "stamp" }, heart: { label: "Heart", bg: "#EC4899", icon: "heart" },
   smiley: { label: "Smiley", bg: "#F59E0B", icon: "smiley" }, question: { label: "Question", bg: "#1657C9", icon: "question" },
 };
-type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "graph" | "calc" | "numberLine"
+type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "graph" | "calc" | "numberLine"
   | "clock" | "fractions" | "hundred" | "placeValue" | "wordCard" | "sentence" | "spell" | "groups" | "spotlight";
 // The class-tools panel, grouped so the host finds things fast.
 const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: string; icon: BoardIconName }[] }[] = [
@@ -71,6 +73,8 @@ const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: 
     { k: "numberLine", label: "Number line", hint: "Mark values", icon: "numberline" },
     { k: "ruler", label: "Ruler", hint: "Measure in cm", icon: "ruler" },
     { k: "protractor", label: "Protractor", hint: "Measure angles", icon: "protractor" },
+    { k: "compass", label: "Compasses", hint: "Draw circles and arcs", icon: "compass" },
+    { k: "solid", label: "3D shapes", hint: "Turn, volume, nets", icon: "solid" },
     { k: "fractions", label: "Fraction wall", hint: "Shade and compare", icon: "fractions" },
     { k: "hundred", label: "Hundred square", hint: "Patterns and multiples", icon: "hundred" },
     { k: "placeValue", label: "Place value", hint: "Digits in columns", icon: "placevalue" },
@@ -185,7 +189,8 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const [widgets, setWidgets] = useState<Widgets>(DEFAULT_WIDGETS);
   const [box, setBox] = useState({ w: 800, h: 500 });
   const [full, setFull] = useState(false);
-  const [edit, setEdit] = useState<{ kind: "text" | "note"; x: number; y: number; value: string } | null>(null);
+  // `replace`: the equation being changed (tap one with the equation tool).
+  const [edit, setEdit] = useState<{ kind: "text" | "note" | "math"; x: number; y: number; value: string; replace?: Stroke } | null>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
   const [overview, setOverview] = useState(false);
   const [activity, setActivity] = useState<"sorting" | "matching" | null>(null);
@@ -713,6 +718,13 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
     const [x, y] = point(e);
     // Keep the browser from moving focus off the text box we're about to open.
     if (tool === "text" || tool === "note") { e.preventDefault(); setEdit({ kind: tool, x, y, value: "" }); return; }
+    if (tool === "math") {
+      e.preventDefault();
+      const hit = hitTest(pages.current[pageRef.current] ?? [], x, y);
+      const old = hit?.kind === "math" && (host || hit.by === myId) ? hit : null;
+      setEdit(old ? { kind: "math", x: old.pts[0], y: old.pts[1], value: old.text ?? "", replace: old } : { kind: "math", x, y, value: "" });
+      return;
+    }
     e.currentTarget.setPointerCapture(e.pointerId);
     if (tool === "select") {
       const hit = hitTest(pages.current[pageRef.current] ?? [], x, y);
@@ -822,6 +834,18 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   function finishEdit() {
     if (!edit) return;
     const text = edit.value.trim();
+    if (edit.kind === "math") {
+      const old = edit.replace;
+      if (old) { // take the old equation off first
+        const n = pageRef.current;
+        pages.current[n] = (pages.current[n] ?? []).filter((x) => x.id !== old.id);
+        send("board-undo", { id: old.id, page: n, host, by: myId }); pending.current.delete(old.id);
+      }
+      if (text) commit({ id: newId(), by: myId, kind: "math", color: old?.color ?? color, w: old?.w ?? size, pts: [edit.x, edit.y], text, t: Date.now() });
+      else if (old) { redraw(); scheduleSave(); }
+      setEdit(null);
+      return;
+    }
     if (text) commit({ id: newId(), by: myId, kind: edit.kind, color: edit.kind === "note" ? noteColor : color, w: size, pts: [edit.x, edit.y], text: edit.value, t: Date.now() });
     setEdit(null);
   }
@@ -1196,7 +1220,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const on = "bg-[#1657C9] text-white";
   const sep = <span className={full ? "my-0.5 h-px w-full bg-white/15" : "mx-0.5 h-7 w-px bg-line"} aria-hidden />;
   const names = people.filter((p) => p.online !== false).map((p) => p.name);
-  const cursor = tool === "hand" || (!drawOk && !isHome(view)) ? "cursor-grab" : !drawOk ? "" : tool === "text" ? "cursor-text" : tool === "laser" || tool === "stamp" ? "cursor-pointer" : tool === "select" ? "cursor-default" : "cursor-crosshair";
+  const cursor = tool === "hand" || (!drawOk && !isHome(view)) ? "cursor-grab" : !drawOk ? "" : tool === "text" || tool === "math" ? "cursor-text" : tool === "laser" || tool === "stamp" ? "cursor-pointer" : tool === "select" ? "cursor-default" : "cursor-crosshair";
   // Where the text box sits on screen (it follows the zoom).
   const [edX, edY] = edit ? toScreen(view, edit.x, edit.y) : [0, 0];
   const editStyle: CSSProperties | undefined = edit ? {
@@ -1512,8 +1536,14 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
         {!readOnly && !lessonId && sessionId && <PulsePoll host={host} myId={myId} myName={myName} people={people} pollOpen={pollOpen} onPollOpen={() => setPollOpen(true)} onPollClose={() => setPollOpen(false)} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <GroupBoards host={host} myId={myId} myName={myName} people={people} open={groupsOpen} onOpen={() => setGroupsOpen(true)} onClose={() => setGroupsOpen(false)} onBring={addBoardPage} keep={keep} />}
         {!readOnly && !lessonId && <AnswerBoards sessionId={sessionId} host={host} myId={myId} myName={myName} people={people} open={answersOpen} onOpen={() => setAnswersOpen(true)} onClose={() => setAnswersOpen(false)} keep={keep} />}
-        <BoardWidgets w={widgets} host={host && !readOnly} onChange={updateWidgets} boxW={box.w} names={names} />
-        {edit && (<>
+        <BoardWidgets w={widgets} host={host && !readOnly} onChange={updateWidgets} boxW={box.w} names={names}
+          onDraw={(g) => commit({ id: newId(), by: myId, kind: g.kind, color, w: Math.min(size, 8), pts: g.pts, t: Date.now() })} />
+        {edit?.kind === "math" && (
+          <EquationEditor value={edit.value} colour={color} dark={dark} changing={!!edit.replace}
+            style={{ left: `${Math.min(edX * 100, 52)}%`, top: edY * box.h > box.h * 0.55 ? Math.max(4, edY * box.h - 250) : edY * box.h + 8 }}
+            onChange={(value) => setEdit({ ...edit, value })} onDone={finishEdit} onCancel={() => setEdit(null)} />
+        )}
+        {edit && edit.kind !== "math" && (<>
           <div className="absolute z-50 flex max-w-[95%] flex-wrap gap-0.5 rounded-xl bg-[#0B1220] p-1 shadow-xl" role="toolbar" aria-label="Maths symbols"
             style={{ left: `${Math.min(edX * 100, 60)}%`, top: edY * box.h > 46 ? edY * box.h - 44 : edY * box.h + (edit.kind === "note" ? (NOTE_H * box.h * view.z) / BOARD_H : 70) + 6 }}>
             {MATH_SYMBOLS.map((sym) => (
