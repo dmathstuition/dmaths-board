@@ -1,6 +1,7 @@
 // A small, safe maths-expression reader for the whiteboard's graph plotter and
 // calculator — no eval. Understands + − × ÷ ^, brackets, implicit
-// multiplication (2x, 3(x+1), 2sin(x)), the usual functions, π and e.
+// multiplication (2x, 3(x+1), 2sin(x)), the usual functions, π and e — and,
+// for the graph plotter, slider letters (a, b, c, k, m…) given as `params`.
 
 export type Compiled = (x: number) => number;
 type Tok = { t: "num"; v: number } | { t: "id"; v: string } | { t: "op"; v: string } | { t: "(" } | { t: ")" } | { t: "," };
@@ -12,8 +13,11 @@ const FUNCS: Record<string, (a: number, deg: boolean) => number> = {
   floor: (a) => Math.floor(a), ceil: (a) => Math.ceil(a), round: (a) => Math.round(a),
 };
 const CONSTS: Record<string, number> = { pi: Math.PI, e: Math.E };
+// Letters that can be sliders on the graph plotter (not x, y or e).
+export const PARAM_LETTERS = "abcdfghjklmnpqrstuvwz";
 
-export function tokenize(src: string): Tok[] {
+// `letters`: also accept these single letters as names (slider values).
+export function tokenize(src: string, letters = ""): Tok[] {
   const s = src.toLowerCase().replace(/\s+/g, "").replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-").replace(/π/g, "pi").replace(/√/g, "sqrt").replace(/²/g, "^2").replace(/³/g, "^3");
   const out: Tok[] = [];
   let i = 0;
@@ -26,7 +30,8 @@ export function tokenize(src: string): Tok[] {
     } else if (/[a-z]/.test(c)) {
       // Longest known name first, so "sinx" = sin(x) and "pix" = π·x.
       const rest = s.slice(i);
-      const name = [...Object.keys(FUNCS), ...Object.keys(CONSTS), "x"].sort((a, b) => b.length - a.length).find((n) => rest.startsWith(n));
+      const name = [...Object.keys(FUNCS), ...Object.keys(CONSTS), "x"].sort((a, b) => b.length - a.length).find((n) => rest.startsWith(n))
+        ?? (letters.includes(c) ? c : undefined);
       if (!name) throw new Error(`Unknown "${rest.match(/^[a-z]+/)![0]}"`);
       out.push({ t: "id", v: name }); i += name.length;
     } else if ("+-*/^".includes(c)) { out.push({ t: "op", v: c }); i++; }
@@ -47,8 +52,8 @@ export function tokenize(src: string): Tok[] {
 }
 
 // Recursive-descent parser → a closure. Precedence: + − < × ÷ < unary − < ^ (right-assoc).
-export function compile(src: string, deg = false): Compiled {
-  const toks = tokenize(src);
+export function compile(src: string, deg = false, params: Record<string, number> = {}): Compiled {
+  const toks = tokenize(src, Object.keys(params).join(""));
   if (!toks.length) throw new Error("Type an expression");
   let p = 0;
   const peek = () => toks[p];
@@ -87,6 +92,7 @@ export function compile(src: string, deg = false): Compiled {
     if (tk.t === "id") {
       if (tk.v === "x") return (x) => x;
       if (tk.v in CONSTS) { const v = CONSTS[tk.v]; return () => v; }
+      if (tk.v in params) { const v = params[tk.v]; return () => v; }
       const f = FUNCS[tk.v];
       // sin x and sin(x) both work: the argument binds like a power.
       const arg = peek()?.t === "(" ? atom() : power();
@@ -133,4 +139,13 @@ export function tickStep(range: number, target = 10): number {
   const raw = range / target, mag = Math.pow(10, Math.floor(Math.log10(raw)));
   const n = raw / mag;
   return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * mag;
+}
+
+// The slider letters an expression uses, in order of first use.
+export function paramsIn(src: string): string[] {
+  try {
+    const seen: string[] = [];
+    for (const t of tokenize(src, PARAM_LETTERS)) if (t.t === "id" && t.v.length === 1 && PARAM_LETTERS.includes(t.v) && !seen.includes(t.v)) seen.push(t.v);
+    return seen;
+  } catch { return []; }
 }

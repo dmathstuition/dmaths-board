@@ -5,7 +5,13 @@
 export type Timer = { seconds: number; endsAt: number | null; left: number | null; mode: "down" | "up"; startedAt: number | null };
 export type Placed = { on: boolean; x: number; y: number; rot: number }; // x,y = centre as a fraction of the board
 export type Panel = { on: boolean; x: number; y: number }; // x,y = top-left as a fraction of the board
-export type GraphState = Panel & { exprs: string[]; xMin: number; xMax: number; yMin: number; yMax: number };
+// A slider value for a letter in the graph rows (a, b, c, k, m…).
+export type GraphSlider = { v: number; min: number; max: number; step: number };
+export type GraphState = Panel & {
+  exprs: string[]; xMin: number; xMax: number; yMin: number; yMax: number;
+  params: Record<string, GraphSlider>; keys: boolean; table: boolean; big: boolean;
+};
+export const GRAPH_ROWS = 6;
 export type CalcState = Panel & { expr: string; result: string; deg: boolean };
 export type LineState = Panel & { min: number; max: number; step: number; marks: number[] };
 export type ClockState = Panel & { h: number; m: number; digital: boolean; words: boolean };
@@ -44,7 +50,7 @@ export const DEFAULT_WIDGETS: Widgets = {
   shade: { on: false, pct: 50 },
   ruler: { on: false, x: 0.5, y: 0.6, rot: 0 },
   protractor: { on: false, x: 0.5, y: 0.6, rot: 0 },
-  graph: { on: false, x: 0.03, y: 0.04, exprs: ["x^2 - 4", "", ""], xMin: -10, xMax: 10, yMin: -10, yMax: 10 },
+  graph: { on: false, x: 0.03, y: 0.04, exprs: ["x^2 - 4", "", "", "", "", ""], xMin: -10, xMax: 10, yMin: -10, yMax: 10, params: {}, keys: false, table: false, big: false },
   calc: { on: false, x: 0.7, y: 0.04, expr: "", result: "", deg: true },
   numberLine: { on: false, x: 0.08, y: 0.74, min: -10, max: 10, step: 1, marks: [] },
   clock: { on: false, x: 0.72, y: 0.06, h: 3, m: 0, digital: true, words: true },
@@ -127,12 +133,21 @@ function cleanExtras(w: any): Pick<Widgets, "clock" | "fractions" | "hundred" | 
 const panel = (p: any, d: Panel): Panel => ({ on: !!p?.on, x: clamp(p?.x, 0, 0.95, d.x), y: clamp(p?.y, 0, 0.95, d.y) });
 function cleanGraph(g: any): GraphState {
   const d = DEFAULT_WIDGETS.graph;
-  const exprs = [0, 1, 2].map((i) => String(g?.exprs?.[i] ?? (g ? "" : d.exprs[i])).slice(0, 80));
+  const exprs = Array.from({ length: GRAPH_ROWS }, (_, i) => String(g?.exprs?.[i] ?? (g ? "" : d.exprs[i])).slice(0, 120));
   let xMin = clamp(g?.xMin, -1e6, 1e6, d.xMin), xMax = clamp(g?.xMax, -1e6, 1e6, d.xMax);
   let yMin = clamp(g?.yMin, -1e6, 1e6, d.yMin), yMax = clamp(g?.yMax, -1e6, 1e6, d.yMax);
   if (xMax <= xMin) [xMin, xMax] = [d.xMin, d.xMax];
   if (yMax <= yMin) [yMin, yMax] = [d.yMin, d.yMax];
-  return { ...panel(g, d), exprs, xMin, xMax, yMin, yMax };
+  const params: Record<string, GraphSlider> = {};
+  for (const [k, raw] of Object.entries(g?.params && typeof g.params === "object" ? g.params : {}).slice(0, 10)) {
+    if (!/^[a-z]$/.test(k)) continue;
+    const r = raw as any;
+    let min = clamp(r?.min, -1e4, 1e4, -10), max = clamp(r?.max, -1e4, 1e4, 10);
+    if (max <= min) [min, max] = [-10, 10];
+    const step = clamp(r?.step, 1e-4, 1e4, 0.1);
+    params[k] = { v: clamp(r?.v, min, max, 1), min, max, step };
+  }
+  return { ...panel(g, d), exprs, xMin, xMax, yMin, yMax, params, keys: !!g?.keys, table: !!g?.table, big: !!g?.big };
 }
 function cleanLine(l: any): LineState {
   const d = DEFAULT_WIDGETS.numberLine;

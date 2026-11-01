@@ -66,7 +66,7 @@ type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" 
 // The class-tools panel, grouped so the host finds things fast.
 const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: string; icon: BoardIconName }[] }[] = [
   { title: "Maths", items: [
-    { k: "graph", label: "Graph plotter", hint: "Plot y = f(x)", icon: "graph" },
+    { k: "graph", label: "Graph plotter", hint: "Graphs, sliders, inequalities", icon: "graph" },
     { k: "calc", label: "Calculator", hint: "Scientific", icon: "calculator" },
     { k: "numberLine", label: "Number line", hint: "Mark values", icon: "numberline" },
     { k: "ruler", label: "Ruler", hint: "Measure in cm", icon: "ruler" },
