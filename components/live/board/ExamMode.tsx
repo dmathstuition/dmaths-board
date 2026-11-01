@@ -59,6 +59,23 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   const [count, setCount] = useState(10);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The A.I writes questions.
+  const [aiTopic, setAiTopic] = useState("");
+  const [aiLevel, setAiLevel] = useState("");
+  const [aiCount, setAiCount] = useState(10);
+  const [aiKind, setAiKind] = useState<"mixed" | "choice" | "typed">("mixed");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  async function askAi() {
+    setAiBusy(true); setAiNote(null);
+    const { ok, j } = await api({ action: "ai", sessionId, topic: aiTopic, level: aiLevel, count: aiCount, kind: aiKind, difficulty: level });
+    setAiBusy(false);
+    if (!ok) { setAiNote(j.error ?? "The A.I couldn't write questions just now — try again."); return; }
+    const got: ExamQ[] = j.questions ?? [];
+    setQs((cur) => [...cur, ...got].slice(0, 60));
+    if (title === "Class test" && aiTopic.trim()) setTitle(aiTopic.trim().slice(0, 80));
+    setAiNote(`✓ The A.I wrote ${got.length} question${got.length === 1 ? "" : "s"} — check them below (you can change any) before you start.`);
+  }
 
   if (!open) {
     if (!running) return null;
@@ -124,8 +141,35 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
             <fieldset className="mt-3"><legend className="text-xs font-black text-ink/60">Time</legend>
               <div className="mt-1 flex flex-wrap gap-1.5">{EXAM_MINUTES.map((m) => <button key={m} type="button" aria-pressed={minutes === m} onClick={() => setMinutes(m)} className={chip(minutes === m)}>{m} min</button>)}</div>
             </fieldset>
-            <div className="mt-4 rounded-xl bg-orange-50/60 p-3 ring-1 ring-orange-100">
-              <p className="text-xs font-black text-[#7C2D12]">Make questions from a maths topic</p>
+            <div className="mt-4 rounded-xl bg-violet-50 p-3 ring-1 ring-violet-200">
+              <p className="text-xs font-black text-violet-800">✨ Ask the A.I to write the questions — any subject</p>
+              <label className="mt-2 block text-xs font-bold text-ink/60">What should they be on?
+                <textarea value={aiTopic} maxLength={300} rows={2} onChange={(e) => setAiTopic(e.target.value)} placeholder="e.g. Simultaneous equations by elimination · Photosynthesis · Concord in English"
+                  className={`${field} mt-1 resize-y`} />
+              </label>
+              <div className="mt-2 flex flex-wrap items-end gap-2">
+                <label className="text-xs font-bold text-ink/60">Class
+                  <input value={aiLevel} maxLength={60} onChange={(e) => setAiLevel(e.target.value)} placeholder="e.g. SS2, JSS1, Year 9" className={`${field} mt-1 w-36`} />
+                </label>
+                <label className="text-xs font-bold text-ink/60">Questions
+                  <select value={aiKind} onChange={(e) => setAiKind(e.target.value as typeof aiKind)} className={`${field} mt-1`}>
+                    <option value="mixed">Multiple choice and typed</option><option value="choice">Multiple choice only</option><option value="typed">Typed answers only</option>
+                  </select>
+                </label>
+                <label className="text-xs font-bold text-ink/60">Level
+                  <select value={level} onChange={(e) => setLevel(e.target.value as Difficulty)} className={`${field} mt-1`} aria-label="A.I level">
+                    <option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option>
+                  </select>
+                </label>
+                <label className="text-xs font-bold text-ink/60">How many
+                  <input type="number" min={1} max={30} value={aiCount} onChange={(e) => setAiCount(Math.max(1, Math.min(30, Number(e.target.value) || 1)))} className={`${field} mt-1 w-20`} aria-label="How many A.I questions" />
+                </label>
+                <button type="button" onClick={askAi} disabled={aiBusy || aiTopic.trim().length < 3} className="min-h-[40px] rounded-xl bg-violet-700 px-4 text-xs font-black text-white disabled:opacity-40">{aiBusy ? "The A.I is writing…" : `✨ Write ${aiCount} questions`}</button>
+              </div>
+              {aiNote && <p role="status" className={`mt-2 text-xs font-bold ${aiNote.startsWith("✓") ? "text-violet-800" : "text-red-700"}`}>{aiNote}</p>}
+            </div>
+            <div className="mt-3 rounded-xl bg-orange-50/60 p-3 ring-1 ring-orange-100">
+              <p className="text-xs font-black text-[#7C2D12]">Or make questions from a maths topic (instant, no A.I)</p>
               <div className="mt-2 flex flex-wrap items-end gap-2">
                 <label className="text-xs font-bold text-ink/60">Topic
                   <select value={topic} onChange={(e) => setTopic(e.target.value)} className={`${field} mt-1 min-w-[12rem]`}>

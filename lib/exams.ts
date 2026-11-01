@@ -120,3 +120,25 @@ export function clockLeft(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
+
+// ── The A.I writes the questions ──
+export type AiExamAsk = { topic: string; level: string; count: number; kind: "mixed" | "choice" | "typed"; difficulty: Difficulty };
+export const AI_EXAM_SYSTEM = `You are an experienced Nigerian teacher setting a class test (WAEC/NECO/JAMB/BECE/Common Entrance style, British spelling, Naira for money).
+Reply with JSON only, in exactly this shape:
+{"questions":[{"q":"...","kind":"choice","options":["...","...","...","..."],"answer":0,"marks":1},{"q":"...","kind":"typed","answer":"...","marks":2}]}
+Rules:
+- "choice": exactly 4 options (each max 80 characters), exactly one correct; "answer" is its 0-based index — vary its position; wrong options are common mistakes.
+- "typed": the answer is short (a number, a word, or a short expression, max 30 characters) so it can be marked automatically. If more than one form is right, separate them with " | " (e.g. "0.5 | 1/2").
+- "marks": 1 to 5, more for harder questions.
+- Questions (max 300 characters) are clear on their own, rise in difficulty, and every answer is certainly correct — check each one.
+- Plain text only: write x², x³, √, π, ÷, ×, ≤, ≥, ½ as characters. No LaTeX, no markdown, no emojis.`;
+export function aiExamPrompt(a: AiExamAsk): string {
+  const kinds = a.kind === "choice" ? "all multiple choice" : a.kind === "typed" ? "all typed answers" : "a mix of multiple choice and typed answers";
+  return `Class: ${a.level || "secondary school"}. Topic: ${a.topic}. Write ${a.count} ${a.difficulty} questions, ${kinds}.`;
+}
+// Whatever the A.I sent back, as exam questions (bad ones dropped).
+export function cleanAiExam(raw: unknown, kind: AiExamAsk["kind"] = "mixed"): ExamQ[] {
+  const list = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.questions) ? (raw as any).questions : [];
+  const qs = cleanExamQuestions(list.map((x: any) => ({ ...x, kind: x?.kind === "typed" || (!Array.isArray(x?.options) && typeof x?.answer === "string") ? "typed" : "choice" })));
+  return kind === "mixed" ? qs : qs.filter((q) => q.kind === kind);
+}

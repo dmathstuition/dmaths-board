@@ -21,6 +21,10 @@ function examServer() {
         return r.fulfill({ json: out });
       }
       const b = JSON.parse(r.request().postData() ?? "{}");
+      if (b.action === "ai") return r.fulfill({ json: { questions: [
+        { q: `${b.topic}: which gas do plants take in?`, kind: "choice", options: ["Oxygen", "Carbon dioxide", "Nitrogen", "Helium"], answer: 1, marks: 1 },
+        { q: `${b.topic}: what colour is chlorophyll?`, kind: "typed", options: [], answer: "green", marks: 1 },
+      ].slice(0, b.count) } });
       if (b.action === "create") { exam = { id: "exam-1", title: b.title, minutes: b.minutes, review: b.review, status: "open", endsAt: Date.now() + b.minutes * 60_000, questions: cleanExamQuestions(b.questions) }; return r.fulfill({ json: { id: exam.id } }); }
       if (b.action === "close") { close(); return r.fulfill({ json: { ok: true } }); }
       if (b.action === "start") { entries.set(me.id, { name: me.name, answers: {}, flags: 0, submitted: false, score: null, total: null }); return r.fulfill({ json: { ok: true } }); }
@@ -65,9 +69,19 @@ test("exam mode: a timed test on a learner's phone, leaving the page flagged, ma
   await panel.getByLabel("Question 2", { exact: true }).fill("Solve 3x + 2 = 14");
   await panel.getByLabel("Answer to question 2").fill("4");
   await panel.getByLabel("Marks for question 2").selectOption("2");
+  // The A.I writes questions on any subject; they can be checked and removed.
+  await panel.getByPlaceholder(/Simultaneous equations by elimination/).fill("Photosynthesis");
+  await panel.getByPlaceholder(/SS2, JSS1/).fill("JSS2");
+  await panel.getByLabel("How many A.I questions").fill("2");
+  await panel.getByRole("button", { name: "✨ Write 2 questions" }).click();
+  await expect(panel.getByText(/The A.I wrote 2 questions/)).toBeVisible();
+  await expect(panel.getByLabel("Question 3", { exact: true })).toHaveValue(/which gas do plants take in/);
+  await expect(panel.getByLabel("Answer to question 4")).toHaveValue("green");
+  await panel.getByRole("button", { name: /Remove question 4/ }).click();
+  await panel.getByRole("button", { name: /Remove question 3/ }).click();
   // And some questions made from a topic.
   await panel.getByLabel("Topic").selectOption({ label: "Pythagoras Pursuit" });
-  await panel.getByLabel("How many").fill("2");
+  await panel.getByLabel("How many", { exact: true }).fill("2");
   await panel.getByRole("button", { name: "Add 2 questions" }).click();
   await expect(panel.getByLabel("Question 4", { exact: true })).toHaveValue(/Right-angled triangle|ladder|distance/);
   await panel.getByRole("button", { name: /Remove question 4/ }).click();

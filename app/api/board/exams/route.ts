@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { sessionViewer } from "@/lib/sessionAccess";
 import { rateLimit } from "@/lib/ratelimit";
-import { GRACE_MS, cleanExamQuestions, cleanGiven, learnerPaper, markPaper, type ExamQ } from "@/lib/exams";
+import { AI_EXAM_SYSTEM, GRACE_MS, aiExamPrompt, cleanAiExam, cleanExamQuestions, cleanGiven, learnerPaper, markPaper, type ExamQ } from "@/lib/exams";
+import { aiChat, aiErrorResponse, extractJson } from "@/lib/ai";
 
 // Exam mode (supabase/migration-exams-stars.sql). Each learner takes the test
 // on their own phone, in their own order; the answers stay on the server
@@ -11,6 +12,7 @@ import { GRACE_MS, cleanExamQuestions, cleanGiven, learnerPaper, markPaper, type
 //                                     learner's progress; a learner gets their own paper
 //   POST { action: "create", sessionId, title, minutes, review, questions }   (teacher)
 //        { action: "close" | "extend", examId, minutes? }                      (teacher)
+//        { action: "ai", sessionId, topic, level, count, kind, difficulty }     (teacher: the A.I writes questions → { questions })
 //        { action: "start" | "submit", examId }                                (learner)
 //        { action: "answer", examId, n, value }   n = question number          (learner)
 //        { action: "flag", examId, reason }       left the exam page            (learner)
@@ -85,6 +87,24 @@ export async function POST(req: Request) {
   const action = String(body?.action ?? "");
   const admin = supabaseAdmin();
   try {
+    if (action === "ai") {
+      const v = await sessionViewer(String(body?.sessionId ?? "")).catch(() => null);
+      if (!v?.host) return bad("Only the class's teacher can set an exam.", 403);
+      const topic = String(body?.topic ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+      if (topic.length < 3) return bad("Say what the questions should be on, e.g. \"Simultaneous equations\".");
+      if (!rateLimit(`exam-ai:${v.id}`, 6, 60_000)) return bad("Give the A.I a minute before asking again.", 429);
+      if (!rateLimit(`exam-ai-day:${v.id}`, 60, 86_400_000)) return bad("That's today's A.I question limit — try again tomorrow.", 429);
+      const kind = ["choice", "typed"].includes(body?.kind) ? body.kind : "mixed";
+      const ask = { topic, level: String(body?.level ?? "").slice(0, 60), count: Math.max(1, Math.min(30, Math.round(Number(body?.count) || 10))), kind,
+        difficulty: ["easy", "medium", "hard"].includes(body?.difficulty) ? body.difficulty : "medium" } as const;
+      let questions: ExamQ[];
+      try {
+        const reply = await aiChat({ system: AI_EXAM_SYSTEM, user: aiExamPrompt(ask), maxTokens: Math.min(6000, 400 + ask.count * 220) });
+        questions = cleanAiExam(extractJson(reply), kind).slice(0, ask.count);
+      } catch (err) { return aiErrorResponse(err); }
+      if (!questions.length) return bad("The A.I reply wasn't usable — try again, or word the topic differently.", 502);
+      return NextResponse.json({ questions });
+    }
     if (action === "create") {
       const sessionId = String(body?.sessionId ?? "");
       const v = await sessionViewer(sessionId).catch(() => null);

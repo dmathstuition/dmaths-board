@@ -50,3 +50,24 @@ describe("exam mode", () => {
 
   it("shows the time left", () => { expect(clockLeft(125_000)).toBe("2:05"); expect(clockLeft(-5)).toBe("0:00"); });
 });
+
+import { aiExamPrompt, cleanAiExam } from "@/lib/exams";
+describe("A.I exam questions", () => {
+  const reply = { questions: [
+    { q: "Solve 2x = 10", kind: "choice", options: ["2", "5", "8", "20"], answer: 1, marks: 1 },
+    { q: "What is 3² + 4²?", kind: "typed", answer: "25", marks: 2 },
+    { q: "No answer", kind: "typed" },
+    { q: "Answer out of range", options: ["a", "b"], answer: 7 },
+    { q: "Half of 1, as a decimal", answer: "0.5 | 1/2" }, // no kind, a text answer: typed
+  ] };
+  it("keeps the usable questions", () => {
+    const qs = cleanAiExam(reply);
+    expect(qs.map((q) => [q.q, q.kind])).toEqual([["Solve 2x = 10", "choice"], ["What is 3² + 4²?", "typed"], ["Half of 1, as a decimal", "typed"]]);
+    expect(cleanAiExam(reply, "choice")).toHaveLength(1);
+    expect(cleanAiExam(reply.questions, "typed")).toHaveLength(2); // a bare list works too
+    expect(cleanAiExam(null)).toEqual([]);
+  });
+  it("asks for what the teacher chose", () => {
+    expect(aiExamPrompt({ topic: "Photosynthesis", level: "JSS2", count: 8, kind: "choice", difficulty: "easy" })).toBe("Class: JSS2. Topic: Photosynthesis. Write 8 easy questions, all multiple choice.");
+  });
+});
