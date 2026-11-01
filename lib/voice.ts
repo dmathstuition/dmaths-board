@@ -28,8 +28,9 @@ export const speakPass = (classId: string, learner: string, exp: number) => mac(
 export const passOk = (classId: string, learner: string, pass: unknown, exp: unknown, now = Date.now()) =>
   typeof pass === "string" && Number(exp) > now && same(pass, speakPass(classId, learner, Number(exp)));
 
-// Each person's microphone has a fixed track name, so nobody can speak as someone else.
+// Each person's microphone and camera have fixed track names, so nobody can speak or appear as someone else.
 export const micTrack = (who: string) => `mic-${who}`.slice(0, 64);
+export const camTrack = (who: string) => `cam-${who}`.slice(0, 64);
 
 export const cleanId = (v: unknown) => (typeof v === "string" && /^[A-Za-z0-9_-]{8,80}$/.test(v) ? v : "");
 export const cleanSdp = (v: unknown) => (typeof v === "string" && v.startsWith("v=0") && v.length < 60_000 ? v : "");

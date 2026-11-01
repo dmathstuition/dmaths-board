@@ -80,6 +80,17 @@ describe("class voice API", () => {
     expect((await ok.json()).track).toBe("mic-guest-abc123");
   });
 
+  it("sends a camera under its own track name, with the same rules as the microphone", async () => {
+    viewer.mockResolvedValue(host);
+    const ticket = sessionTicket(CLASS, host.id, "cfsession0001");
+    expect((await (await call({ op: "push", session: "cfsession0001", ticket, sdp: SDP, mid: "1", kind: "cam" })).json()).track).toBe("cam-teacher-1");
+    viewer.mockResolvedValue(learner);
+    const lt = sessionTicket(CLASS, learner.id, "cfsession0003");
+    expect((await call({ op: "push", session: "cfsession0003", ticket: lt, sdp: SDP, mid: "1", kind: "cam" })).status).toBe(403);
+    const pull = await (await call({ op: "pull", session: "cfsession0003", ticket: lt, tracks: [{ s: "cfsession0001", t: "cam-teacher-1" }] })).json();
+    expect(pull.tracks[0]).toMatchObject({ t: "cam-teacher-1" });
+  });
+
   it("only the teacher hands out speaking passes", async () => {
     viewer.mockResolvedValue(learner);
     expect((await call({ op: "allow", learner: learner.id })).status).toBe(403);

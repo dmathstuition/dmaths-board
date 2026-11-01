@@ -120,13 +120,14 @@ function paperStyle(p: Paper, boxW: number): CSSProperties {
 // often in big classes), and the
 // host's copy autosaves so late joiners and the class log get the board.
 // `lessonId`: preparing a lesson-library board instead of a live class (saves to the lesson).
-export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "Learner", canDraw, writers, readOnly = false, canLog = false, people = [], roster, onQuizLaunched, hand, extra }: {
+export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "Learner", canDraw, writers, readOnly = false, canLog = false, people = [], roster, onQuizLaunched, hand, extra, overlay }: {
   sessionId: string; lessonId?: string; host: boolean; myId: string; myName?: string; canDraw: boolean;
   writers: string[] | "all"; readOnly?: boolean; canLog?: boolean; people?: Person[];
   roster?: RosterProps; // the host's class list, shown beside the full-screen board
   onQuizLaunched?: () => void; // a ready-made quiz was launched from the Games panel: show the quiz
   hand?: { up: boolean; onToggle: () => void; note?: string }; // a learner's raise-hand button (on the board, so it works in full screen too)
   extra?: (full: boolean) => React.ReactNode; // more buttons for the toolbar (class voice), shown in full screen too
+  overlay?: (full: boolean) => React.ReactNode; // something floating over the board (the speaker's video), shown in full screen too
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   // The element the board's full-screen panels open in (see `labLayer`).
@@ -1486,6 +1487,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
           role="img" aria-label={`Shared class board, page ${page + 1} of ${pageCount}`} />
         <canvas ref={inkRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />
         <canvas ref={laserRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />
+        {overlay?.(full)}
         {selected && tool === "select" && (host || selected.by === myId) && (() => {
           const ib = itemBounds(selected), [x1, y1] = toScreen(view, ib.x1, ib.y1), [, y2] = toScreen(view, ib.x2, ib.y2);
           const b = { x1, y1, y2 };

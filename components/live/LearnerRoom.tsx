@@ -98,7 +98,7 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
       )}
       <div hidden={showQuiz}>
         <Whiteboard sessionId={id} host={false} myId={room.me.id} myName={room.me.name} canDraw={room.me.canWrite} writers={room.writers} readOnly={ended}
-          hand={ended ? undefined : { up: handUp, onToggle: toggleHand, note: handNote }} extra={ended ? undefined : voice.controls} />
+          hand={ended ? undefined : { up: handUp, onToggle: toggleHand, note: handNote }} extra={ended ? undefined : voice.controls} overlay={ended ? undefined : voice.overlay} />
       </div>
       <p className="text-center text-xs text-ink/45">{guest ? "Follow your teacher's board and take part here. Keep this page open." : "Watch your tutor's shared screen in the call and take part here. Keep this page open."}</p>
     </div>

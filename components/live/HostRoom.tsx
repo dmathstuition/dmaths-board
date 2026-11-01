@@ -171,7 +171,7 @@ function Host({ id, base }: { id: string; base: HostBase }) {
             <div ref={stageRef} className="rounded-[1.75rem] bg-[#F4F9FF] [&:fullscreen]:overflow-y-auto [&:fullscreen]:p-6">
               <div hidden={tab !== "board"}>
                 <Whiteboard sessionId={id} host myId={room.me.id} myName={room.me.name} canDraw writers={room.writers} canLog={!!s.classId} people={room.people}
-                  onQuizLaunched={() => setTab("quiz")} extra={voice.controls}
+                  onQuizLaunched={() => setTab("quiz")} extra={voice.controls} overlay={voice.overlay}
                   roster={{
                     people: room.people, allCanWrite: s.allCanWrite,
                     onWrite: (studentId, value) => act({ action: "write", studentId, value }),

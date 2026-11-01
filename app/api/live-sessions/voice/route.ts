@@ -2,14 +2,15 @@ import { NextResponse } from "next/server";
 import { sessionViewer } from "@/lib/sessionAccess";
 import { rateLimit } from "@/lib/ratelimit";
 import {
-  voiceConfigured, cf, iceServers, sessionTicket, ticketOk, speakPass, passOk, micTrack, cleanId, cleanSdp, VoiceError, SPEAK_MS,
+  voiceConfigured, cf, iceServers, sessionTicket, ticketOk, speakPass, passOk, micTrack, camTrack, cleanId, cleanSdp, VoiceError, SPEAK_MS,
 } from "@/lib/voice";
 
-// Class voice (lib/voice.ts). Everyone in the class may listen; the host may
-// speak, and so may a learner holding a speaking pass from the host.
+// Class voice and camera (lib/voice.ts). Everyone in the class may listen and
+// watch; the host may speak (and show their camera), and so may a learner
+// holding a speaking pass from the host.
 //   POST { id, op: "config" }                                   → { on }
 //   POST { id, op: "start" }                                    → { session, ticket, iceServers }
-//   POST { id, op: "push", session, ticket, sdp, mid, pass?, exp? } → { sdp, track }       (send my microphone)
+//   POST { id, op: "push", session, ticket, sdp, mid, kind?: "mic" | "cam", pass?, exp? } → { sdp, track }  (send my microphone or camera)
 //   POST { id, op: "pull", session, ticket, tracks: [{ s, t }] }    → { tracks, sdp? }     (listen; sdp = an offer to answer)
 //   POST { id, op: "answer", session, ticket, sdp }             → { ok }
 //   POST { id, op: "close", session, ticket, sdp, mids }        → { sdp }
@@ -51,14 +52,14 @@ export async function POST(req: Request) {
       if (!v.host && !passOk(classId, v.id, body?.pass, body?.exp)) return bad("Your teacher hasn't let you speak.", 403);
       const sdp = cleanSdp(body?.sdp), mid = String(body?.mid ?? "").slice(0, 16);
       if (!sdp || !mid) return bad("Microphone details are missing.");
-      const track = micTrack(v.id);
+      const track = body?.kind === "cam" ? camTrack(v.id) : micTrack(v.id);
       const r = await cf(`${path}/tracks/new`, { method: "POST", body: { sessionDescription: { type: "offer", sdp }, tracks: [{ location: "local", mid, trackName: track }] } });
       return NextResponse.json({ sdp: r?.sessionDescription?.sdp ?? "", track });
     }
     if (op === "pull") {
       const tracks = (Array.isArray(body?.tracks) ? body.tracks : []).slice(0, 12)
         .map((t: any) => ({ location: "remote", sessionId: cleanId(t?.s), trackName: String(t?.t ?? "").slice(0, 64) }))
-        .filter((t: any) => t.sessionId && /^mic-[A-Za-z0-9_-]+$/.test(t.trackName));
+        .filter((t: any) => t.sessionId && /^(mic|cam)-[A-Za-z0-9_-]+$/.test(t.trackName));
       if (!tracks.length) return bad("Nothing to listen to.");
       const r = await cf<any>(`${path}/tracks/new`, { method: "POST", body: { tracks } });
       return NextResponse.json({

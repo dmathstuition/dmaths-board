@@ -1,7 +1,7 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import { SID, agree, classServer, realtimeHub } from "./helpers";
 
-// Class voice from start to finish, with real audio. Cloudflare's SFU is played
+// Class voice and camera from start to finish, with real audio and video. Cloudflare's SFU is played
 // by a third browser page that forwards tracks the way Cloudflare does: each
 // person has one connection; pushing a microphone is offer → answer; pulling a
 // track gives back an offer to answer.
@@ -28,8 +28,9 @@ async function fakeSfu(browser: Browser) {
         const tx = pc.getTransceivers().find((t) => t.mid === mid)!;
         tx.direction = "recvonly";
         tracks[name] = tx.receiver.track;
-        // Chrome only decodes incoming audio that is played somewhere; play it (muted) so it can be forwarded.
-        const keep = new Audio(); keep.muted = true; keep.srcObject = new MediaStream([tx.receiver.track]); keep.play().catch(() => {});
+        // Chrome only decodes incoming media that is played somewhere; play it (muted) so it can be forwarded.
+        const keep = document.createElement(tx.receiver.track.kind === "video" ? "video" : "audio");
+        keep.muted = true; keep.srcObject = new MediaStream([tx.receiver.track]); keep.play().catch(() => {});
         await pc.setLocalDescription(await pc.createAnswer());
         await gathered(pc);
         return { sessionDescription: { type: "answer", sdp: pc.localDescription!.sdp }, tracks: [{ mid, trackName: name }] };
@@ -48,12 +49,12 @@ async function fakeSfu(browser: Browser) {
         await pc.setLocalDescription(await pc.createAnswer());
         return { sessionDescription: { type: "answer", sdp: pc.localDescription!.sdp } };
       },
-      // Audio packets the SFU has received from / sent to a session.
-      async packets(id: string) {
+      // Audio (or video) packets the SFU has received from / sent to a session.
+      async packets(id: string, kind = "audio") {
         let inn = 0, out = 0;
         (await pcs[id]?.getStats())?.forEach((r: any) => {
-          if (r.type === "inbound-rtp" && r.kind === "audio") inn += r.packetsReceived ?? 0;
-          if (r.type === "outbound-rtp" && r.kind === "audio") out += r.packetsSent ?? 0;
+          if (r.type === "inbound-rtp" && r.kind === kind) inn += r.packetsReceived ?? 0;
+          if (r.type === "outbound-rtp" && r.kind === kind) out += r.packetsSent ?? 0;
         });
         return { in: inn, out };
       },
@@ -66,7 +67,7 @@ async function openClass(browser: Browser) {
   const hub = realtimeHub("normal"), server = classServer(), sfu = await fakeSfu(browser);
   const sessions: Record<string, string> = {};
   const open = async (who: "teacher" | "learner") => {
-    const ctx = await browser.newContext({ permissions: ["microphone"] });
+    const ctx = await browser.newContext({ permissions: ["microphone", "camera"] });
     await hub.attach(ctx, who);
     await server.attach(ctx, who);
     await ctx.route("**/api/live-sessions/voice", async (r) => {
@@ -76,7 +77,7 @@ async function openClass(browser: Browser) {
       if (b.op === "config") json = { on: true };
       else if (b.op === "start") { const id = await run("start"); sessions[who] = id as string; json = { session: id, ticket: "t", iceServers: [] }; }
       else if (b.op === "allow") json = { pass: "pass", exp: Date.now() + 3_600_000 };
-      else if (b.op === "push") { const res: any = await run("push", b.session, b.sdp, b.mid, `mic-${who}`); json = { sdp: res.sessionDescription.sdp, track: `mic-${who}` }; }
+      else if (b.op === "push") { const name = `${b.kind === "cam" ? "cam" : "mic"}-${who}`; const res: any = await run("push", b.session, b.sdp, b.mid, name); json = { sdp: res.sessionDescription.sdp, track: name }; }
       else if (b.op === "pull") {
         const res: any = await run("pull", b.session, b.tracks.map((t: any) => ({ sessionId: t.s, trackName: t.t })));
         json = { sdp: res.sessionDescription.sdp, tracks: res.tracks.map((t: any) => ({ mid: t.mid, s: t.sessionId, t: t.trackName, error: null })) };
@@ -93,7 +94,7 @@ async function openClass(browser: Browser) {
   await expect(teacher.locator("canvas").first()).toBeVisible();
   await expect(learner.locator("canvas").first()).toBeVisible();
   await teacher.waitForTimeout(1500);
-  const packets = (who: "teacher" | "learner") => sfu.evaluate((id) => (window as any).sfu.packets(id), sessions[who]) as Promise<{ in: number; out: number }>;
+  const packets = (who: "teacher" | "learner", kind = "audio") => sfu.evaluate(([id, k]) => (window as any).sfu.packets(id, k), [sessions[who], kind] as const) as Promise<{ in: number; out: number }>;
   return { teacher, learner, packets };
 }
 
@@ -148,4 +149,52 @@ test("voice stays hidden when it isn't set up", async ({ browser }) => {
   await expect(page.locator("canvas").first()).toBeVisible();
   await page.waitForTimeout(1000);
   await expect(page.getByRole("button", { name: /Start voice|Talk to the class/ })).toHaveCount(0);
+});
+
+// A video element on the page that is really showing frames.
+const showing = (p: Page, label: string) => p.evaluate((l) => {
+  const v = document.querySelector<HTMLVideoElement>(`video[aria-label="Video of ${l}"]`);
+  return !!v && v.videoWidth > 0 && !v.paused;
+}, label);
+
+test("the teacher's camera reaches a learner who turns video on; a learner speaking can show theirs", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const { teacher, learner, packets } = await openClass(browser);
+
+  await teacher.getByRole("button", { name: /Start voice/ }).click();
+  await learner.getByRole("button", { name: "Listen to the class" }).click();
+  await expect(learner.getByRole("status").filter({ hasText: "Listening" })).toBeVisible();
+
+  // The teacher turns the camera on and sees themself in the corner.
+  await teacher.getByRole("button", { name: "Turn my camera on" }).click();
+  await expect(teacher.getByRole("button", { name: "Turn my camera off" })).toBeVisible();
+  await flowing(() => showing(teacher, "You"));
+  await flowing(async () => (await packets("teacher", "video")).in > 20); // the SFU gets the teacher's video
+
+  // Video is off for the learner until they ask for it (it uses more data).
+  await expect(learner.locator("video")).toHaveCount(0);
+  await learner.getByRole("button", { name: "Show the video" }).click();
+  await flowing(() => showing(learner, "Mr B"));
+  await flowing(async () => (await packets("learner", "video")).out > 20);
+
+  // The window can move to another corner and be hidden, and comes back.
+  await learner.getByRole("button", { name: "Move the video to another corner" }).click();
+  await learner.getByRole("button", { name: "Hide the video" }).click();
+  await expect(learner.locator("video")).toHaveCount(0);
+  await learner.getByRole("button", { name: "Show Mr B's video" }).click();
+  await flowing(() => showing(learner, "Mr B"));
+
+  // A learner given a turn shows their camera; the teacher sees them.
+  await learner.getByRole("button", { name: "Raise my hand" }).click();
+  await teacher.getByRole("button", { name: "Let Emmanuel speak" }).click();
+  await learner.getByRole("button", { name: "Speak to the class" }).click();
+  await learner.getByRole("button", { name: "Turn my camera on" }).click();
+  await flowing(() => showing(learner, "You"));
+  await flowing(() => showing(teacher, "Emmanuel"));
+
+  // Turning the teacher's camera off stops the video for the learner.
+  await teacher.getByRole("button", { name: "Stop Emmanuel speaking" }).click();
+  await expect(learner.getByRole("button", { name: "Stop speaking" })).toBeHidden({ timeout: 10_000 });
+  await teacher.getByRole("button", { name: "Turn my camera off" }).click();
+  await expect(learner.locator("video")).toHaveCount(0, { timeout: 15_000 });
 });
