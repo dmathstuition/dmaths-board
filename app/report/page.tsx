@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { BoardFormPage } from "@/components/board/BoardBrand";
 import { readReport } from "@/lib/classReportLink";
-import { learnerReport } from "@/lib/classReportData";
+import { learnerDetail } from "@/lib/learnerResults";
+import ResultsBreakdown from "@/components/live/ResultsBreakdown";
 import { praise, scoreLine } from "@/lib/classReport";
 
 // A parent's class report: what the class covered and how their child did.
@@ -11,7 +12,7 @@ export const metadata = { title: "Class report", robots: { index: false, follow:
 
 export default async function ClassReportPage({ searchParams }: { searchParams: { t?: string } }) {
   const link = readReport(searchParams.t);
-  const r = link ? await learnerReport(link.s, link.g).catch(() => null) : null;
+  const r = link ? await learnerDetail(link.s, link.g).catch(() => null) : null;
   if (!link || !r) {
     return (
       <BoardFormPage kicker="Class report" title="Report not found">
@@ -48,6 +49,12 @@ export default async function ClassReportPage({ searchParams }: { searchParams: 
           )}
           <p className="mt-2 font-semibold">{praise(row.percent)}</p>
         </div>
+        {(r.work.length > 0 || r.quizzes.length > 0) && (
+          <details className="rounded-2xl border border-dmb-rule p-4" open>
+            <summary className="cursor-pointer text-xs font-bold uppercase tracking-[.14em] text-dmb-muted">Question by question</summary>
+            <div className="mt-3"><ResultsBreakdown d={r} /></div>
+          </details>
+        )}
         {link.h && (
           <div className="rounded-2xl bg-dmb-penSoft p-4">
             <p className="text-xs font-bold uppercase tracking-[.14em] text-dmb-pen">Homework</p>

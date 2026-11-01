@@ -20,7 +20,7 @@ export async function learnerReport(sessionId: string, studentId: string): Promi
     board
       ? admin.from("live_session_guests").select("name").eq("id", studentId).eq("session_id", sessionId).maybeSingle()
       : admin.from("profiles").select("first_name, last_name").eq("id", studentId).maybeSingle(),
-    admin.from("live_class_marks").select("round_id, student_id, name, question, mark, max_mark").eq("session_id", sessionId).limit(5000),
+    admin.from("live_class_marks").select("round_id, student_id, name, question, mark, max_mark").eq("session_id", sessionId).not("mark", "is", null).limit(5000),
     admin.from("live_quizzes").select("id, title, questions, status, current").eq("session_id", sessionId).limit(50),
   ]);
   const l: any = learnerRes.data;

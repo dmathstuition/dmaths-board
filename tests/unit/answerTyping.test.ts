@@ -16,7 +16,7 @@ describe("typed answers on answer boards", () => {
     expect(hasAnswered({ strokes: [], text: "  " })).toBe(false);
     expect(hasAnswered({ strokes: [], text: "x = 4" })).toBe(true);
     const s = answerSummary([{ by: "a", name: "Ada", strokes: [], text: "4", v: 1, at: 0 }], [{ id: "a", name: "Ada" }, { id: "b", name: "Bo" }]);
-    expect(s).toEqual({ answered: 1, waiting: ["Bo"] });
+    expect(s).toEqual({ answered: 1, handedIn: 0, waiting: ["Bo"] });
   });
   it("carries the typed text when the tutor shows an answer", () => {
     expect(cleanRound({ id: "r", open: true, show: { strokes: [], text: "Half", name: null } })?.show?.text).toBe("Half");

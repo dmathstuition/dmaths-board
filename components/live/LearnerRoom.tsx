@@ -6,6 +6,7 @@ import { useLearnerVoice } from "@/components/live/ClassVoice";
 import Whiteboard from "@/components/live/Whiteboard";
 import QuizPlayer from "@/components/live/QuizPlayer";
 import { useRoom } from "@/components/live/HostRoom";
+import MyResults from "@/components/live/MyResults";
 
 // `guest`: a student in a D-Maths Board class (joined with a PIN and their name).
 export default function LearnerRoom({ id, guest = false }: { id: string; guest?: boolean }) {
@@ -19,6 +20,7 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
   const { room, err, load, setRoom } = useRoom(id, 8000);
   const [quiz, setQuiz] = useState<{ id: string; status: string } | null>(null);
   const [dismissed, setDismissed] = useState<string | null>(null);
+  const [mine, setMine] = useState(false); // "My results so far", during the class
   const send = useLive({ perm: () => load(), "session-ended": () => load() });
   // Tell the host's screen we're here (after the channel has connected).
   useEffect(() => { const t = setTimeout(() => send("joined"), 1500); return () => clearTimeout(t); }, [send]);
@@ -82,6 +84,10 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
           </button>
         )}
         {!ended && (
+          <button type="button" onClick={() => setMine((m) => !m)} aria-expanded={mine}
+            className="min-h-[40px] rounded-full bg-white px-4 text-sm font-black text-[#1657C9] ring-1 ring-[#BFD7FF] hover:ring-[#1657C9]">📊 {mine ? "Hide my results" : "My results"}</button>
+        )}
+        {!ended && (
           <span className={`rounded-full px-3 py-1.5 text-sm font-bold ${room.me.canWrite ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-300" : "bg-ink/5 text-ink/60"}`} role="status">
             {room.me.canWrite ? "✏️ You can write" : "👀 Watching"}
           </span>
@@ -89,6 +95,7 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
       </div>
 
       {handNote && !ended && <p role="status" className={`rounded-2xl px-4 py-2.5 text-sm font-bold ${handNote.startsWith("Couldn") ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-900"}`}>{handNote}</p>}
+      {(ended || (mine && !showQuiz)) && <MyResults sessionId={id} ended={ended} />}
       {ended && <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">This class has ended. Here&apos;s the board your {guest ? "teacher" : "tutor"} saved.</p>}
 
       {!ended && (

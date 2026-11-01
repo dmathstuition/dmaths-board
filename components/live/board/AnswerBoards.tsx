@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
 import { localPoint } from "@/components/live/board/rotation";
-import { MARK_CHOICES, MAX_ANSWER_TEXT, anonLabel, answerSummary, cleanAnswerStrokes, cleanAnswerText, cleanImg, cleanRound, shareOut, taskFor, type Answer, type AnswerMode, type Round, type Task } from "@/lib/answerBoards";
+import { MARK_CHOICES, MAX_ANSWER_TEXT, MAX_NOTE, MAX_PHOTOS, TIME_LIMITS, anonLabel, answerSummary, canEdit, cleanAnswerStrokes, cleanAnswerText, cleanImgs, cleanNote, cleanRound, hasAnswered, shareOut, taskFor, timeLeft, type Answer, type AnswerMode, type Round, type Task } from "@/lib/answerBoards";
+import { useServerClock } from "@/lib/serverClock";
 import { sendPicture } from "@/components/live/board/slides";
 import { BOARD_H, BOARD_W, drawStrokes, roundPt, type Stroke } from "@/lib/whiteboard";
 import { useKeptRef, useKeptState, type KeepStore } from "@/lib/keptState";
@@ -46,6 +47,8 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
   const [pasted, setPasted] = useState("");
   const [busy, setBusy] = useState<string | null>(null); // a picture uploading: what's happening
   const [bigPic, setBigPic] = useState<string | null>(null);
+  const [limit, setLimit] = useKeptState<number>(keep, k("limit"), 0); // minutes; 0 = no time limit
+  const [draft, setDraft] = useState(""); // feedback being written for the open answer
   // Learner side
   const [mine, setMine] = useKeptState<Stroke[]>(keep, k("mine"), []);
   const mineRef = useRef(mine); mineRef.current = mine;
@@ -54,8 +57,20 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
   const [way, setWay] = useKeptState<"draw" | "type">(keep, k("way"), "draw");
   const version = useKeptRef(keep, k("version"), 0);
   const [hidden, setHidden] = useKeptState<boolean>(keep, k("hidden"), false);
-  const [photo, setPhoto] = useKeptState<string | null>(keep, k("photo"), null);
-  const photoRef = useRef(photo); photoRef.current = photo;
+  const [photos, setPhotos] = useKeptState<string[]>(keep, k("photos"), []);
+  const photosRef = useRef(photos); photosRef.current = photos;
+  const [done, setDone] = useKeptState<boolean>(keep, k("done"), false); // handed in
+  const doneRef = useRef(done); doneRef.current = done;
+  const backSeen = useKeptRef(keep, k("backSeen"), 0);
+  const [sentBack, setSentBack] = useKeptState<boolean>(keep, k("sentBack"), false);
+  const now = useServerClock()();
+  // A ticking clock while a round has a time limit.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!round?.endsAt) return;
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [round?.endsAt]);
 
   const send = useLive({
     "ab-round": (p) => {
@@ -63,8 +78,16 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
       const r = cleanRound(p.round);
       if (!r || !r.open) { setRound(null); return; }
       if (roundRef.current?.id !== r.id) {
-        setMine([]); mineRef.current = []; setTyped(""); typedRef.current = ""; setPhoto(null); photoRef.current = null; version.current = 0; setHidden(false);
+        setMine([]); mineRef.current = []; setTyped(""); typedRef.current = ""; setPhotos([]); photosRef.current = []; version.current = 0; setHidden(false);
+        setDone(false); doneRef.current = false; backSeen.current = 0; setSentBack(false);
         setWay(r.mode === "type" ? "type" : "draw");
+      }
+      // Sent back to try again: unlock it, once for each send-back.
+      const back = r.back[myId] ?? 0;
+      if (back > backSeen.current) {
+        backSeen.current = back; setSentBack(true); setHidden(false);
+        setDone(false); doneRef.current = false; version.current++;
+        setTimeout(() => sendMine(true), 0);
       }
       setRound(r);
     },
@@ -77,7 +100,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
         if (old && old.v >= v) return cur;
         if (!order.current.includes(p.by)) order.current.push(p.by);
         const next = new Map(cur);
-        next.set(p.by, { by: p.by, name: String(p.name ?? "Learner").slice(0, 60), strokes: cleanAnswerStrokes(p.strokes), text: cleanAnswerText(p.text), img: cleanImg(p.img), v, at: Date.now() });
+        next.set(p.by, { by: p.by, name: String(p.name ?? "Learner").slice(0, 60), strokes: cleanAnswerStrokes(p.strokes), text: cleanAnswerText(p.text), imgs: cleanImgs(p.imgs, p.img), done: !!p.done, v, at: Date.now() });
         return next;
       });
     },
@@ -104,7 +127,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
       return;
     }
     lastSent.current = now;
-    send("ab-answer", { round: r.id, by: myId, name: myName, v: version.current, strokes: mineRef.current, text: typedRef.current, img: photoRef.current });
+    send("ab-answer", { round: r.id, by: myId, name: myName, v: version.current, strokes: mineRef.current, text: typedRef.current, imgs: photosRef.current, done: doneRef.current });
   };
   useEffect(() => {
     if (host || !round) return;
@@ -117,7 +140,8 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     order.current = []; setAnswers(new Map()); setFocus(null); setShowBy(null);
     const each: Record<string, Task> = {};
     if (setFor === "each") for (const [who, t] of Object.entries(per)) if (t.q.trim() || t.img) each[who] = { q: t.q.trim().slice(0, 300), img: t.img };
-    setRound({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, q: question.trim().slice(0, 200), open: true, mode, show: null, max: worth, marks: {}, img: qImg, per: each });
+    setRound({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, q: question.trim().slice(0, 200), open: true, mode, show: null, max: worth, marks: {}, img: qImg, per: each,
+      closed: false, endsAt: limit ? now + limit * 60_000 : null, notes: {}, back: {} });
   }
   // Upload a picture (the tutor's question, or a learner's photo of their work).
   async function upload(file: File | undefined, answer: boolean): Promise<string | null> {
@@ -149,13 +173,35 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     if (!sessionId) return;
     fetch("/api/live-sessions/results", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(mark == null ? { id: sessionId, action: "unmark", roundId: r.id, studentId: a.by }
-        : { id: sessionId, action: "mark", roundId: r.id, question: r.q, studentId: a.by, name: a.name, mark, max: r.max }) })
+        : { id: sessionId, action: "mark", roundId: r.id, question: taskFor(r, a.by).q, studentId: a.by, name: a.name, mark, max: r.max, feedback: r.notes[a.by] ?? "", answer: keptAnswer(a) }) })
       .then((res) => setMarkNote(res.status === 501 ? "Marks show on learners’ boards, but to keep them for the class results run supabase/migration-class-marks.sql." : res.ok ? null : "A mark wasn’t saved for the results — check the internet."))
       .catch(() => setMarkNote("A mark wasn’t saved for the results — check the internet."));
   }
+  // Feedback to one learner: shows on their board, and is kept with their mark.
+  function giveNote(a: Answer, note: string) {
+    const r = roundRef.current;
+    if (!r) return;
+    const t = cleanNote(note).trim();
+    const notes = { ...r.notes };
+    if (t) notes[a.by] = t; else delete notes[a.by];
+    setRound({ ...r, notes });
+    if (sessionId) fetch("/api/live-sessions/results", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: sessionId, action: "note", roundId: r.id, studentId: a.by, name: a.name, question: taskFor(r, a.by).q, max: r.max, feedback: t, answer: keptAnswer(a) }) }).catch(() => {});
+  }
+  // Send a learner's work back to try again (with any feedback written).
+  function sendBack(a: Answer) {
+    const r = roundRef.current;
+    if (!r) return;
+    setRound({ ...r, back: { ...r.back, [a.by]: (r.back[a.by] ?? 0) + 1 } });
+    setAnswers((cur) => { const next = new Map(cur); const old = next.get(a.by); if (old) next.set(a.by, { ...old, done: false }); return next; });
+  }
+  function setClosed(closed: boolean) {
+    const r = roundRef.current;
+    if (r) setRound({ ...r, closed, endsAt: closed ? r.endsAt : null });
+  }
   function showToClass(a: Answer | null) {
     if (!round) return;
-    setRound({ ...round, show: a ? { strokes: a.strokes, text: a.text, img: a.img ?? null, bg: taskFor(round, a.by).img, name: anon ? null : a.name } : null });
+    setRound({ ...round, show: a ? { strokes: a.strokes, text: a.text, imgs: a.imgs ?? [], bg: taskFor(round, a.by).img, name: anon ? null : a.name } : null });
     setShowBy(a?.by ?? null);
   }
 
@@ -171,7 +217,8 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     }
     const list = [...answers.values()].sort((a, b) => order.current.indexOf(a.by) - order.current.indexOf(b.by));
     const online = people.filter((p) => p.online !== false);
-    const { answered, waiting } = answerSummary(list, online);
+    const { answered, handedIn, waiting } = answerSummary(list, online);
+    const timeUp = !!round?.endsAt && now >= round.endsAt;
     const focused = focus ? answers.get(focus) ?? null : null;
     return (
       <div role="dialog" aria-modal="true" aria-label="Answer boards" className="fixed inset-0 z-[96] flex items-center justify-center bg-black/60 p-3">
@@ -180,13 +227,19 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#EEF6FF] text-[#1657C9]"><BoardIcon name="answers" /></span>
             <div className="min-w-0 flex-1">
               <p className="text-base font-black">Answer boards</p>
-              {round && <p className="truncate text-xs font-bold text-ink/55">{round.q || "No question — learners answer what you ask out loud"} · {answered} of {online.length || list.length} answered · {Object.keys(round.marks).length} marked (out of {round.max})</p>}
+              {round && <p className="truncate text-xs font-bold text-ink/55">{round.q || "No question — learners answer what you ask out loud"} · {answered} of {online.length || list.length} answered · {handedIn} handed in · {Object.keys(round.marks).length} marked (out of {round.max})</p>}
             </div>
             {round && (
               <label className="flex items-center gap-2 text-xs font-black text-ink/70">
                 <input type="checkbox" checked={anon} onChange={(e) => setAnon(e.target.checked)} className="h-4 w-4 accent-[#1657C9]" /> Hide names
               </label>
             )}
+            {round?.endsAt && !round.closed && (
+              <span role="timer" className={`rounded-xl px-3 py-2 text-xs font-black ${timeUp ? "bg-red-100 text-red-700" : "bg-[#EEF6FF] text-[#1657C9]"}`}>{timeUp ? "⏱ Time’s up" : `⏱ ${timeLeft(round.endsAt, now)} left`}</span>
+            )}
+            {round && (round.closed || timeUp
+              ? <button type="button" onClick={() => setClosed(false)} className="rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800">Reopen answers</button>
+              : <button type="button" onClick={() => setClosed(true)} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-ink/80">Close answers</button>)}
             {round && round.show && <button type="button" onClick={() => showToClass(null)} className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-black text-amber-800">Stop showing</button>}
             {round && <button type="button" onClick={end} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white">End</button>}
             <button type="button" onClick={onClose} aria-label={round ? "Hide — answers keep coming in" : "Close"} title={round ? "Hide — answers keep coming in" : "Close"}
@@ -246,6 +299,15 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                 </div>
               </fieldset>
               <fieldset className="grid gap-1.5">
+                <legend className="text-xs font-black text-ink/60">Time limit</legend>
+                <div className="flex flex-wrap gap-2">
+                  {TIME_LIMITS.map((m) => (
+                    <button key={m} type="button" onClick={() => setLimit(m)} aria-pressed={limit === m}
+                      className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 transition ${limit === m ? "bg-[#1657C9] text-white ring-[#1657C9]" : "bg-white text-ink/70 ring-slate-200 hover:ring-[#BFD7FF]"}`}>{m ? `${m} min` : "No limit"}</button>
+                  ))}
+                </div>
+              </fieldset>
+              <fieldset className="grid gap-1.5">
                 <legend className="text-xs font-black text-ink/60">Marks for this question</legend>
                 <div className="flex flex-wrap gap-2">
                   {MARK_CHOICES.map((m) => (
@@ -264,13 +326,15 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                   const showing = !!round.show && showBy === a.by;
                   return (
                     <div key={a.by} className={`overflow-hidden rounded-xl ring-2 transition ${showing ? "ring-amber-400" : round.marks[a.by] != null ? (round.marks[a.by] > 0 ? "ring-emerald-400" : "ring-red-300") : "ring-line hover:ring-[#BFD7FF]"}`}>
-                      <button type="button" onClick={() => setFocus(a.by)} aria-label={`Open ${labelFor(a)}'s answer`} className="block w-full text-left">
+                      <button type="button" onClick={() => { setFocus(a.by); setDraft(round.notes[a.by] ?? ""); }} aria-label={`Open ${labelFor(a)}'s answer`} className="block w-full text-left">
                         <AnswerView a={{ ...a, bg: taskFor(round, a.by).img }} />
                       </button>
                       {round.per[a.by] && <p className="truncate bg-slate-50 px-2 pt-1 text-[11px] font-bold text-ink/55" title={taskFor(round, a.by).q}>Task: {taskFor(round, a.by).q || "their own picture"}</p>}
                       <div className="flex items-center justify-between gap-1 bg-slate-50 px-2 py-1 text-xs font-black">
                         <span className="min-w-0 truncate">{labelFor(a)}</span>
                         {showing && <span className="rounded bg-amber-400 px-1.5 text-[10px] text-ink">On screen</span>}
+                        {a.done && <span className="shrink-0 rounded bg-emerald-100 px-1.5 text-[10px] text-emerald-800">Handed in</span>}
+                        {round.notes[a.by] && <span className="shrink-0 text-[11px]" title={round.notes[a.by]} aria-label="Feedback given">💬</span>}
                         <MarkButtons who={labelFor(a)} max={round.max} mark={round.marks[a.by]} onMark={(m) => giveMark(a, m)} />
                       </div>
                     </div>
@@ -284,9 +348,9 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
         </div>
         {focused && round && (
           <div role="dialog" aria-label="One answer" className="fixed inset-0 z-[97] flex items-center justify-center bg-black/70 p-4">
-            <div className="w-full max-w-3xl rounded-2xl bg-white p-3 shadow-2xl">
+            <div className="max-h-full w-full max-w-3xl overflow-y-auto overscroll-contain rounded-2xl bg-white p-3 shadow-2xl">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-sm font-black text-ink">{labelFor(focused)}</p>
+                <p className="text-sm font-black text-ink">{labelFor(focused)}{focused.done && <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-800">Handed in</span>}</p>
                 <div className="flex flex-wrap items-center gap-2">
                   <MarkButtons who={labelFor(focused)} max={round.max} mark={round.marks[focused.by]} onMark={(m) => giveMark(focused, m)} big />
                   <button type="button" onClick={() => { showToClass(focused); setFocus(null); }} className="rounded-xl bg-[#1657C9] px-3 py-2 text-xs font-black text-white">Show to class{anon ? " (no name)" : ""}</button>
@@ -295,6 +359,23 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
               </div>
               {round.per[focused.by]?.q && <p className="mb-2 text-sm font-bold text-ink/60">Their task: {round.per[focused.by].q}</p>}
               <AnswerView a={{ ...focused, bg: taskFor(round, focused.by).img }} big />
+              <div className="mt-3 grid gap-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                <label className="text-xs font-black text-ink/60" htmlFor="ab-feedback">Feedback for {labelFor(focused)} <span className="font-bold text-ink/45">— only they see it, and it’s kept with their mark</span></label>
+                <div className="flex flex-wrap gap-1.5">
+                  {["Well done! ⭐", "Show your working", "Check your signs", "Nearly — look again", "Great method!"].map((t) => (
+                    <button key={t} type="button" onClick={() => setDraft(t)} className="min-h-[32px] rounded-full bg-white px-3 text-xs font-bold text-ink/70 ring-1 ring-slate-200 hover:ring-[#1657C9]">{t}</button>
+                  ))}
+                </div>
+                <textarea id="ab-feedback" value={draft} maxLength={MAX_NOTE} rows={2} onChange={(e) => setDraft(e.target.value)} placeholder="e.g. Good start — now divide both sides by 3"
+                  className="w-full rounded-lg bg-white p-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1657C9]" />
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => giveNote(focused, draft)} disabled={(round.notes[focused.by] ?? "") === draft.trim()}
+                    className="min-h-[40px] rounded-xl bg-[#1657C9] px-4 text-xs font-black text-white disabled:opacity-40">{round.notes[focused.by] ? "Update feedback" : "Send feedback"}</button>
+                  <button type="button" onClick={() => { if (draft.trim() !== (round.notes[focused.by] ?? "")) giveNote(focused, draft); sendBack(focused); }}
+                    className="min-h-[40px] rounded-xl bg-amber-100 px-4 text-xs font-black text-amber-900">↩ Send back to try again</button>
+                  {(round.back[focused.by] ?? 0) > 0 && <span className="self-center text-xs font-bold text-ink/50">Sent back {round.back[focused.by]}×</span>}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -305,6 +386,11 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
   // ── Learner view ──
   if (!round) return null;
   const task = taskFor(round, myId);
+  const edit = canEdit(round, done, now);
+  const timeUp = !!round.endsAt && now >= round.endsAt;
+  const something = hasAnswered({ strokes: mine, text: typed, imgs: photos });
+  const note = round.notes[myId];
+  const handIn = (yes: boolean) => { setDone(yes); doneRef.current = yes; if (yes) setSentBack(false); version.current++; sendMine(true); };
   if (hidden) {
     return (
       <button type="button" onClick={() => setHidden(false)} className="fixed bottom-4 right-4 z-[96] flex items-center gap-2 rounded-full bg-[#1657C9] px-4 py-3 text-sm font-black text-white shadow-2xl">
@@ -321,9 +407,15 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
             <p className="text-lg font-black leading-snug">{task.q || "Answer the tutor’s question"}</p>
             {round.per[myId] && <p className="text-xs font-bold text-ink/50">This class work is just for you</p>}
           </div>
-          <button type="button" onClick={() => setHidden(true)} className="rounded-lg bg-ink/5 px-3 py-2 text-xs font-black text-ink/70 hover:bg-ink/10">See the class board</button>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <button type="button" onClick={() => setHidden(true)} className="rounded-lg bg-ink/5 px-3 py-2 text-xs font-black text-ink/70 hover:bg-ink/10">See the class board</button>
+            {round.endsAt && !round.closed && <span role="timer" className={`rounded-lg px-2 py-1 text-xs font-black ${timeUp ? "bg-red-100 text-red-700" : "bg-[#EEF6FF] text-[#1657C9]"}`}>{timeUp ? "⏱ Time’s up" : `⏱ ${timeLeft(round.endsAt, now)} left`}</span>}
+          </div>
         </div>
+        {sentBack && !done && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm font-black text-amber-900 ring-1 ring-amber-200">↩ Your tutor sent this back — have another go, then hand it in again.</p>}
+        {note && <p role="status" className="rounded-xl bg-[#EEF6FF] p-3 text-sm font-bold text-ink ring-1 ring-[#BFD7FF]"><span className="block text-[11px] font-black uppercase tracking-wider text-[#1657C9]">💬 From your tutor</span>{note}</p>}
         {round.marks[myId] != null && <YourMark mark={round.marks[myId]} max={round.max} />}
+        {(round.closed || timeUp) && !done && <p role="status" className="rounded-xl bg-slate-100 p-3 text-sm font-black text-ink/75">{timeUp && !round.closed ? "Time’s up — " : ""}Your tutor has closed answers. They can see what you did.</p>}
         {round.show && (
           <div className="rounded-xl bg-amber-50 p-2 ring-1 ring-amber-200">
             <p className="mb-1 text-xs font-black text-amber-800">The tutor is showing {round.show.name ? `${round.show.name}’s` : "an"} answer</p>
@@ -341,12 +433,12 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
           </div>
         )}
         {(round.mode === "draw" || (round.mode === "both" && way === "draw")) && (
-          <Pad strokes={mine} by={myId} bg={task.img} onChange={(next) => { setMine(next); mineRef.current = next; version.current++; sendMine(); }} onDone={() => sendMine(true)} />
+          <Pad strokes={mine} by={myId} bg={task.img} locked={!edit} onChange={(next) => { setMine(next); mineRef.current = next; version.current++; sendMine(); }} onDone={() => sendMine(true)} />
         )}
         {(round.mode === "type" || (round.mode === "both" && way === "type")) && (
           <div className="grid gap-1.5">
             <label htmlFor="ab-typed" className="sr-only">Type your answer</label>
-            <textarea id="ab-typed" value={typed} maxLength={MAX_ANSWER_TEXT} rows={5}
+            <textarea id="ab-typed" value={typed} maxLength={MAX_ANSWER_TEXT} rows={5} readOnly={!edit}
               onChange={(e) => { const t = cleanAnswerText(e.target.value); setTyped(t); typedRef.current = t; version.current++; sendMine(); }}
               onBlur={() => sendMine(true)}
               placeholder="Type your answer here — e.g. x = 4, because 3 × 4 = 12"
@@ -362,8 +454,18 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
             <img src={task.img} alt="The question" className="mx-auto max-h-56 w-full object-contain" />
           </button>
         )}
-        <SnapWork photo={photo} busy={busy} onPick={async (f) => { const u = await upload(f, true); if (u) { setPhoto(u); photoRef.current = u; version.current++; sendMine(true); } }}
-          onRemove={() => { setPhoto(null); photoRef.current = null; version.current++; sendMine(true); }} onBig={() => photo && setBigPic(photo)} />
+        <SnapWork photos={photos} busy={busy} locked={!edit}
+          onPick={async (f) => { const u = await upload(f, true); if (u) { const next = [...photosRef.current, u].slice(0, MAX_PHOTOS); setPhotos(next); photosRef.current = next; version.current++; sendMine(true); } }}
+          onRemove={(u) => { const next = photosRef.current.filter((x) => x !== u); setPhotos(next); photosRef.current = next; version.current++; sendMine(true); }} onBig={setBigPic} />
+        {done ? (
+          <div role="status" className="flex flex-wrap items-center gap-2 rounded-xl bg-emerald-50 p-3 ring-1 ring-emerald-200">
+            <span className="text-sm font-black text-emerald-800">✅ Handed in — your tutor has your work</span>
+            {!round.closed && !timeUp && <button type="button" onClick={() => handIn(false)} className="ml-auto min-h-[40px] rounded-xl bg-white px-3 text-xs font-black text-ink/70 ring-1 ring-emerald-200">Change my answer</button>}
+          </div>
+        ) : edit && (
+          <button type="button" onClick={() => handIn(true)} disabled={!something}
+            className="min-h-[48px] rounded-xl bg-emerald-600 px-5 text-sm font-black text-white shadow disabled:opacity-40">✅ Hand in my work</button>
+        )}
         {round.mode === "both" && way === "type" && mine.length > 0 && <p className="text-xs font-bold text-ink/50">Your drawing is kept too — your tutor sees both.</p>}
         {round.mode === "both" && way === "draw" && typed.trim() && <p className="text-xs font-bold text-ink/50">Your typed answer is kept too — your tutor sees both.</p>}
       </div>
@@ -411,13 +513,22 @@ function YourMark({ mark, max }: { mark: number; max: number }) {
   );
 }
 
+// What's kept with a mark for the learner's results: their typed answer and photos.
+const keptAnswer = (a: Answer) => ({ text: a.text, imgs: a.imgs ?? [] });
+
 // One answer as the tutor (or the class) sees it: the drawing, the typed text, or both.
-function AnswerView({ a, big = false }: { a: { strokes: Stroke[]; text: string; img?: string | null; bg?: string | null }; big?: boolean }) {
+function AnswerView({ a, big = false }: { a: { strokes: Stroke[]; text: string; imgs?: string[]; bg?: string | null }; big?: boolean }) {
   const drew = a.strokes.some((s) => !s.erase), text = a.text.trim();
-  if (a.img) {
+  const imgs = a.imgs ?? [];
+  if (imgs.length) {
     return (
       <div className="bg-white">
-        <img src={a.img} alt="Their work" className={`block w-full bg-slate-100 object-contain ${big ? "max-h-[60vh]" : "aspect-[16/10]"}`} />
+        {big ? imgs.map((u, i) => <img key={u} src={u} alt={`Their work${imgs.length > 1 ? `, page ${i + 1}` : ""}`} className="block max-h-[45vh] w-full bg-slate-100 object-contain" />) : (
+          <div className="relative">
+            <img src={imgs[0]} alt="Their work" className="block aspect-[16/10] w-full bg-slate-100 object-contain" />
+            {imgs.length > 1 && <span className="absolute bottom-1 right-1 rounded bg-black/65 px-1.5 text-[11px] font-black text-white">{imgs.length} pages</span>}
+          </div>
+        )}
         {drew && <Thumb strokes={a.strokes} bg={a.bg} big={big} />}
         {text && <p className={`whitespace-pre-wrap break-words border-t border-line px-3 py-2 font-bold text-ink ${big ? "text-xl" : "line-clamp-2 text-xs"}`}>{text}</p>}
       </div>
@@ -466,24 +577,34 @@ function PicturePick({ label, url, onPick, onRemove, disabled, small = false }: 
   );
 }
 
-// A learner photographs their work (e.g. on paper) and sends it.
-function SnapWork({ photo, busy, onPick, onRemove, onBig }: { photo: string | null; busy: string | null; onPick: (f: File | undefined) => void; onRemove: () => void; onBig: () => void }) {
+// A learner photographs their work (e.g. on paper) and sends it: up to
+// MAX_PHOTOS pages.
+function SnapWork({ photos, busy, locked, onPick, onRemove, onBig }: { photos: string[]; busy: string | null; locked: boolean; onPick: (f: File | undefined) => void; onRemove: (url: string) => void; onBig: (url: string) => void }) {
   const sending = !!busy && !busy.startsWith("That");
+  const full = photos.length >= MAX_PHOTOS;
   return (
     <div className="grid gap-2 rounded-xl bg-[#F5F9FF] p-2 ring-1 ring-[#BFD7FF]">
       <div className="flex flex-wrap items-center gap-2">
-        <label className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl bg-[#1657C9] px-4 text-sm font-black text-white ${sending ? "pointer-events-none opacity-60" : ""}`}>
-          <span aria-hidden>📷</span>{photo ? "Retake the photo" : "Snap my work"}
-          <input type="file" accept="image/*" capture="environment" className="sr-only" aria-label="Snap a photo of my work" disabled={sending}
-            onChange={(e) => { onPick(e.target.files?.[0]); e.target.value = ""; }} />
-        </label>
-        {photo && <button type="button" onClick={onRemove} className="min-h-[44px] rounded-xl px-3 text-xs font-black text-red-600 hover:bg-red-50">Remove the photo</button>}
-        <span className="text-xs font-bold text-ink/55">{busy ?? (photo ? "✓ Your tutor can see your photo" : "Worked on paper? Take a photo and send it.")}</span>
+        {!locked && !full && (
+          <label className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl bg-[#1657C9] px-4 text-sm font-black text-white ${sending ? "pointer-events-none opacity-60" : ""}`}>
+            <span aria-hidden>📷</span>{photos.length ? `Add another page (${photos.length + 1} of ${MAX_PHOTOS})` : "Snap my work"}
+            <input type="file" accept="image/*" capture="environment" className="sr-only" aria-label="Snap a photo of my work" disabled={sending}
+              onChange={(e) => { onPick(e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
+        )}
+        <span className="text-xs font-bold text-ink/55">{busy ?? (photos.length ? `✓ Your tutor can see ${photos.length === 1 ? "your photo" : `your ${photos.length} photos`}` : "Worked on paper? Take a photo and send it.")}</span>
       </div>
-      {photo && (
-        <button type="button" onClick={onBig} className="overflow-hidden rounded-lg" aria-label="Make my photo bigger">
-          <img src={photo} alt="My work" className="mx-auto max-h-48 object-contain" />
-        </button>
+      {photos.length > 0 && (
+        <ul className="flex flex-wrap gap-2">
+          {photos.map((u, i) => (
+            <li key={u} className="relative">
+              <button type="button" onClick={() => onBig(u)} className="overflow-hidden rounded-lg ring-1 ring-line" aria-label={`Make page ${i + 1} bigger`}>
+                <img src={u} alt={`My work, page ${i + 1}`} className="h-28 w-auto max-w-[9rem] bg-white object-contain" />
+              </button>
+              {!locked && <button type="button" onClick={() => onRemove(u)} aria-label={`Remove page ${i + 1}`} className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-red-600 text-xs font-black text-white shadow">✕</button>}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -500,7 +621,7 @@ function BigPicture({ url, onClose }: { url: string; onClose: () => void }) {
 }
 
 // The learner's own small board.
-function Pad({ strokes, by, bg, onChange, onDone }: { strokes: Stroke[]; by: string; bg?: string | null; onChange: (s: Stroke[]) => void; onDone: () => void }) {
+function Pad({ strokes, by, bg, locked = false, onChange, onDone }: { strokes: Stroke[]; by: string; bg?: string | null; locked?: boolean; onChange: (s: Stroke[]) => void; onDone: () => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const cur = useRef<Stroke | null>(null);
   const [colour, setColour] = useState(PEN_COLOURS[1]);
@@ -515,11 +636,12 @@ function Pad({ strokes, by, bg, onChange, onDone }: { strokes: Stroke[]; by: str
       {bg && <img src={bg} alt="The question — write on it" className="pointer-events-none absolute inset-0 h-full w-full object-contain" draggable={false} />}
       <canvas ref={ref} width={BOARD_W * 0.6} height={BOARD_H * 0.6} role="img" aria-label="Your answer — draw here"
         className="relative block aspect-[16/10] w-full touch-none"
-        onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); cur.current = { id: `${by.slice(0, 6)}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`, by, color: colour, w: rubber ? 10 : 4, erase: rubber, pts: pt(e) }; paint(); }}
+        onPointerDown={(e) => { if (locked) return; e.currentTarget.setPointerCapture(e.pointerId); cur.current = { id: `${by.slice(0, 6)}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`, by, color: colour, w: rubber ? 10 : 4, erase: rubber, pts: pt(e) }; paint(); }}
         onPointerMove={(e) => { const s = cur.current; if (!s || !e.buttons) return; const [x, y] = pt(e); const L = s.pts.length; if (Math.hypot(x - s.pts[L - 2], y - s.pts[L - 1]) < 0.002) return; s.pts.push(x, y); paint(); }}
         onPointerUp={() => { const s = cur.current; cur.current = null; if (s) onChange([...strokes, s].slice(-300)); onDone(); }}
         onPointerCancel={() => { cur.current = null; paint(); }} />
       </div>
+      {locked ? <p className="text-xs font-bold text-ink/55">🔒 Your answer is locked</p> : (
       <div className="flex flex-wrap items-center gap-1.5">
         {PEN_COLOURS.map((c) => (
           <button key={c} type="button" onClick={() => { setColour(c); setRubber(false); }} aria-label={`Pen colour ${c}`} aria-pressed={!rubber && colour === c}
@@ -529,7 +651,7 @@ function Pad({ strokes, by, bg, onChange, onDone }: { strokes: Stroke[]; by: str
         <button type="button" onClick={() => onChange(strokes.slice(0, -1))} disabled={!strokes.length} className={`${tool} bg-ink/5 disabled:opacity-40`}>Undo</button>
         <button type="button" onClick={() => onChange([])} disabled={!strokes.length} className={`${tool} bg-ink/5 disabled:opacity-40`}>Clear</button>
         <span className="ml-auto text-xs font-bold text-emerald-700">{strokes.length ? "✓ Your tutor can see this" : "Draw or write your answer"}</span>
-      </div>
+      </div>)}
     </div>
   );
 }

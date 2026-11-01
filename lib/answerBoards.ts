@@ -10,16 +10,30 @@ export type AnswerMode = "both" | "draw" | "type";
 // `img`: a picture for everyone (a worksheet, a diagram); `per`: class work set
 // for each learner — their own question and/or picture (by learner id).
 export type Task = { q: string; img: string | null };
-export type Shown = { strokes: Stroke[]; text: string; img?: string | null; bg?: string | null; name: string | null };
+export type Shown = { strokes: Stroke[]; text: string; imgs?: string[]; bg?: string | null; name: string | null };
+// Handing in: `closed` — the tutor has stopped answers changing; `endsAt` — a
+// time limit (server time, lib/serverClock); `notes` — the tutor's feedback to
+// each learner; `back` — work sent back to try again (a count per learner, so
+// a learner sees each send-back once).
 export type Round = {
   id: string; q: string; open: boolean; mode: AnswerMode; show: Shown | null; max: number; marks: Record<string, number>;
   img: string | null; per: Record<string, Task>;
+  closed: boolean; endsAt: number | null; notes: Record<string, string>; back: Record<string, number>;
 };
+export const MAX_PHOTOS = 3;
+export const MAX_NOTE = 200;
+export const TIME_LIMITS = [0, 2, 5, 10, 15, 30] as const; // minutes (0 = no limit)
 export const MAX_PER = 60;
 export const MARK_CHOICES = [1, 2, 5, 10] as const;
-// `img`: a photo the learner took of their work.
-export type Answer = { by: string; name: string; strokes: Stroke[]; text: string; img?: string | null; v: number; at: number };
+// `imgs`: photos the learner took of their work (pages of it); `done`: handed in.
+export type Answer = { by: string; name: string; strokes: Stroke[]; text: string; imgs?: string[]; done?: boolean; v: number; at: number };
 export const cleanImg = (v: unknown): string | null => (isSlideUrl(v) ? v : null);
+// Up to MAX_PHOTOS board pictures (an older board sent one, as `img`).
+export function cleanImgs(v: unknown, old?: unknown): string[] {
+  const list = Array.isArray(v) ? v : old != null ? [old] : [];
+  return [...new Set(list.filter(isSlideUrl))].slice(0, MAX_PHOTOS);
+}
+export const cleanNote = (v: unknown) => (typeof v === "string" ? v.replace(/\r/g, "").slice(0, MAX_NOTE) : "");
 
 export const MAX_ANSWER_TEXT = 500;
 // A typed answer: plain text, tidy line breaks, within the size limit.
@@ -45,7 +59,7 @@ export function cleanAnswerStrokes(v: unknown): Stroke[] {
 export function cleanRound(v: unknown): Round | null {
   const r = v as any;
   if (!r || typeof r.id !== "string" || !r.id) return null;
-  const show = r.show && typeof r.show === "object" ? { strokes: cleanAnswerStrokes(r.show.strokes), text: cleanAnswerText(r.show.text), img: cleanImg(r.show.img), bg: cleanImg(r.show.bg), name: typeof r.show.name === "string" ? r.show.name.slice(0, 60) : null } : null;
+  const show = r.show && typeof r.show === "object" ? { strokes: cleanAnswerStrokes(r.show.strokes), text: cleanAnswerText(r.show.text), imgs: cleanImgs(r.show.imgs, r.show.img), bg: cleanImg(r.show.bg), name: typeof r.show.name === "string" ? r.show.name.slice(0, 60) : null } : null;
   const mode: AnswerMode = MODES.includes(r.mode) ? r.mode : "both"; // older boards sent no mode
   const max = Math.max(1, Math.min(10, Math.round(Number(r.max) || 1)));
   const marks: Record<string, number> = {};
@@ -62,7 +76,13 @@ export function cleanRound(v: unknown): Round | null {
       if (who && (q.trim() || img)) per[who.slice(0, 60)] = { q, img };
     }
   }
-  return { id: r.id.slice(0, 40), q: String(r.q ?? "").slice(0, 200), open: !!r.open, mode, show, max, marks, img: cleanImg(r.img), per };
+  const notes: Record<string, string> = {};
+  if (r.notes && typeof r.notes === "object") for (const [who, n] of Object.entries(r.notes).slice(0, 500)) { const t = cleanNote(n); if (who && t.trim()) notes[who.slice(0, 60)] = t; }
+  const back: Record<string, number> = {};
+  if (r.back && typeof r.back === "object") for (const [who, n] of Object.entries(r.back).slice(0, 500)) { const k = Math.round(Number(n)); if (who && k > 0 && k < 1000) back[who.slice(0, 60)] = k; }
+  const endsAt = Number(r.endsAt) > 0 ? Math.round(Number(r.endsAt)) : null;
+  return { id: r.id.slice(0, 40), q: String(r.q ?? "").slice(0, 200), open: !!r.open, mode, show, max, marks, img: cleanImg(r.img), per,
+    closed: !!r.closed, endsAt, notes, back };
 }
 
 // "Learner A", "Learner B"… — the same learner keeps the same letter in a round.
@@ -74,12 +94,12 @@ export function anonLabel(order: string[], by: string): string {
 }
 
 // Has this learner given an answer — drawn, typed, or sent a photo?
-export const hasAnswered = (a: Pick<Answer, "strokes" | "text" | "img">) => a.strokes.some((s) => !s.erase) || !!a.text.trim() || !!a.img;
+export const hasAnswered = (a: Pick<Answer, "strokes" | "text" | "imgs">) => a.strokes.some((s) => !s.erase) || !!a.text.trim() || !!a.imgs?.length;
 
 // Who has answered and who hasn't yet.
 export function answerSummary(answers: Answer[], online: { id: string; name: string }[]) {
   const done = new Set(answers.filter(hasAnswered).map((a) => a.by));
-  return { answered: done.size, waiting: online.filter((p) => !done.has(p.id)).map((p) => p.name) };
+  return { answered: done.size, handedIn: answers.filter((a) => a.done).length, waiting: online.filter((p) => !done.has(p.id)).map((p) => p.name) };
 }
 
 // This learner's class work: their own question and picture where set, else the ones for everyone.
@@ -95,4 +115,14 @@ export function shareOut(questions: string[], learners: string[]): Record<string
   if (!qs.length) return out;
   learners.slice(0, MAX_PER).forEach((id, i) => { out[id] = { q: qs[i % qs.length].slice(0, 300), img: null }; });
   return out;
+}
+
+// Can this learner still change their answer? Not once handed in, the tutor
+// has closed answers, or time is up.
+export const canEdit = (r: Pick<Round, "closed" | "endsAt">, done: boolean, now: number) => !done && !r.closed && !(r.endsAt && now >= r.endsAt);
+
+// "4:05" left on the clock.
+export function timeLeft(endsAt: number, now: number): string {
+  const s = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }

@@ -3,7 +3,7 @@
 // Each live-quiz question counts as one mark in the total; the quiz's speed
 // points are shown alongside.
 
-export type MarkRow = { round_id: string; student_id: string; name: string; question: string; mark: number; max_mark: number };
+export type MarkRow = { round_id: string; student_id: string; name: string; question: string; mark: number | null; max_mark: number };
 export type QuizInfo = { id: string; title: string; asked: number };
 export type QuizAnswerRow = { quiz_id: string; student_id: string; correct: boolean; points: number };
 export type ResultRow = {
@@ -21,7 +21,8 @@ export function askedCount(q: { questions: unknown[]; status: string; current: n
   return Math.max(0, Math.min(n, q.current + 1));
 }
 
-export function classResults(people: { id: string; name: string }[], marks: MarkRow[], quizzes: QuizInfo[], answers: QuizAnswerRow[]): ResultRow[] {
+export function classResults(people: { id: string; name: string }[], allMarks: MarkRow[], quizzes: QuizInfo[], answers: QuizAnswerRow[]): ResultRow[] {
+  const marks = allMarks.filter((m) => m.mark != null); // feedback without a mark doesn't count
   const rounds = new Map<string, number>(); // every round counts for everyone, marked or not
   for (const m of marks) rounds.set(m.round_id, Math.max(rounds.get(m.round_id) ?? 0, m.max_mark));
   const workMax = [...rounds.values()].reduce((a, b) => a + b, 0);
@@ -32,7 +33,7 @@ export function classResults(people: { id: string; name: string }[], marks: Mark
   const rows: ResultRow[] = [...ids].map((id) => {
     const mine = marks.filter((m) => m.student_id === id);
     const qa = answers.filter((a) => a.student_id === id);
-    const work = mine.reduce((a, m) => a + m.mark, 0);
+    const work = mine.reduce((a, m) => a + (m.mark ?? 0), 0);
     const quizCorrect = qa.filter((a) => a.correct).length;
     const total = work + quizCorrect, totalMax = workMax + quizAsked;
     return {
