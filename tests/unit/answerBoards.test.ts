@@ -10,7 +10,7 @@ describe("answer boards", () => {
     expect(cleanAnswerStrokes(Array.from({ length: 40 }, (_, i) => pen(`p${i}`, 2000))).length).toBeLessThan(40);
   });
   it("checks rounds sent by the tutor", () => {
-    expect(cleanRound({ id: "r1", q: "What is ½ of 8?", open: true })).toEqual({ id: "r1", q: "What is ½ of 8?", open: true, mode: "both", show: null, max: 1, marks: {} });
+    expect(cleanRound({ id: "r1", q: "What is ½ of 8?", open: true })).toEqual({ id: "r1", q: "What is ½ of 8?", open: true, mode: "both", show: null, max: 1, marks: {}, img: null, per: {} });
     expect(cleanRound({ q: "no id" })).toBeNull();
     expect(cleanRound({ id: "r1", open: true, show: { strokes: [pen("a")], name: 5 } })?.show).toMatchObject({ name: null });
   });

@@ -84,7 +84,7 @@ describe("maths tools state", () => {
       calc: { on: true, expr: "2+2", result: "4", deg: false },
       numberLine: { on: true, min: 0, max: 1000, step: 1, marks: [5, 5000, "x"] },
     });
-    expect(w.graph.exprs).toEqual(["sin(x)", "x".repeat(80), ""]);
+    expect(w.graph.exprs).toEqual(["sin(x)", "x".repeat(120), "", "", "", ""]); // six rows, each kept short
     expect([w.graph.xMin, w.graph.xMax]).toEqual([-10, 10]); // a back-to-front range resets
     expect(w.graph.yMax).toBe(2);
     expect(w.calc).toMatchObject({ on: true, expr: "2+2", deg: false });

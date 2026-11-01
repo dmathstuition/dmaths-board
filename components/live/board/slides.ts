@@ -157,7 +157,7 @@ async function sourcesFor(files: File[], room: number): Promise<{ list: Source[]
 
 // ── Uploading ──
 type Ticket = { path: string; token: string; url: string };
-type Target = { sessionId?: string; lessonId?: string };
+type Target = { sessionId?: string; lessonId?: string; answer?: boolean }; // answer: a learner's photo of their work
 
 async function tickets(target: Target, count: number): Promise<Ticket[]> {
   return withRetries(async () => {
