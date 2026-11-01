@@ -69,3 +69,24 @@ test("a ready-made quiz launches as a live quiz", async ({ browser }) => {
   // The quiz tab lists the ready-made quizzes too.
   await expect(teacher.getByText(/Ready-made quizzes — early years/)).toBeVisible();
 });
+
+test("upper-school maths games: the teacher picks one for SSS and learners play it", async ({ browser }) => {
+  const { teacher, learner } = await openClass(browser);
+  await teacher.getByRole("button", { name: "Games and quizzes" }).click();
+  const panel = teacher.getByRole("dialog", { name: "Games and quizzes" });
+  await panel.getByRole("button", { name: /Upper secondary/ }).click();
+  const upper = panel.getByRole("region", { name: /Senior secondary/ });
+  for (const t of ["Surd Smash", "Integration Island", "Straight-Line Sprint", "Circle Circuit", "Function Machine"]) await expect(upper.getByRole("button", { name: new RegExp(t) })).toBeVisible();
+  await panel.screenshot({ path: "test-results/games-upper.png" });
+  await panel.getByRole("radio", { name: "hard" }).click();
+  await panel.getByRole("button", { name: /Straight-Line Sprint/ }).click();
+  await panel.getByLabel("Let learners play").check();
+
+  const game = learner.getByRole("dialog", { name: "Game: Straight-Line Sprint" });
+  await expect(game).toBeVisible({ timeout: 20_000 });
+  await game.getByRole("button", { name: /Let.s play/ }).click();
+  // A straight-line question with answers to pick (1–4 on a keyboard).
+  await expect(game.getByText(/gradient|y-axis|lines meet|line with gradient/i).first()).toBeVisible({ timeout: 15_000 });
+  await learner.keyboard.press("1");
+  await learner.screenshot({ path: "test-results/games-learner.png" });
+});

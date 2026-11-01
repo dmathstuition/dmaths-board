@@ -3,9 +3,12 @@ import { useEffect, useRef, useState } from "react";
 import { choiceQuestion, type ChoiceSkill, type ChoiceQ } from "@/lib/games/senior";
 import { englishChoice, ENGLISH_CHOICE, type EnglishChoiceSkill } from "@/lib/games/english";
 import type { Difficulty } from "@/lib/games/generators";
+import { moreChoice, MORE_CHOICE, type MoreChoiceSkill } from "@/lib/games/moreMaths";
 
 const nextQuestion = (skill: string, d: Difficulty, rng: () => number): ChoiceQ =>
-  ENGLISH_CHOICE.includes(skill) ? englishChoice(skill as EnglishChoiceSkill, d, rng) : choiceQuestion(skill as ChoiceSkill, d, rng);
+  ENGLISH_CHOICE.includes(skill) ? englishChoice(skill as EnglishChoiceSkill, d, rng)
+    : MORE_CHOICE.includes(skill) ? moreChoice(skill as MoreChoiceSkill, d, rng)
+      : choiceQuestion(skill as ChoiceSkill, d, rng);
 import type { EngineProps } from "@/components/games/GamePlayer";
 
 // Four big answer tiles, each with its own colour and shape. Tap one, or

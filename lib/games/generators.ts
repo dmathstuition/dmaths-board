@@ -5,6 +5,7 @@ import {
   seniorQuestion, identityStatement, poolPairs,
   type SeniorNumericSkill, type ChoiceSkill, type MatchSkill,
 } from "@/lib/games/senior";
+import { moreNumeric, MORE_NUMERIC, type MoreNumericSkill, type MoreChoiceSkill } from "@/lib/games/moreMaths";
 import {
   spellingStatement, englishPairs, ENGLISH_MATCH,
   type EnglishChoiceSkill, type EnglishMatchSkill, type TileSkill,
@@ -12,7 +13,7 @@ import {
 
 export type Difficulty = "easy" | "medium" | "hard";
 export type BasicSkill = "addition" | "subtraction" | "multiplication" | "division" | "missing" | "bodmas" | "mixed";
-export type Skill = BasicSkill | SeniorNumericSkill | ChoiceSkill | MatchSkill | "identity"
+export type Skill = BasicSkill | SeniorNumericSkill | ChoiceSkill | MatchSkill | "identity" | MoreNumericSkill | MoreChoiceSkill
   | EnglishChoiceSkill | EnglishMatchSkill | TileSkill;
 export type Rng = () => number;
 // `ask` is shown under the prompt when the prompt is itself an equation ("x = ?").
@@ -99,6 +100,7 @@ function bodmas(rng: Rng, d: Difficulty): Question {
 
 export function question(skill: Skill, d: Difficulty, rng: Rng = Math.random): Question {
   if (isSeniorNumeric(skill)) return seniorQuestion(skill, d, rng);
+  if (MORE_NUMERIC.includes(skill)) return moreNumeric(skill as MoreNumericSkill, d, rng);
   switch (skill) {
     case "addition": return addition(rng, d);
     case "subtraction": return subtraction(rng, d);

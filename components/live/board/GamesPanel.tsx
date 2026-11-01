@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
 import GamePlayer from "@/components/games/GamePlayer";
-import { CLASS_GAMES, findGame, type ClassGame, type GameSubject } from "@/lib/games/catalog";
+import { CLASS_GAMES, STAGE_LABEL, findGame, subjectOf, type ClassGame, type GameSubject, type Stage } from "@/lib/games/catalog";
 import type { Difficulty } from "@/lib/games/generators";
 import { UK_SETS, UK_STAGE_LABEL, findUKSet, gameItems, quizQuestions, type UKSet, type UKStage, type UKSubject } from "@/lib/ukPrimary";
 import { useKeptState, type KeepStore } from "@/lib/keptState";
@@ -29,8 +29,12 @@ export function ukGame(s: UKSet): ClassGame {
     howTo: "Tap the right answer (or press 1–4). Questions come round again, so learn from any you miss.",
   };
 }
-// Quick arcade games that suit primary classes (any difficulty).
-const ARCADE = CLASS_GAMES.filter((g) => g.stage === "primary");
+// Quick arcade games, from primary to A-Level (any difficulty), grouped by stage.
+// Ages on the filter: the curriculum stages, plus secondary (JSS / KS3, SSS / KS4+).
+type Age = UKStage | "all" | "junior" | "senior";
+const AGE_LABEL: Record<"junior" | "senior", string> = { junior: "Secondary · JSS / KS3", senior: "Upper secondary · SSS / KS4 / A-Level" };
+const ARCADE_STAGES: Record<Age, Stage[]> = { all: ["primary", "junior", "senior"], eyfs: [], ks1: ["primary"], ks2: ["primary"], junior: ["junior"], senior: ["senior"] };
+const GROUP_LABEL: Record<Stage, string> = { primary: "Primary", junior: STAGE_LABEL.junior, senior: `${STAGE_LABEL.senior} & A-Level` };
 
 // What's being played: a curriculum set, or an arcade game at a difficulty.
 type Pick = { kind: "uk"; id: string } | { kind: "arcade"; id: string; difficulty: Difficulty };
@@ -57,7 +61,7 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
   keep?: KeepStore;
 }) {
   const [tab, setTab] = useKeptState<"games" | "quizzes">(keep, "games:tab", "games");
-  const [stage, setStage] = useKeptState<UKStage | "all">(keep, "games:stage", "all");
+  const [stage, setStage] = useKeptState<Age>(keep, "games:stage", "all");
   const [subject, setSubject] = useKeptState<UKSubject | "all">(keep, "games:subject", "all");
   const [playing, setPlaying] = useKeptState<string | null>(keep, "games:playing", null); // teacher: pickKey
   const [shared, setShared] = useKeptState(keep, "games:shared", false);
@@ -98,6 +102,9 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
   }, [showing, host, onClose, setHidden]);
 
   const sets = useMemo(() => UK_SETS.filter((s) => (stage === "all" || s.stage === stage) && (subject === "all" || s.subject === subject)), [stage, subject]);
+  const arcade = useMemo(() => ARCADE_STAGES[stage].map((st) => ({
+    stage: st, games: CLASS_GAMES.filter((g) => g.stage === st && (subject === "all" || subjectOf(g) === subject.toLowerCase())),
+  })).filter((grp) => grp.games.length), [stage, subject]);
 
   // ── Learner: the game the teacher sent ──
   if (!host) {
@@ -146,7 +153,7 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
     <div role="dialog" aria-modal="true" aria-label="Games and quizzes" data-board-overlay className="fixed inset-0 z-[96] flex flex-col bg-[#1E1B4B] text-white">
       <div className="flex items-center gap-2 border-b border-white/10 px-2 py-1.5 sm:px-3">
         <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 sm:flex"><BoardIcon name="game" /></span>
-        <p className="min-w-0 flex-1 truncate text-sm font-black">{current ? `${titleOf(current)}` : "Games & quizzes — early years and primary"}</p>
+        <p className="min-w-0 flex-1 truncate text-sm font-black">{current ? `${titleOf(current)}` : "Games & quizzes"}</p>
         {current && live && (
           <label className={`${btn} bg-white/10`}>
             <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} className="h-4 w-4 accent-amber-400" /> Let learners play
@@ -174,8 +181,8 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
             </div>
             <p className="mt-3 text-xs text-white/55">Following the England curriculum: the EYFS for Reception, and the National Curriculum for Key Stages 1 and 2.</p>
             <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Filter">
-              {(["all", "eyfs", "ks1", "ks2"] as const).map((s) => (
-                <button key={s} type="button" aria-pressed={stage === s} onClick={() => setStage(s)} className={chip(stage === s)}>{s === "all" ? "All ages" : UK_STAGE_LABEL[s]}</button>
+              {(["all", "eyfs", "ks1", "ks2", "junior", "senior"] as const).map((s) => (
+                <button key={s} type="button" aria-pressed={stage === s} onClick={() => setStage(s)} className={chip(stage === s)}>{s === "all" ? "All ages" : s === "junior" || s === "senior" ? AGE_LABEL[s] : UK_STAGE_LABEL[s]}</button>
               ))}
               <span className="mx-1 w-px shrink-0 bg-white/15" aria-hidden />
               {(["all", "Maths", "English", "Science"] as const).map((s) => (
@@ -202,7 +209,7 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
                     </li>
                   ))}
                 </ul>
-                {(stage === "all" || stage === "ks1" || stage === "ks2") && (subject === "all" || subject === "Maths" || subject === "English") && (
+                {arcade.length > 0 && (
                   <>
                     <div className="mt-6 flex flex-wrap items-center gap-2">
                       <p className="text-sm font-black">Quick-fire arcade games</p>
@@ -214,21 +221,27 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
                         ))}
                       </div>
                     </div>
-                    <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {ARCADE.filter((g) => subject === "all" || (g.subject ?? "maths") === subject.toLowerCase()).map((g) => (
-                        <li key={g.id}>
-                          <button type="button" onClick={() => setPlaying(pickKey({ kind: "arcade", id: g.id, difficulty }))}
-                            className="flex h-full w-full items-start gap-3 rounded-2xl p-3 text-left ring-1 ring-white/10 transition hover:ring-white/40"
-                            style={{ background: `linear-gradient(135deg, ${g.colors[0]}55, ${g.colors[1]}33)` }}>
-                            <span className="text-3xl" aria-hidden>{g.emoji}</span>
-                            <span className="min-w-0">
-                              <span className="block text-sm font-black">{g.title}</span>
-                              <span className="mt-0.5 block text-xs text-white/60">{g.tagline}</span>
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                    {arcade.map((grp) => (
+                      <section key={grp.stage} aria-label={GROUP_LABEL[grp.stage]}>
+                        <h3 className="mt-4 text-xs font-black uppercase tracking-wider text-amber-300">{GROUP_LABEL[grp.stage]} <span className="text-white/45">· {grp.games.length}</span></h3>
+                        <ul className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {grp.games.map((g) => (
+                            <li key={g.id}>
+                              <button type="button" onClick={() => setPlaying(pickKey({ kind: "arcade", id: g.id, difficulty }))}
+                                className="flex h-full w-full items-start gap-3 rounded-2xl p-3 text-left ring-1 ring-white/10 transition hover:ring-white/40"
+                                style={{ background: `linear-gradient(135deg, ${g.colors[0]}55, ${g.colors[1]}33)` }}>
+                                <span className="text-3xl" aria-hidden>{g.emoji}</span>
+                                <span className="min-w-0">
+                                  <span className="block text-sm font-black">{g.title}</span>
+                                  <span className="block text-[11px] font-bold text-white/60">{g.band}</span>
+                                  <span className="mt-0.5 block text-xs text-white/60">{g.tagline}</span>
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
                   </>
                 )}
               </>
@@ -253,7 +266,7 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
                 </ul>
               </>
             )}
-            {!sets.length && <p className="mt-6 text-center text-sm text-white/50">Nothing for that choice yet — try another age or subject.</p>}
+            {!sets.length && (tab === "quizzes" || !arcade.length) && <p className="mt-6 text-center text-sm text-white/50">{tab === "quizzes" && arcade.length ? "Ready-made quizzes are for early years and primary — the secondary games are in Class games." : "Nothing for that choice yet — try another age or subject."}</p>}
           </div>
         </div>
       )}
