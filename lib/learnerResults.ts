@@ -10,7 +10,8 @@ import { cleanAnswerText, cleanImgs } from "@/lib/answerBoards";
 export type WorkItem = { question: string; mark: number | null; max: number; feedback: string; answer: { text: string; imgs: string[] } | null };
 export type QuizItem = { q: string; options: string[]; answer: number; choice: number | null; correct: boolean };
 export type QuizResult = { title: string; items: QuizItem[] };
-export type LearnerDetail = LearnerReport & { work: WorkItem[]; quizzes: QuizResult[]; classAverage: number | null; live: boolean };
+export type ExamResult = { title: string; score: number | null; total: number | null; submitted: boolean };
+export type LearnerDetail = LearnerReport & { work: WorkItem[]; quizzes: QuizResult[]; exams: ExamResult[]; classAverage: number | null; live: boolean };
 
 const asItem = (m: any): WorkItem => ({
   question: String(m.question ?? ""), mark: m.mark ?? null, max: Number(m.max_mark) || 1, feedback: String(m.feedback ?? ""),
@@ -42,6 +43,13 @@ export async function learnerDetail(sessionId: string, studentId: string): Promi
   const classAverage = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null;
 
   const myAnswers = answers.filter((a) => a.student_id === studentId);
+  // Exams (supabase/migration-exams-stars.sql; none before it's run).
+  const examRows = await admin.from("board_exams").select("id, title, created_at").eq("session_id", sessionId).order("created_at").limit(20);
+  let exams: ExamResult[] = [];
+  if (!examRows.error && examRows.data?.length) {
+    const { data: es } = await admin.from("board_exam_entries").select("exam_id, score, total, submitted_at").eq("student_id", studentId).in("exam_id", examRows.data.map((e: any) => e.id));
+    exams = examRows.data.map((e: any) => { const m: any = (es ?? []).find((x: any) => x.exam_id === e.id); return m ? { title: String(e.title), score: m.score, total: m.total, submitted: !!m.submitted_at } : null; }).filter(Boolean) as ExamResult[];
+  }
   return {
     ...report,
     live: sessionRes.data?.status === "live",
@@ -53,6 +61,7 @@ export async function learnerDetail(sessionId: string, studentId: string): Promi
         return { q: String(x?.q ?? ""), options: Array.isArray(x?.options) ? x.options.map(String) : [], answer: Number(x?.answer) || 0, choice: a ? a.choice : null, correct: !!a?.correct };
       }),
     })),
+    exams,
     classAverage,
   };
 }

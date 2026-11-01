@@ -45,17 +45,22 @@ function parsePick(v: unknown): Pick | null {
   if (kind === "arcade" && findGame(id) && (d === "easy" || d === "medium" || d === "hard")) return { kind, id, difficulty: d };
   return null;
 }
-function Player({ pick, onExit, exitLabel }: { pick: Pick; onExit: () => void; exitLabel: string }) {
+function Player({ pick, onExit, exitLabel, sessionId }: { pick: Pick; onExit: () => void; exitLabel: string; sessionId?: string }) {
+  // A learner's arcade round counts for their stars on the class leaderboard.
+  const onRound = sessionId && pick.kind === "arcade" ? (r: { score: number; correct: number; attempts: number }) => {
+    fetch("/api/board/stars", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, gameId: pick.id, difficulty: pick.difficulty, ...r }) }).catch(() => {});
+  } : undefined;
   if (pick.kind === "uk") {
     const s = findUKSet(pick.id)!;
     return <GamePlayer key={pickKey(pick)} game={ukGame(s)} items={gameItems(s)} difficulty="medium" mode="preview" backHref="#" backLabel={exitLabel} onExit={onExit} />;
   }
-  return <GamePlayer key={pickKey(pick)} game={findGame(pick.id)!} difficulty={pick.difficulty} mode="preview" backHref="#" backLabel={exitLabel} onExit={onExit} />;
+  return <GamePlayer key={pickKey(pick)} game={findGame(pick.id)!} difficulty={pick.difficulty} mode="preview" backHref="#" backLabel={exitLabel} onExit={onExit} onRound={onRound} />;
 }
 const titleOf = (p: Pick) => (p.kind === "uk" ? findUKSet(p.id)?.title : findGame(p.id)?.title) ?? "Game";
 
-export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunchQuiz, keep }: {
+export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunchQuiz, keep, sessionId }: {
   host: boolean; open: boolean; onOpen: () => void; onClose: () => void;
+  sessionId?: string; // learners' game rounds earn stars in this class
   live: boolean; // in a class (not preparing a lesson)
   onLaunchQuiz?: (title: string, questions: ReturnType<typeof quizQuestions>) => Promise<string | null>; // null = launched
   keep?: KeepStore;
@@ -119,7 +124,7 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
     }
     return (
       <div role="dialog" aria-label={`Game: ${titleOf(pick)}`} data-board-overlay className="fixed inset-0 z-[96] overflow-y-auto overscroll-contain bg-[#1E1B4B]">
-        <Player pick={pick} onExit={() => setHidden(true)} exitLabel="Back to the class board" />
+        <Player pick={pick} onExit={() => setHidden(true)} exitLabel="Back to the class board" sessionId={live ? sessionId : undefined} />
       </div>
     );
   }

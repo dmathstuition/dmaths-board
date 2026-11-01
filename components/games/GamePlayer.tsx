@@ -45,7 +45,7 @@ type Phase = "intro" | "countdown" | "playing" | "over";
 const stars = starsFor;
 
 export default function GamePlayer({
-  game, difficulty, mode, initialBest = 0, backHref, backLabel = "All games", saveTo, items, onSaved, title, onExit,
+  game, difficulty, mode, initialBest = 0, backHref, backLabel = "All games", saveTo, items, onSaved, title, onExit, onRound,
 }: {
   game: ClassGame; difficulty: Difficulty; mode: "play" | "preview"; initialBest?: number; backHref: string; backLabel?: string;
   saveTo?: { url: string; body?: Record<string, unknown> }; // where the round is saved (adventure stop, recap game)
@@ -53,6 +53,7 @@ export default function GamePlayer({
   onSaved?: (reply: any) => void;                          // the save reply (adventure progress)
   title?: string;
   onExit?: () => void; // played inside a board: a button closes it instead of the links away
+  onRound?: (r: { score: number; correct: number; attempts: number }) => void; // a round finished (board stars)
 }) {
   const [phase, setPhase] = useState<Phase>("intro");
   const [count, setCount] = useState(3);
@@ -137,6 +138,7 @@ export default function GamePlayer({
     setRoundTags({ ...t.tags });
     setMistakes(collectMistakes(t.mistakes));
     const avgMs = t.attempts ? Math.round((Math.min(Date.now(), endAt.current) - t.startedAt) / t.attempts) : 0;
+    onRound?.({ score: t.score, correct: t.correct, attempts: t.attempts });
     if (mode !== "play") { setSaveNote(onExit ? "" : "Preview round — scores aren't saved."); return; }
     const res = await fetch(saveTo?.url ?? "/api/games/score", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -150,7 +152,7 @@ export default function GamePlayer({
     if (typeof j.rating === "number") setResult({ rating: j.rating, tier: j.tier, ratingChange: j.ratingChange ?? null, tierUp: !!j.tierUp });
     if (j.tierUp && j.tier) { setLevelUp(String(j.tier)); fx("levelUp"); }
     else if (j.chapterComplete || j.newBest) fx("best");
-  }, [best, mode, game.id, saveTo, onSaved, fx, onExit]);
+  }, [best, mode, game.id, saveTo, onSaved, fx, onExit, onRound]);
 
   // The clock
   useEffect(() => {

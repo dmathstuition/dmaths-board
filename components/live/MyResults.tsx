@@ -8,12 +8,13 @@ import type { LearnerDetail } from "@/lib/learnerResults";
 export default function MyResults({ sessionId, ended }: { sessionId: string; ended: boolean }) {
   const [d, setD] = useState<LearnerDetail | null>(null);
   const [link, setLink] = useState<string | null>(null);
+  const [stars, setStars] = useState<{ stars: number; classStars: number; badges: { id: string; icon: string; label: string }[]; rank: number; of: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const load = useCallback(async () => {
     const r = await fetch(`/api/live-sessions/my-results?id=${encodeURIComponent(sessionId)}`, { cache: "no-store" }).catch(() => null);
     const j = r ? await r.json().catch(() => ({})) : {};
-    if (r?.ok) { setD(j.detail); setLink(j.link); setErr(null); } else setErr(j.error ?? "Couldn't load your results — check the internet.");
+    if (r?.ok) { setD(j.detail); setLink(j.link); setStars(j.stars ?? null); setErr(null); } else setErr(j.error ?? "Couldn't load your results — check the internet.");
   }, [sessionId]);
   useEffect(() => { load(); }, [load]);
 
@@ -29,6 +30,13 @@ export default function MyResults({ sessionId, ended }: { sessionId: string; end
       </div>
       {err && <p role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{err}</p>}
       {!d && !err && <div className="mt-3 h-40 animate-pulse rounded-xl bg-slate-100" />}
+      {stars && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-[#1E1B4B] p-3 text-white" aria-label="My stars">
+          <span className="text-3xl font-black text-amber-300">⭐ {stars.stars}</span>
+          <span className="min-w-0 flex-1 text-xs font-bold text-white/75">{stars.classStars} this class · #{stars.rank} of {stars.of} in your teacher’s classes</span>
+          <span className="flex flex-wrap gap-1">{stars.badges.map((b) => <span key={b.id} title={b.label} className="rounded-full bg-white/10 px-2 py-1 text-xs font-black">{b.icon} {b.label.split(" — ")[0]}</span>)}</span>
+        </div>
+      )}
       {d && <div className="mt-3"><ResultsBreakdown d={d} /></div>}
       {d && full && (
         <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">

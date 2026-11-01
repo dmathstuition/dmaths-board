@@ -51,6 +51,20 @@ export default function ResultsBreakdown({ d }: { d: LearnerDetail }) {
         </section>
       )}
 
+      {d.exams?.length > 0 && (
+        <section aria-label="Exams">
+          <h3 className="text-xs font-black uppercase tracking-wider text-[#1657C9]">Exams</h3>
+          <ul className="mt-2 grid gap-2">
+            {d.exams.map((e, i) => (
+              <li key={i} className="flex items-center gap-2 rounded-xl bg-white p-3 ring-1 ring-slate-200">
+                <span className="min-w-0 flex-1 text-sm font-bold">📝 {e.title}</span>
+                <span className="text-sm font-black">{e.submitted && e.score != null ? `${e.score} / ${e.total} (${Math.round((e.score / Math.max(1, e.total ?? 1)) * 100)}%)` : "Not handed in yet"}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {d.quizzes.map((q, qi) => (
         <section key={qi} aria-label={`Quiz: ${q.title}`}>
           <h3 className="text-xs font-black uppercase tracking-wider text-[#1657C9]">Live quiz · {q.title} <span className="text-ink/45">({q.items.filter((i) => i.correct).length} / {q.items.length})</span></h3>
@@ -68,7 +82,7 @@ export default function ResultsBreakdown({ d }: { d: LearnerDetail }) {
         </section>
       ))}
 
-      {!d.work.length && !d.quizzes.length && <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-ink/60">Nothing has been marked yet. Your results appear here once your tutor marks your work or runs a quiz.</p>}
+      {!d.work.length && !d.quizzes.length && !d.exams?.length && <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-ink/60">Nothing has been marked yet. Your results appear here once your tutor marks your work or runs a quiz.</p>}
     </div>
   );
 }

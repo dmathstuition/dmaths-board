@@ -18,6 +18,7 @@ import Replay from "@/components/live/board/Replay";
 import AnswerBoards from "@/components/live/board/AnswerBoards";
 import EquationEditor from "@/components/live/board/EquationEditor";
 import ExamMode from "@/components/live/board/ExamMode";
+import Leaderboard from "@/components/live/board/Leaderboard";
 import PulsePoll from "@/components/live/board/PulsePoll";
 import GroupBoards from "@/components/live/board/GroupBoards";
 import dynamic from "next/dynamic";
@@ -198,6 +199,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const [replay, setReplay] = useState(false);
   const [answersOpen, setAnswersOpen] = useState(false);
   const [examOpen, setExamOpen] = useState(false);
+  const [starsOpen, setStarsOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [labOpen, setLabOpen] = useState(false);
@@ -1414,6 +1416,9 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
               <button type="button" onClick={() => setExamOpen(true)} className={`${btn} ${examOpen ? on : idle}`} title="A timed test on every learner's phone, marked for you" aria-label="Exam mode">
                 <BoardIcon name="exam" />{full ? "" : "Exam"}
               </button>
+              <button type="button" onClick={() => setStarsOpen(true)} className={`${btn} ${starsOpen ? on : idle}`} title="Stars and badges across your classes" aria-label="Leaderboard">
+                <BoardIcon name="trophy" />{full ? "" : "Leaderboard"}
+              </button>
               <button type="button" onClick={() => setPollOpen(true)} className={`${btn} ${pollOpen ? on : idle}`} title="Ask a quick question — learners tap a choice" aria-label="Quick poll">
                 <BoardIcon name="poll" />{full ? "" : "Poll"}
               </button>
@@ -1540,6 +1545,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
           onOpen={applyLesson} onClose={() => setLessonsOpen(false)} notify={setNotice} />}
         {!readOnly && !lessonId && sessionId && <PulsePoll host={host} myId={myId} myName={myName} people={people} pollOpen={pollOpen} onPollOpen={() => setPollOpen(true)} onPollClose={() => setPollOpen(false)} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <GroupBoards host={host} myId={myId} myName={myName} people={people} open={groupsOpen} onOpen={() => setGroupsOpen(true)} onClose={() => setGroupsOpen(false)} onBring={addBoardPage} keep={keep} />}
+        {!readOnly && !lessonId && sessionId && <Leaderboard sessionId={sessionId} host={host} myName={myName} open={starsOpen} onClose={() => setStarsOpen(false)} />}
         {!readOnly && !lessonId && sessionId && <ExamMode sessionId={sessionId} host={host} open={examOpen} onOpen={() => setExamOpen(true)} onClose={() => setExamOpen(false)} />}
         {!readOnly && !lessonId && <AnswerBoards sessionId={sessionId} host={host} myId={myId} myName={myName} people={people} open={answersOpen} onOpen={() => setAnswersOpen(true)} onClose={() => setAnswersOpen(false)} keep={keep} />}
         <BoardWidgets w={widgets} host={host && !readOnly} onChange={updateWidgets} boxW={box.w} names={names}
@@ -1593,7 +1599,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   }
   const gamesLayer = !readOnly && (gamesUsed || !host) && !(lessonId && !host) && rootEl
     ? createPortal(
-        <GamesPanel host={host} open={gamesOpen} live={!lessonId} onOpen={() => setGamesOpen(true)} onClose={() => setGamesOpen(false)}
+        <GamesPanel host={host} sessionId={sessionId} open={gamesOpen} live={!lessonId} onOpen={() => setGamesOpen(true)} onClose={() => setGamesOpen(false)}
           onLaunchQuiz={host && !lessonId ? launchQuiz : undefined} keep={keep} />,
         full ? rootEl : document.body)
     : null;

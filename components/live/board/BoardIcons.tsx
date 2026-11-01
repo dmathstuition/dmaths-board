@@ -12,6 +12,7 @@ const P: Record<string, string> = {
   circle: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z",
   text: "M4 7V5h16v2M9 19h6M12 5v14",
   equation: "M18 5H6l6 7-6 7h12",
+  trophy: "M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0ZM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4",
   exam: "M9 3h6v3H9zM7 4.5H5v17h14v-17h-2M8.5 11h7M8.5 14.5h7M8.5 18h4",
   compass: "M12 3v3M12 6l-5 15M12 6l5 15M8.5 16h7",
   solid: "M12 3 4 7v10l8 4 8-4V7ZM4 7l8 4 8-4M12 11v10",
