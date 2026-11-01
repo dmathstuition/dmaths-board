@@ -10,10 +10,14 @@ import type { Difficulty, Rng } from "@/lib/games/generators";
 import type { ChoiceQ, NumericQ } from "@/lib/games/senior";
 import { gcd, poly, sup } from "@/lib/games/senior";
 
-export type MoreNumericSkill = "angles" | "area" | "ratio" | "averages" | "powers" | "functions";
-export type MoreChoiceSkill = "rounding" | "lines" | "probability" | "surds" | "circles" | "inequalities" | "integration";
-export const MORE_NUMERIC: readonly string[] = ["angles", "area", "ratio", "averages", "powers", "functions"];
-export const MORE_CHOICE: readonly string[] = ["rounding", "lines", "probability", "surds", "circles", "inequalities", "integration"];
+export type MoreNumericSkill = "angles" | "area" | "ratio" | "averages" | "powers" | "functions"
+  | "placeValue" | "money" | "hcfLcm" | "speed" | "interest" | "bases" | "sets" | "pythagoras" | "modular" | "vectors" | "counting" | "bearings";
+export type MoreChoiceSkill = "rounding" | "lines" | "probability" | "surds" | "circles" | "inequalities" | "integration"
+  | "time" | "fdp" | "negatives" | "matrices";
+export const MORE_NUMERIC: readonly string[] = ["angles", "area", "ratio", "averages", "powers", "functions",
+  "placeValue", "money", "hcfLcm", "speed", "interest", "bases", "sets", "pythagoras", "modular", "vectors", "counting", "bearings"];
+export const MORE_CHOICE: readonly string[] = ["rounding", "lines", "probability", "surds", "circles", "inequalities", "integration",
+  "time", "fdp", "negatives", "matrices"];
 
 const MINUS = "−";
 function int(rng: Rng, lo: number, hi: number): number {
@@ -169,7 +173,170 @@ export function moreNumeric(skill: MoreNumericSkill, d: Difficulty, rng: Rng = M
     case "averages": return averages(rng, d);
     case "powers": return powers(rng, d);
     case "functions": return functions(rng, d);
+    case "placeValue": return placeValue(rng, d);
+    case "money": return money(rng, d);
+    case "hcfLcm": return hcfLcm(rng, d);
+    case "speed": return speed(rng, d);
+    case "interest": return interest(rng, d);
+    case "bases": return bases(rng, d);
+    case "sets": return sets(rng, d);
+    case "pythagoras": return pythagoras(rng, d);
+    case "modular": return modular(rng, d);
+    case "vectors": return vectors(rng, d);
+    case "counting": return counting(rng, d);
+    case "bearings": return bearings(rng, d);
   }
+}
+
+// ── second batch: numeric ──────────────────────────────────────────────────
+const commas = (n: number) => n.toLocaleString("en-GB");
+const PLACE = ["ones", "tens", "hundreds", "thousands", "ten thousands", "hundred thousands", "millions"];
+function placeValue(rng: Rng, d: Difficulty): NumericQ {
+  const len = d === "easy" ? 4 : d === "medium" ? 5 : 7;
+  // Different digits, no leading zero, so "the digit 7" means one place.
+  const digits = shuffle(rng, [1, 2, 3, 4, 5, 6, 7, 8, 9, 0]).slice(0, len);
+  if (digits[0] === 0) [digits[0], digits[1]] = [digits[1], digits[0]];
+  const n = Number(digits.join(""));
+  if (d === "medium" && rng() < 0.5) {
+    const [th, h, o] = [int(rng, 1, 9), int(rng, 1, 9), int(rng, 1, 9)];
+    return { prompt: `${th} thousands, ${h} hundreds and ${o} ones`, answer: th * 1000 + h * 100 + o, ask: "as a number = ?" };
+  }
+  if (d === "hard" && rng() < 0.4) {
+    const t = pick(rng, [10, 100] as const);
+    return { prompt: `How many ${t === 10 ? "tens" : "hundreds"} are in ${commas(n)}?`, answer: Math.floor(n / t), ask: "(whole ones) = ?" };
+  }
+  const nonzero = digits.map((v, i) => ({ v, place: len - 1 - i })).filter((x) => x.v > 0);
+  const c = pick(rng, nonzero);
+  return { prompt: `The value of the digit ${c.v} in ${commas(n)}`, answer: c.v * 10 ** c.place, ask: `(it's in the ${PLACE[c.place]}) = ?` };
+}
+
+function money(rng: Rng, d: Difficulty): NumericQ {
+  if (d === "easy") {
+    const cost = 10 * int(rng, 3, 45), paid = pick(rng, [500, 1000].filter((x) => x > cost));
+    return { prompt: `A snack costs ₦${cost}. You pay ₦${paid}`, answer: paid - cost, ask: "change in ₦ = ?" };
+  }
+  if (d === "medium") {
+    const each = 10 * int(rng, 5, 40), n = int(rng, 2, 6), paid = Math.ceil((each * n + 1) / 1000) * 1000;
+    return rng() < 0.5
+      ? { prompt: `${n} books at ₦${each} each`, answer: each * n, ask: "total in ₦ = ?" }
+      : { prompt: `${n} books at ₦${each} each, paid with ₦${commas(paid)}`, answer: paid - each * n, ask: "change in ₦ = ?" };
+  }
+  const price = 100 * int(rng, 5, 60), off = 5 * int(rng, 1, 8);
+  return rng() < 0.5
+    ? { prompt: `A ₦${commas(price)} bag with ${off}% off`, answer: price - (price * off) / 100, ask: "sale price in ₦ = ?" }
+    : { prompt: `Bought for ₦${commas(price)}, sold at a ${off}% profit`, answer: price + (price * off) / 100, ask: "selling price in ₦ = ?" };
+}
+
+const lcm = (a: number, b: number) => (a / gcd(a, b)) * b;
+function hcfLcm(rng: Rng, d: Difficulty): NumericQ {
+  const coprime = (): [number, number] => { for (;;) { const a = int(rng, 1, 9), b = int(rng, 2, 9); if (a !== b && gcd(a, b) === 1) return [a, b]; } };
+  if (d === "easy") { const g = int(rng, 2, 9), [a, b] = coprime(); return { prompt: `HCF of ${g * a} and ${g * b}`, answer: g }; }
+  if (d === "medium") {
+    const a = int(rng, 3, 15), b = int(rng, 3, 15);
+    return rng() < 0.5 ? { prompt: `LCM of ${a} and ${b}`, answer: lcm(a, b) } : { prompt: `HCF of ${a * 4} and ${b * 4}`, answer: gcd(a * 4, b * 4) };
+  }
+  const [a, b, c] = [int(rng, 2, 12), int(rng, 2, 12), int(rng, 2, 10)];
+  return rng() < 0.5 ? { prompt: `LCM of ${a}, ${b} and ${c}`, answer: lcm(lcm(a, b), c) } : { prompt: `HCF of ${a * 6}, ${b * 6} and ${c * 6}`, answer: gcd(gcd(a * 6, b * 6), c * 6) };
+}
+
+function speed(rng: Rng, d: Difficulty): NumericQ {
+  if (d === "easy") { const t = int(rng, 1, 5), v = 5 * int(rng, 2, 20); return { prompt: `A car goes ${v * t} km in ${t} hour${t === 1 ? "" : "s"}`, answer: v, ask: "speed in km/h = ?" }; }
+  if (d === "medium") {
+    const t = int(rng, 2, 6), v = 5 * int(rng, 4, 24);
+    return rng() < 0.5 ? { prompt: `${v} km/h for ${t} hours`, answer: v * t, ask: "distance in km = ?" } : { prompt: `${v * t} km at ${v} km/h`, answer: t, ask: "time in hours = ?" };
+  }
+  if (rng() < 0.5) { const k = int(rng, 1, 7); return { prompt: `${18 * k} km/h`, answer: 5 * k, ask: "in metres per second = ?" }; }
+  const m = pick(rng, [15, 30, 45, 90] as const), v = 4 * int(rng, 5, 25);
+  return { prompt: `${v} km/h for ${m} minutes`, answer: (v * m) / 60, ask: "distance in km = ?" };
+}
+
+function interest(rng: Rng, d: Difficulty): NumericQ {
+  const P = 1000 * int(rng, 1, 20), R = int(rng, 2, 12), T = int(rng, 1, 5);
+  const I = (P * R * T) / 100;
+  if (d === "easy") return { prompt: `Simple interest on ₦${commas(P)} at ${R}% a year for ${T} year${T === 1 ? "" : "s"}`, answer: I, ask: "interest in ₦ = ?" };
+  if (d === "medium") return rng() < 0.5
+    ? { prompt: `₦${commas(P)} at ${R}% simple interest for ${T} year${T === 1 ? "" : "s"}`, answer: P + I, ask: "amount in ₦ = ?" }
+    : { prompt: `₦${commas(P)} earns ₦${commas(I)} simple interest in ${T} year${T === 1 ? "" : "s"}`, answer: R, ask: "rate in % = ?" };
+  const p = 100 * int(rng, 10, 90);
+  return { prompt: `₦${commas(p)} at 10% compound interest for 2 years`, answer: Math.round(p * 1.21), ask: "amount in ₦ = ?" };
+}
+
+function bases(rng: Rng, d: Difficulty): NumericQ {
+  if (d === "easy") { const n = int(rng, 2, 31); return { prompt: `${n.toString(2)} in base 2`, answer: n, ask: "in base 10 = ?" }; }
+  if (d === "medium") { const b = pick(rng, [3, 4, 5, 8] as const), n = int(rng, b * b, b ** 3 - 1); return { prompt: `${n.toString(b)} in base ${b}`, answer: n, ask: "in base 10 = ?" }; }
+  const b = pick(rng, [2, 5, 8] as const), n = int(rng, 9, b === 2 ? 63 : 200);
+  return { prompt: `${n} in base 10`, answer: Number(n.toString(b)), ask: `in base ${b} = ?` };
+}
+
+function sets(rng: Rng, d: Difficulty): NumericQ {
+  const both = int(rng, 1, 12), onlyA = int(rng, 1, 20), onlyB = int(rng, 1, 20), neither = int(rng, 0, 10);
+  const A = both + onlyA, B = both + onlyB, U = A + onlyB + neither;
+  if (d === "easy") return { prompt: `n(A) = ${A}, n(B) = ${B}, n(A ∩ B) = ${both}`, answer: A + onlyB, ask: "n(A ∪ B) = ?" };
+  if (d === "medium") return { prompt: `In a class of ${U}, ${A} play football, ${B} play basketball and ${both} play both`, answer: neither, ask: "how many play neither?" };
+  return { prompt: `In a class of ${U}, ${A} take Physics, ${B} take Chemistry and ${neither} take neither`, answer: both, ask: "how many take both?" };
+}
+
+const TRIPLES: [number, number, number][] = [[3, 4, 5], [5, 12, 13], [8, 15, 17], [7, 24, 25], [20, 21, 29], [9, 40, 41]];
+function pythagoras(rng: Rng, d: Difficulty): NumericQ {
+  const [a, b, c] = pick(rng, TRIPLES), k = d === "easy" ? int(rng, 1, 3) : int(rng, 1, 2);
+  const [A, B, C] = [a * k, b * k, c * k];
+  if (d === "easy") return { prompt: `Right-angled triangle: shorter sides ${A} cm and ${B} cm`, answer: C, ask: "hypotenuse in cm = ?" };
+  if (d === "medium") return { prompt: `Right-angled triangle: hypotenuse ${C} cm, one side ${A} cm`, answer: B, ask: "the other side in cm = ?" };
+  if (rng() < 0.5) {
+    const x = int(rng, -5, 5), y = int(rng, -5, 5);
+    return { prompt: `The distance from (${signed(x)}, ${signed(y)}) to (${signed(x + A)}, ${signed(y - B)})`, answer: C, ask: "= ?" };
+  }
+  return { prompt: `A ${C} m ladder leans on a wall, its foot ${A} m from the wall`, answer: B, ask: "how high up the wall (m)?" };
+}
+
+function modular(rng: Rng, d: Difficulty): NumericQ {
+  const m = int(rng, 3, 9);
+  if (d === "easy") { const a = int(rng, 10, 60); return { prompt: `${a} mod ${m}`, answer: a % m }; }
+  if (d === "medium") {
+    const a = int(rng, 10, 40), b = int(rng, 10, 40);
+    return rng() < 0.5 ? { prompt: `(${a} + ${b}) mod ${m}`, answer: (a + b) % m } : { prompt: `(${a} × ${b}) mod ${m}`, answer: (a * b) % m };
+  }
+  const p = pick(rng, [5, 7, 11] as const), a = int(rng, 2, p - 1), x = int(rng, 1, p - 1), c = (a * x) % p;
+  return { prompt: `${a}x ≡ ${c} (mod ${p})`, answer: x, ask: `x (from 0 to ${p - 1}) = ?` };
+}
+
+function vectors(rng: Rng, d: Difficulty): NumericQ {
+  const [a, b, c] = pick(rng, TRIPLES.slice(0, 4));
+  const sx = pick(rng, [1, -1]), sy = pick(rng, [1, -1]), [X, Y] = rng() < 0.5 ? [a * sx, b * sy] : [b * sx, a * sy];
+  const v = (x: number, y: number) => `(${signed(x)}, ${signed(y)})`;
+  if (d === "easy") return { prompt: `|${v(X, Y)}|`, answer: c, ask: "the magnitude = ?" };
+  const px = int(rng, -6, 6), py = int(rng, -6, 6);
+  if (d === "medium") return { prompt: `a = ${v(px, py)}, b = ${v(X - px, Y - py)}`, answer: c, ask: "|a + b| = ?" };
+  return { prompt: `a = ${v(px, py)}, b = ${v(2 * px - X, 2 * py - Y)}`, answer: c, ask: "|2a − b| = ?" };
+}
+
+const fact = (n: number): number => (n <= 1 ? 1 : n * fact(n - 1));
+const nCr = (n: number, r: number) => fact(n) / (fact(r) * fact(n - r));
+function counting(rng: Rng, d: Difficulty): NumericQ {
+  if (d === "easy") { const n = int(rng, 3, 6); return { prompt: `Ways to arrange ${n} different books in a row`, answer: fact(n), ask: "= ?" }; }
+  if (d === "medium") {
+    const n = int(rng, 5, 10);
+    return rng() < 0.5 ? { prompt: `Choose a captain and a vice-captain from ${n} players`, answer: n * (n - 1), ask: "how many ways?" }
+      : { prompt: `Choose 2 learners from ${n} to clean the board`, answer: nCr(n, 2), ask: "how many ways?" };
+  }
+  if (rng() < 0.5) { const n = int(rng, 6, 10), r = int(rng, 3, 4); return { prompt: `${n}C${r}`, answer: nCr(n, r), ask: `(choose ${r} from ${n}) = ?` }; }
+  const word = pick(rng, ["BOOK", "APPLE", "LEVEL", "BANANA", "LETTER", "COFFEE"] as const);
+  const counts = [...word].reduce<Record<string, number>>((o, ch) => ({ ...o, [ch]: (o[ch] ?? 0) + 1 }), {});
+  return { prompt: `Arrangements of the letters of ${word}`, answer: fact(word.length) / Object.values(counts).reduce((p, n) => p * fact(n), 1), ask: "= ?" };
+}
+
+const pad3 = (n: number) => String(n).padStart(3, "0");
+function bearings(rng: Rng, d: Difficulty): NumericQ {
+  if (d === "easy") {
+    const [name, deg] = pick(rng, [["east", 90], ["south", 180], ["west", 270], ["north-east", 45], ["south-east", 135], ["south-west", 225], ["north-west", 315]] as [string, number][]);
+    return { prompt: `The bearing of due ${name}`, answer: deg, ask: "in degrees = ?" };
+  }
+  const t = int(rng, 1, 35) * 10 + pick(rng, [0, 5]);
+  if (d === "medium") {
+    const turn = 5 * int(rng, 5, 30);
+    return { prompt: `Facing ${pad3(t)}°, turn ${turn}° clockwise`, answer: (t + turn) % 360, ask: "new bearing = ?" };
+  }
+  return { prompt: `The bearing of B from A is ${pad3(t)}°`, answer: (t + 180) % 360, ask: "bearing of A from B = ?" };
 }
 
 // ── choice skills ──────────────────────────────────────────────────────────
@@ -354,5 +521,91 @@ export function moreChoice(skill: MoreChoiceSkill, d: Difficulty, rng: Rng = Mat
     case "circles": return circles(rng, d);
     case "inequalities": return inequalities(rng, d);
     case "integration": return integration(rng, d);
+    case "time": return time(rng, d);
+    case "fdp": return fdp(rng, d);
+    case "negatives": return negatives(rng, d);
+    case "matrices": return matrices(rng, d);
   }
+}
+
+// ── second batch: choice ───────────────────────────────────────────────────
+const clock12 = (mins: number) => { const m = ((mins % 720) + 720) % 720, h = Math.floor(m / 60); return `${h === 0 ? 12 : h}:${String(m % 60).padStart(2, "0")}`; };
+const clock24 = (mins: number) => { const m = ((mins % 1440) + 1440) % 1440; return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+const hm = (mins: number) => `${Math.floor(mins / 60)} h ${mins % 60} min`;
+function time(rng: Rng, d: Difficulty): ChoiceQ {
+  if (d === "easy") {
+    const start = int(rng, 13, 140) * 5, add = 5 * int(rng, 3, 18), ans = clock12(start + add);
+    return { lead: `What time is it ${add} minutes after`, prompt: clock12(start),
+      options: four(rng, ans, [clock12(start - add), clock12(start + add + 60), clock12(start + add - 10)], () => clock12(start + 5 * int(rng, 1, 40))), answer: ans };
+  }
+  if (d === "medium") {
+    if (rng() < 0.5) {
+      const m = 12 * 60 + int(rng, 1, 143) * 5, ans = clock24(m);
+      return { lead: "Write in 24-hour time", prompt: `${clock12(m)} pm`, options: four(rng, ans, [clock24(m - 720), clock24(m + 60), `${clock12(m)}`.padStart(5, "0")], () => clock24(m + 5 * int(rng, -20, 20))), answer: ans };
+    }
+    const a = int(rng, 84, 180) * 5, len = 5 * int(rng, 7, 40), ans = hm(len);
+    return { lead: "How long is it", prompt: `from ${clock24(a)} to ${clock24(a + len)}`, options: four(rng, ans, [hm(len + 60), hm(Math.abs(len - 40) + 5), hm(len + 40)], () => hm(5 * int(rng, 7, 50))), answer: ans };
+  }
+  const dep = int(rng, 240, 287) * 5, len = 5 * int(rng, 18, 60), ans = clock24(dep + len);
+  return { lead: `A night bus leaves at ${clock24(dep)} and takes ${hm(len)}. It arrives at`, prompt: "?",
+    options: four(rng, ans, [clock24(dep + len - 60), clock24(dep + len + 40), clock24(dep + len + 720)], () => clock24(dep + 5 * int(rng, 10, 80))), answer: ans };
+}
+
+const FDP: [number, number][] = [[1, 2], [1, 4], [3, 4], [1, 5], [2, 5], [3, 5], [4, 5], [1, 10], [3, 10], [7, 10], [1, 20], [3, 20], [7, 20], [9, 20], [1, 8], [3, 8], [1, 25], [12, 25]];
+const dec = (n: number, dn: number) => String(n / dn);
+function fdp(rng: Rng, d: Difficulty): ChoiceQ {
+  const [n, dn] = pick(rng, d === "easy" ? FDP.slice(0, 10) : FDP);
+  const pc = `${(n * 100) / dn}%`, fr = frac(n, dn), dc = dec(n, dn);
+  const way = d === "easy" ? 0 : d === "medium" ? int(rng, 1, 2) : int(rng, 3, 4);
+  if (way === 0) return { lead: "As a percentage", prompt: fr, options: four(rng, pc, [`${n}${dn}%`, `${dn}%`, `${(n * 10) / dn}%`], () => `${5 * int(rng, 1, 19)}%`), answer: pc };
+  if (way === 1) return { lead: "As a fraction in its simplest form", prompt: dc, options: four(rng, fr, [`${(n * 100) / dn}/10`, frac(dn, n * 10), frac(n + 1, dn)], () => frac(int(rng, 1, 9), pick(rng, [4, 5, 8, 10, 20]))), answer: fr };
+  if (way === 2) return { lead: "As a decimal", prompt: fr, options: four(rng, dc, [`${n}.${dn}`, String((n / dn) * 10), String(n / dn / 10)], () => String(int(rng, 1, 99) / 100)), answer: dc };
+  if (way === 3) return { lead: "As a fraction in its simplest form", prompt: pc, options: four(rng, fr, [frac(n * 100 / dn, 10), `${n * 100 / dn}/1000`, frac(n + 1, dn)], () => frac(int(rng, 1, 19), 20)), answer: fr };
+  const r = pick(rng, [[1, 3], [2, 3], [1, 9], [4, 9], [1, 6], [5, 6]] as [number, number][]);
+  const rec: Record<string, string> = { "1/3": "0.3̇", "2/3": "0.6̇", "1/9": "0.1̇", "4/9": "0.4̇", "1/6": "0.16̇", "5/6": "0.83̇" };
+  const ans = frac(r[0], r[1]);
+  return { lead: "As a fraction", prompt: rec[ans], options: four(rng, ans, Object.keys(rec).filter((k) => k !== ans).slice(0, 3), () => frac(int(rng, 1, 8), 9)), answer: ans };
+}
+
+function negatives(rng: Rng, d: Difficulty): ChoiceQ {
+  const n = (x: number) => (x < 0 ? `(${signed(x)})` : String(x));
+  let prompt: string, v: number;
+  if (d === "easy") {
+    const a = int(rng, 1, 12), b = int(rng, 1, 15), c = int(rng, 1, 10);
+    [prompt, v] = rng() < 0.5 ? [`${signed(-a)} + ${b}`, b - a] : [`${b} − ${b + c}`, -c];
+  }
+  else if (d === "medium") {
+    const a = int(rng, 2, 12), b = int(rng, 2, 12);
+    [prompt, v] = pick(rng, [[`${signed(-a)} × ${n(-b)}`, a * b], [`${signed(-a)} − ${b}`, -a - b], [`${a} × ${n(-b)}`, -a * b], [`${signed(-a * b)} ÷ ${b}`, -a]] as [string, number][]);
+  } else {
+    const a = int(rng, 2, 4), b = int(rng, 2, 6), c = int(rng, 1, 9);
+    [prompt, v] = pick(rng, [[`(${signed(-a)})³`, -(a ** 3)], [`(${signed(-a)})²`, a * a], [`${signed(-b * a)} ÷ ${n(-a)} + ${n(-c)}`, b - c], [`${n(-a)} × ${n(-b)} − ${c * 3}`, a * b - c * 3]] as [string, number][]);
+  }
+  const ans = signed(v);
+  return { lead: "Work out", prompt, options: four(rng, ans, [signed(-v), signed(v + 2), signed(v - 1)], () => signed(int(rng, -30, 30))), answer: ans };
+}
+
+const mat = (m: number[]) => `[${signed(m[0])} ${signed(m[1])} ; ${signed(m[2])} ${signed(m[3])}]`;
+function matrices(rng: Rng, d: Difficulty): ChoiceQ {
+  const A = [0, 0, 0, 0].map(() => int(rng, -5, 9)), B = [0, 0, 0, 0].map(() => int(rng, -5, 9));
+  if (d === "easy") {
+    const ans = mat(A.map((x, i) => x + B[i]));
+    return { lead: "A + B, where", prompt: `A = ${mat(A)}, B = ${mat(B)}`, options: four(rng, ans, [mat(A.map((x, i) => x - B[i])), mat(A.map((x, i) => x * B[i])), mat(A.map((x, i) => x + B[3 - i]))], () => mat(A.map((x) => x + int(rng, -3, 3)))), answer: ans };
+  }
+  if (d === "medium") {
+    const det = A[0] * A[3] - A[1] * A[2], ans = signed(det);
+    return { lead: "The determinant of", prompt: mat(A), options: four(rng, ans, [signed(A[0] * A[3] + A[1] * A[2]), signed(-det), signed(A[0] * A[1] - A[2] * A[3])], () => signed(int(rng, -40, 60))), answer: ans };
+  }
+  const P = [A[0] * B[0] + A[1] * B[2], A[0] * B[1] + A[1] * B[3], A[2] * B[0] + A[3] * B[2], A[2] * B[1] + A[3] * B[3]];
+  const ans = mat(P);
+  return { lead: "AB, where", prompt: `A = ${mat(A)}, B = ${mat(B)}`, options: four(rng, ans, [mat(A.map((x, i) => x * B[i])), mat([B[0] * A[0] + B[1] * A[2], B[0] * A[1] + B[1] * A[3], B[2] * A[0] + B[3] * A[2], B[2] * A[1] + B[3] * A[3]]), mat(P.map((x) => x + 1))], () => mat(P.map((x) => x + int(rng, -4, 4)))), answer: ans };
+}
+
+// True or False: is this number prime?
+const isPrime = (n: number) => { if (n < 2) return false; for (let k = 2; k * k <= n; k++) if (n % k === 0) return false; return true; };
+const TRICKY = [51, 57, 87, 91, 119, 133, 143, 161, 169, 187, 1, 2, 27, 49, 77];
+export function primeStatement(d: Difficulty, rng: Rng = Math.random): { text: string; isTrue: boolean } {
+  const top = d === "easy" ? 30 : d === "medium" ? 100 : 200;
+  const n = d !== "easy" && rng() < 0.35 ? pick(rng, TRICKY.filter((x) => x <= top)) : int(rng, 1, top);
+  return { text: `${n} is a prime number`, isTrue: isPrime(n) };
 }

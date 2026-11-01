@@ -5,14 +5,14 @@ import {
   seniorQuestion, identityStatement, poolPairs,
   type SeniorNumericSkill, type ChoiceSkill, type MatchSkill,
 } from "@/lib/games/senior";
-import { moreNumeric, MORE_NUMERIC, type MoreNumericSkill, type MoreChoiceSkill } from "@/lib/games/moreMaths";
+import { moreNumeric, primeStatement, MORE_NUMERIC, type MoreNumericSkill, type MoreChoiceSkill } from "@/lib/games/moreMaths";
 import {
   spellingStatement, englishPairs, ENGLISH_MATCH,
   type EnglishChoiceSkill, type EnglishMatchSkill, type TileSkill,
 } from "@/lib/games/english";
 
 export type Difficulty = "easy" | "medium" | "hard";
-export type BasicSkill = "addition" | "subtraction" | "multiplication" | "division" | "missing" | "bodmas" | "mixed";
+export type BasicSkill = "addition" | "subtraction" | "multiplication" | "division" | "missing" | "bodmas" | "mixed" | "primes";
 export type Skill = BasicSkill | SeniorNumericSkill | ChoiceSkill | MatchSkill | "identity" | MoreNumericSkill | MoreChoiceSkill
   | EnglishChoiceSkill | EnglishMatchSkill | TileSkill;
 export type Rng = () => number;
@@ -138,6 +138,7 @@ export function withOptions(q: Question, rng: Rng = Math.random, count = 4): { q
 export function statement(d: Difficulty, rng: Rng = Math.random, skill: Skill = "mixed"): { text: string; isTrue: boolean } {
   if (skill === "identity") return identityStatement(d, rng);
   if (skill === "spelling") return spellingStatement(d, rng);
+  if (skill === "primes") return primeStatement(d, rng);
   const q = question(skill, d, rng);
   const isTrue = rng() < 0.5;
   if (isTrue) return { text: `${q.prompt} = ${q.answer}`, isTrue };

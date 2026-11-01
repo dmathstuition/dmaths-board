@@ -84,14 +84,18 @@ describe("more maths games", () => {
 
   it("every new game is in the catalog and plays", () => {
     const ids = ["rounding-rodeo", "square-sense", "power-pop", "area-architect", "angle-ace", "ratio-rumble", "average-arena", "probability-pick",
-      "function-machine", "line-lab", "inequality-ice", "circle-circuit", "surd-smash", "integration-island"];
+      "function-machine", "line-lab", "inequality-ice", "circle-circuit", "surd-smash", "integration-island",
+      "place-value-palace", "market-day", "tick-tock", "prime-time", "factor-frenzy", "fdp-flip", "below-zero", "speed-trap", "interest-investor",
+      "venn-victory", "pythagoras-pursuit", "base-jumper", "clock-arithmetic", "bearing-bound", "vector-velocity", "matrix-maze", "count-the-ways"];
     for (const id of ids) {
       const g = CLASS_GAMES.find((x) => x.id === id)!;
       expect(g, id).toBeTruthy();
       const rng = seeded(1);
       if (g.kind === "quiz") expect(Number.isInteger(question(g.skill, "hard", rng).answer)).toBe(true);
       if (g.kind === "balloon") expect(withOptions(question(g.skill, "medium", rng), rng).options).toHaveLength(4);
-      if (g.kind === "truefalse") {
+      if (g.kind === "truefalse" && g.skill === "primes") {
+        for (let i = 0; i < 50; i++) { const p = statement("hard", rng, "primes"), n = Number(p.text.split(" ")[0]); expect(p.isTrue).toBe(n > 1 && [...Array(n).keys()].slice(2).every((k) => n % k)); }
+      } else if (g.kind === "truefalse") {
         const s = statement("easy", rng, g.skill);
         const [l, r] = s.text.split(" = ");
         const [base, pow] = l.includes("√") ? [Math.sqrt(Number(l.slice(1))), 1] : [Number(l.slice(0, -1)), l.endsWith("²") ? 2 : 3];
@@ -99,5 +103,30 @@ describe("more maths games", () => {
       }
     }
     expect(new Set(CLASS_GAMES.map((g) => g.id)).size).toBe(CLASS_GAMES.length);
+  });
+
+  it("second batch: the answers are right", () => {
+    const rng = seeded(21);
+    for (let i = 0; i < 300; i++) {
+      const pv = moreNumeric("placeValue", "easy", rng), [digit] = nums(pv.prompt);
+      expect(String(pv.answer).startsWith(String(digit))).toBe(true);
+      const b = moreNumeric("bases", "medium", rng), base = Number(b.prompt.split("base ")[1]);
+      expect(parseInt(b.prompt.split(" ")[0], base)).toBe(b.answer);
+      const h = moreNumeric("bases", "hard", rng), hb = Number(h.ask!.match(/base (\d+)/)![1]);
+      expect(parseInt(String(h.answer), hb)).toBe(nums(h.prompt)[0]);
+      const p = moreNumeric("pythagoras", "medium", rng), [hyp, side] = nums(p.prompt);
+      expect(side ** 2 + p.answer ** 2).toBe(hyp ** 2);
+      const m = moreNumeric("modular", "hard", rng), [a, c, mod] = nums(m.prompt);
+      expect((a * m.answer) % mod).toBe(c);
+      const v = moreNumeric("vectors", "hard", rng), [ax, ay, bx, by] = nums(v.prompt);
+      expect(Math.hypot(2 * ax - bx, 2 * ay - by)).toBe(v.answer);
+      const st = moreNumeric("sets", "hard", rng), [U, A, B, neither] = nums(st.prompt);
+      expect(A + B - st.answer + neither).toBe(U);
+      const br = moreNumeric("bearings", "hard", rng);
+      expect((nums(br.prompt)[0] + 180) % 360).toBe(br.answer);
+      const t = moreChoice("matrices", "medium", rng), [w, x, y, z] = nums(t.prompt);
+      expect(Number(t.answer.replace("−", "-"))).toBe(w * z - x * y + 0); // + 0: no −0
+    }
+    expect(moreNumeric("counting", "hard", () => 0.99).answer).toBe(180); // COFFEE: 6! ÷ (2! 2!)
   });
 });
