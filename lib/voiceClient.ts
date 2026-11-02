@@ -1,3 +1,5 @@
+import { boostMic, playLoud, wakeAudio, type Player } from "@/lib/loudAudio";
+
 // BROWSER — one person's voice-and-camera connection for a class (see
 // lib/voice.ts and app/api/live-sessions/voice). It can send this device's
 // microphone and camera, and receive other people's. Every change to the
@@ -8,8 +10,8 @@
 export type Speaker = { id: string; name: string; s: string; t: string; v?: string; sc?: string; muted?: boolean };
 type Api = (op: string, extra?: Record<string, unknown>) => Promise<any>;
 type Pass = { pass: string; exp: number };
-type Sent = { stream: MediaStream; tx: RTCRtpTransceiver; track: string };
-type Got = { mid: string; kind: "audio" | "video"; audio?: HTMLAudioElement; stream?: MediaStream; rx?: RTCRtpReceiver };
+type Sent = { stream: MediaStream; tx: RTCRtpTransceiver; track: string; raw?: MediaStream; stop?: () => void };
+type Got = { mid: string; kind: "audio" | "video"; player?: Player; stream?: MediaStream; rx?: RTCRtpReceiver };
 
 // Small, light video: the board is the lesson; the face is a corner picture.
 // About 250 kbit/s at most ≈ 110 MB an hour for each person watching.
@@ -143,8 +145,13 @@ export class VoiceLink {
   speak(pass?: Pass): Promise<{ s: string; t: string }> {
     return this.run(async () => {
       if (!this.mic) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-        this.mic = await this.push("mic", stream, pass);
+        const raw = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+        const loud = boostMic(raw); // lifted and evened out, like Zoom (lib/loudAudio)
+        try {
+          const sent = await this.push("mic", loud.stream, pass);
+          this.mic = { ...sent, raw, stop: loud.stop };
+          await limit(sent.tx.sender, { maxBitrate: 64_000, priority: "high", networkPriority: "high" } as RTCRtpEncodingParameters);
+        } catch (e) { loud.stop(); throw e; }
       }
       return { s: this.session, t: this.mic.track };
     });
@@ -178,8 +185,13 @@ export class VoiceLink {
   stopShare(): Promise<void> { return this.run(() => this.unsend("scr")); }
   get screenStream() { return this.scr?.stream ?? null; }
 
-  mute(on: boolean) { this.mic?.stream.getAudioTracks().forEach((t) => { t.enabled = !on; }); }
-  get muted() { return !!this.mic && !this.mic.stream.getAudioTracks()[0]?.enabled; }
+  mute(on: boolean) { (this.mic?.raw ?? this.mic?.stream)?.getAudioTracks().forEach((t) => { t.enabled = !on; }); }
+  get muted() { return !!this.mic && !(this.mic.raw ?? this.mic.stream).getAudioTracks()[0]?.enabled; }
+
+  // How loud the class sound plays here: 1 normal, 2 loud, 3 extra loud.
+  private vol = 2;
+  get volume() { return this.vol; }
+  setVolume(v: number) { this.vol = v; for (const p of this.pulled.values()) p.player?.setVolume(v); }
   get speaking() { return !!this.mic; }
 
   private async unsend(which: "mic" | "cam" | "scr") {
@@ -187,6 +199,7 @@ export class VoiceLink {
     if (!m) return;
     this[which] = null;
     m.stream.getTracks().forEach((t) => t.stop());
+    m.stop?.(); // the microphone itself and its voice chain
     await this.closeMids([m.tx.mid ?? ""].filter(Boolean), [m.tx]);
     this.onChange();
   }
@@ -209,7 +222,7 @@ export class VoiceLink {
       }
       const gone = [...this.pulled.entries()].filter(([t]) => !want.has(t));
       if (gone.length) {
-        for (const [, p] of gone) { p.audio?.pause(); if (p.audio) p.audio.srcObject = null; }
+        for (const [, p] of gone) p.player?.stop();
         gone.forEach(([t]) => this.pulled.delete(t));
         const txs = this.pc?.getTransceivers().filter((x) => gone.some(([, p]) => p.mid === x.mid)) ?? [];
         await this.closeMids(gone.map(([, p]) => p.mid), txs);
@@ -232,11 +245,7 @@ export class VoiceLink {
         if (!tx || !kind) continue;
         const stream = new MediaStream([tx.receiver.track]);
         if (kind === "audio") {
-          const audio = new Audio();
-          audio.autoplay = true;
-          audio.srcObject = stream;
-          audio.play().catch(() => {});
-          this.pulled.set(t.t, { mid: t.mid, kind, audio, rx: tx.receiver });
+          this.pulled.set(t.t, { mid: t.mid, kind, player: playLoud(stream, this.vol), rx: tx.receiver });
         } else {
           this.pulled.set(t.t, { mid: t.mid, kind, stream });
         }
@@ -249,7 +258,7 @@ export class VoiceLink {
   videoFor(track: string | undefined) { return track ? this.pulled.get(track)?.stream ?? null : null; }
 
   // Phones only play sound after a tap: call this from the tap.
-  resume() { for (const p of this.pulled.values()) p.audio?.play().catch(() => {}); }
+  resume() { wakeAudio(); for (const p of this.pulled.values()) p.player?.resume(); }
   get listening() { return [...this.pulled.values()].filter((p) => p.kind === "audio").length; }
   // How loud someone is right now (0–1), from their microphone track: who's talking.
   level(track: string | undefined): number {
@@ -274,9 +283,9 @@ export class VoiceLink {
   }
 
   close() {
-    for (const m of [this.mic, this.cam, this.scr]) m?.stream.getTracks().forEach((t) => t.stop());
+    for (const m of [this.mic, this.cam, this.scr]) { m?.stream.getTracks().forEach((t) => t.stop()); m?.stop?.(); }
     this.mic = null; this.cam = null; this.scr = null;
-    for (const p of this.pulled.values()) { p.audio?.pause(); if (p.audio) p.audio.srcObject = null; }
+    for (const p of this.pulled.values()) p.player?.stop();
     this.pulled.clear();
     if (this.dropTimer) { clearTimeout(this.dropTimer); this.dropTimer = null; }
     const pc = this.pc;
@@ -302,6 +311,9 @@ async function limit(sender: RTCRtpSender, cap: RTCRtpEncodingParameters) {
     if (!p.encodings?.length) p.encodings = [{}];
     p.encodings[0].maxBitrate = cap.maxBitrate;
     if (cap.maxFramerate) p.encodings[0].maxFramerate = cap.maxFramerate;
+    // Voice first when the network is busy.
+    if ((cap as any).priority) (p.encodings[0] as any).priority = (cap as any).priority;
+    if ((cap as any).networkPriority) (p.encodings[0] as any).networkPriority = (cap as any).networkPriority;
     await sender.setParameters(p);
   } catch { /* fine without the limit */ }
 }

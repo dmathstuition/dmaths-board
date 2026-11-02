@@ -173,7 +173,8 @@ const showing = (p: Page, label: string) => p.evaluate((l) => {
   return !!v && v.videoWidth > 0 && !v.paused;
 }, label);
 
-test("the teacher's camera reaches a learner who turns video on; a learner speaking can show theirs", async ({ browser }) => {
+// Video is switched off for now (components/live/ClassVoice.tsx: VIDEO).
+test.skip("the teacher's camera reaches a learner who turns video on; a learner speaking can show theirs", async ({ browser }) => {
   test.setTimeout(240_000);
   const { teacher, learner, packets } = await openClass(browser);
 
@@ -215,31 +216,36 @@ test("the teacher's camera reaches a learner who turns video on; a learner speak
   await expect(learner.locator("video")).toHaveCount(0, { timeout: 15_000 });
 });
 
-test("video call: optional, gallery of everyone, mute all, screen share", async ({ browser }) => {
+test("class call (sound only): optional, everyone can talk, mute all, loud volume", async ({ browser }) => {
   test.setTimeout(240_000);
-  const { teacher, learner } = await openClass(browser);
+  const { teacher, learner, packets } = await openClass(browser);
 
-  // The teacher starts a video call; the learner chooses to join.
-  await teacher.getByRole("button", { name: /Video call/ }).first().click();
-  const tCall = teacher.getByRole("region", { name: "Video call" });
+  // No video anywhere while it's switched off.
+  await expect(teacher.getByRole("button", { name: /camera/i })).toHaveCount(0);
+
+  // The teacher starts a class call; the learner chooses to join.
+  await teacher.getByRole("button", { name: /Class call/ }).first().click();
+  const tCall = teacher.getByRole("region", { name: "Class call" });
   await expect(tCall).toBeVisible({ timeout: 20_000 });
-  await expect(learner.getByRole("region", { name: "Video call" })).toHaveCount(0); // nobody is pulled in
-  await learner.getByRole("button", { name: "Join the video call" }).click();
-  const lCall = learner.getByRole("region", { name: "Video call" });
+  await expect(tCall.getByRole("button", { name: /Start video|Share screen/ })).toHaveCount(0);
+  await expect(learner.getByRole("region", { name: "Class call" })).toHaveCount(0); // nobody is pulled in
+  await learner.getByRole("button", { name: "Join the call" }).click();
+  const lCall = learner.getByRole("region", { name: "Class call" });
   await expect(lCall).toBeVisible();
   await expect(lCall.getByLabel(/^Mr B/)).toBeVisible({ timeout: 20_000 });
-  // They join muted; the teacher sees them.
   await expect(tCall.getByLabel("Emmanuel, muted")).toBeVisible({ timeout: 20_000 });
+  await flowing(async () => (await packets("learner")).out > 20); // the teacher's (boosted) voice reaches the learner
 
-  // The learner unmutes and starts their video; the teacher sees and hears them.
+  // The learner unmutes: the teacher hears them.
   await lCall.getByRole("button", { name: "Unmute my microphone" }).click();
   await expect(tCall.getByLabel(/^Emmanuel(, talking)?$/)).toBeVisible({ timeout: 20_000 });
-  await lCall.getByRole("button", { name: "Turn my camera on" }).click();
-  await flowing(() => showing(teacher, "Emmanuel"));
-  await flowing(() => showing(learner, "Emmanuel")); // their own picture
-  await teacher.getByRole("button", { name: "Turn my camera on" }).first().click();
-  await flowing(() => showing(learner, "Mr B"));
-  await tCall.screenshot({ path: "test-results/call-gallery.png" });
+  await flowing(async () => (await packets("learner")).in > 20);
+
+  // Volume: Loud by default, louder on a tap.
+  await expect(lCall.getByRole("button", { name: /^Volume: Loud/ })).toBeVisible();
+  await lCall.getByRole("button", { name: /^Volume: Loud/ }).click();
+  await expect(lCall.getByRole("button", { name: /^Volume: Extra loud/ })).toBeVisible();
+  await tCall.screenshot({ path: "test-results/call-audio.png" });
 
   // Mute everyone, and stop learners unmuting themselves.
   await tCall.getByRole("button", { name: /Mute everyone/ }).click();
@@ -249,17 +255,12 @@ test("video call: optional, gallery of everyone, mute all, screen share", async 
   await lCall.getByRole("button", { name: "Unmute my microphone" }).click();
   await expect(lCall.getByText(/turned off unmuting/)).toBeVisible();
 
-  // The teacher shares their screen: the learner sees it big.
-  await tCall.getByRole("button", { name: "Share my screen" }).click();
-  await flowing(() => showing(learner, "Mr B's screen"));
-  await learner.screenshot({ path: "test-results/call-screen-share.png" });
-
   // Back to the board and into the call again; then the teacher ends it.
   await lCall.getByRole("button", { name: "Back to the board" }).click();
   await expect(lCall).toBeHidden();
-  await learner.getByRole("button", { name: /Open the video call/ }).first().click();
+  await learner.getByRole("button", { name: /Open the class call/ }).first().click();
   await expect(lCall).toBeVisible();
   await tCall.getByRole("button", { name: "End call" }).click();
   await expect(lCall).toBeHidden({ timeout: 20_000 });
-  await expect(learner.getByRole("button", { name: "Join the video call" })).toHaveCount(0);
+  await expect(learner.getByRole("button", { name: /Join the call/ })).toHaveCount(0);
 });

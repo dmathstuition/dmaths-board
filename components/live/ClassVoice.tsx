@@ -3,6 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useLive } from "@/components/live/LiveChannel";
 import { VoiceLink, friendlyMediaError, voiceApi, type Speaker } from "@/lib/voiceClient";
 import SpeakerVideo from "@/components/live/SpeakerVideo";
+import { VOLUMES, wakeAudio } from "@/lib/loudAudio";
+
+// Video (cameras, screen sharing, video tiles) is switched off for now: the
+// class has sound only. Set this to true to bring video back.
+export const VIDEO = false;
 import CallView, { type Tile } from "@/components/live/CallView";
 import { nextActive, onScreen, pageCount, perPage, type CallView as View } from "@/lib/callLayout";
 
@@ -94,6 +99,7 @@ function useCallScreen(get: () => VoiceLink, inCall: boolean, members: Member[],
   const corner = view === "board" ? (people.find((p) => p.id === active.id && p.hasVideo && !p.me) ?? people.find((p) => p.host && p.hasVideo && !p.me) ?? null) : null;
   const wanted = useMemo(() => {
     const set = new Set<string>();
+    if (!VIDEO) return set;
     for (const p of [shown.big, ...shown.tiles, corner]) if (p?.sp?.v && !p.me) set.add(p.sp.v);
     if (screen?.track && view === "speaker") set.add(screen.track);
     return set;
@@ -110,9 +116,9 @@ function useCallScreen(get: () => VoiceLink, inCall: boolean, members: Member[],
       const c = corner ? tileOf(corner) : null;
       return (
         <>
-          <SpeakerVideo stream={c?.stream ?? null} label={c?.name ?? ""} />
+          {VIDEO && <SpeakerVideo stream={c?.stream ?? null} label={c?.name ?? ""} />}
           <button type="button" onClick={() => setView("gallery")} className="absolute left-2 top-2 z-20 flex items-center gap-1.5 rounded-full bg-[#0B1220]/85 px-3 py-2 text-xs font-black text-white shadow-lg">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden />Open the video call · {members.length}
+            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden />Open the {VIDEO ? "video" : "class"} call · {members.length}
           </button>
         </>
       );
@@ -262,8 +268,8 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
           <button type="button" onClick={start} disabled={busy} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line hover:ring-[#0E6E72]"}`} title="Talk to the class from the board">
             <span aria-hidden>🎙</span>{busy ? "Starting…" : full ? "" : "Start voice"}
           </button>
-          <button type="button" onClick={startCall} disabled={busy} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line hover:ring-[#0E6E72]"}`} title="A video call with the class — everyone can switch on their camera and microphone">
-            <span aria-hidden>📹</span>{full ? "" : "Video call"}
+          <button type="button" onClick={startCall} disabled={busy} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line hover:ring-[#0E6E72]"}`} title={VIDEO ? "A video call with the class — everyone can switch on their camera and microphone" : "A call with the class — everyone can switch on their microphone and talk"}>
+            <span aria-hidden>{VIDEO ? "📹" : "📞"}</span>{full ? "" : VIDEO ? "Video call" : "Class call"}
           </button>
         </>
       ) : (
@@ -271,21 +277,22 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
           <button type="button" onClick={mute} aria-pressed={get().muted} className={`${btnBase} ${get().muted ? "bg-amber-400 text-ink" : "bg-red-500 text-white"}`} title={get().muted ? "Unmute" : "Mute"} aria-label={get().muted ? "Unmute my microphone" : "Mute my microphone"}>
             {get().muted ? <><span aria-hidden>🔇</span>{full ? "" : "Muted"}</> : <><span aria-hidden className="h-2 w-2 animate-pulse rounded-full bg-white" />{full ? "" : "On air"}</>}
           </button>
-          <button type="button" onClick={camera} aria-pressed={!!mine.v} className={`${btnBase} ${mine.v ? "bg-[#0E6E72] text-white" : full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line"}`} aria-label={mine.v ? "Turn my camera off" : "Turn my camera on"}>
+          {VIDEO && <button type="button" onClick={camera} aria-pressed={!!mine.v} className={`${btnBase} ${mine.v ? "bg-[#0E6E72] text-white" : full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line"}`} aria-label={mine.v ? "Turn my camera off" : "Turn my camera on"}>
             <span aria-hidden>📷</span>{full ? "" : mine.v ? "Camera on" : "Camera"}
-          </button>
+          </button>}
           {call ? (
             <button type="button" onClick={() => cs.setView(cs.view === "board" ? "gallery" : "board")} className={`${btnBase} bg-emerald-600 text-white`} aria-label={cs.view === "board" ? "Open the video call" : "Back to the board"}>
-              <span aria-hidden>📹</span>{full ? "" : cs.view === "board" ? `Call (${members.length})` : "Board"}
+              <span aria-hidden>{VIDEO ? "📹" : "📞"}</span>{full ? "" : cs.view === "board" ? `Call (${members.length})` : "Board"}
             </button>
           ) : (
-            <button type="button" onClick={startCall} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line"}`} aria-label="Start a video call">
-              <span aria-hidden>📹</span>{full ? "" : "Video call"}
+            <button type="button" onClick={startCall} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line"}`} aria-label={VIDEO ? "Start a video call" : "Start a class call"}>
+              <span aria-hidden>{VIDEO ? "📹" : "📞"}</span>{full ? "" : VIDEO ? "Video call" : "Class call"}
             </button>
           )}
           <button type="button" onClick={stop} disabled={busy} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line"}`} aria-label="Stop voice">
             <span aria-hidden>⏹</span>{full ? "" : "Stop voice"}
           </button>
+          {(student || Object.keys(parts).length > 0) && <VolumeButton link={get} dark={full} />}
         </>
       )}
       {!call && (allow ? (
@@ -303,8 +310,9 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
   const bar = mine && call ? (
     <>
       <button type="button" onClick={mute} className={barBtn(!get().muted)} aria-label={get().muted ? "Unmute my microphone" : "Mute my microphone"}>{get().muted ? "🔇 Unmute" : "🎙 Mute"}</button>
-      <button type="button" onClick={camera} className={barBtn(!!mine.v)} aria-label={mine.v ? "Turn my camera off" : "Turn my camera on"}>📷 {mine.v ? "Stop video" : "Start video"}</button>
-      <button type="button" onClick={share} className={barBtn(!!mine.sc)} aria-label={mine.sc ? "Stop sharing my screen" : "Share my screen"}>🖥 {mine.sc ? "Stop sharing" : "Share screen"}</button>
+      {VIDEO && <button type="button" onClick={camera} className={barBtn(!!mine.v)} aria-label={mine.v ? "Turn my camera off" : "Turn my camera on"}>📷 {mine.v ? "Stop video" : "Start video"}</button>}
+      {VIDEO && <button type="button" onClick={share} className={barBtn(!!mine.sc)} aria-label={mine.sc ? "Stop sharing my screen" : "Share my screen"}>🖥 {mine.sc ? "Stop sharing" : "Share screen"}</button>}
+      <VolumeButton link={get} dark />
       <button type="button" onClick={muteAll} className={barBtn(false)}>🔇 Mute everyone</button>
       <label className={`${barBtn(call.open)} cursor-pointer`}>
         <input type="checkbox" checked={call.open} onChange={(e) => setOpen(e.target.checked)} className="h-4 w-4 accent-emerald-500" /> Learners can unmute
@@ -316,8 +324,9 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
   // Outside a call: the learner who is speaking if their camera is on, otherwise my own camera.
   const studentVideo = student?.v ? get().videoFor(student.v) : null;
   const overlay = () => call ? cs.render(bar)
-    : studentVideo ? <SpeakerVideo stream={studentVideo} label={student!.name} />
-      : <SpeakerVideo stream={mine?.v ? get().cameraStream : null} label="You" mirror />;
+    : !VIDEO ? null
+      : studentVideo ? <SpeakerVideo stream={studentVideo} label={student!.name} />
+        : <SpeakerVideo stream={mine?.v ? get().cameraStream : null} label="You" mirror />;
   return { available, controls, overlay };
 }
 
@@ -414,7 +423,7 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lost]);
 
-  function listen() { setErr(""); setListening(true); get().resume(); }
+  function listen() { setErr(""); wakeAudio(); setListening(true); get().resume(); }
   async function talk() {
     if (!allow) return;
     setBusy(true); setErr("");
@@ -425,10 +434,10 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
   async function join() {
     if (!call) return;
     setBusy(true); setErr("");
-    setListening(true); get().resume(); setJoined(true); cs.setView("gallery");
+    wakeAudio(); setListening(true); get().resume(); setJoined(true); cs.setView("gallery");
     // Join with the microphone on but muted (like a meeting); without one, just watch and listen.
     try { const r = await get().speak({ pass: call.pass, exp: call.exp }); get().mute(true); const next = { ...r, muted: true }; setTalking(next); tell.current(next); }
-    catch (e) { setErr(`${mediaError(e, "microphone")} You can still watch and listen.`); }
+    catch (e) { setErr(`${mediaError(e, "microphone")} You can still listen.`); }
     finally { setBusy(false); }
   }
   async function leave() {
@@ -469,13 +478,13 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
   const controls = (full: boolean) => (!teacherOn && !allow) ? null : (
     <span className="inline-flex flex-wrap items-center gap-1">
       {call && !joined && (
-        <button type="button" onClick={join} disabled={busy} className={`${btnBase} animate-pulse bg-emerald-600 text-white`} aria-label="Join the video call">
-          <span aria-hidden>📹</span>{busy ? "Joining…" : "Join video call"}
+        <button type="button" onClick={join} disabled={busy} className={`${btnBase} animate-pulse bg-emerald-600 text-white`} aria-label={VIDEO ? "Join the video call" : "Join the call"}>
+          <span aria-hidden>{VIDEO ? "📹" : "📞"}</span>{busy ? "Joining…" : VIDEO ? "Join video call" : "Join the call"}
         </button>
       )}
       {inCall && (
         <button type="button" onClick={() => cs.setView(cs.view === "board" ? "gallery" : "board")} className={`${btnBase} bg-emerald-600 text-white`} aria-label={cs.view === "board" ? "Open the video call" : "Back to the board"}>
-          <span aria-hidden>📹</span>{full ? "" : cs.view === "board" ? "Video call" : "Board"}
+          <span aria-hidden>{VIDEO ? "📹" : "📞"}</span>{full ? "" : cs.view === "board" ? (VIDEO ? "Video call" : "Class call") : "Board"}
         </button>
       )}
       {teacherOn && !listening && !call && (
@@ -493,13 +502,14 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
           <span aria-hidden>🔊</span>{full ? "" : "Listening"}
         </span>
       )}
-      {teacherOn && listening && hasVideo && !inCall && (
+      {VIDEO && teacherOn && listening && hasVideo && !inCall && (
         <button type="button" onClick={() => setWatch((w) => !w)} aria-pressed={watch} className={`${btnBase} ${watch ? "bg-[#0E6E72] text-white" : full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line"}`}
           aria-label={watch ? "Turn video off" : "Show the video"} title="Video uses more data than sound">
           <span aria-hidden>📺</span>{full ? "" : watch ? "Video on" : "Show video"}
         </button>
       )}
-      {talking && !inCall && (
+      {teacherOn && listening && <VolumeButton link={get} dark={full} />}
+      {VIDEO && talking && !inCall && (
         <button type="button" onClick={myCamera} aria-pressed={!!talking.v} className={`${btnBase} ${talking.v ? "bg-[#0E6E72] text-white" : "bg-white text-ink ring-1 ring-line"}`} aria-label={talking.v ? "Turn my camera off" : "Turn my camera on"}>
           <span aria-hidden>📷</span>{full ? "" : talking.v ? "Camera on" : "Camera"}
         </button>
@@ -520,7 +530,8 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
   const bar = inCall ? (
     <>
       <button type="button" onClick={toggleMute} disabled={!talking} className={barBtn(!!talking && !talking.muted)} aria-label={!talking || talking.muted ? "Unmute my microphone" : "Mute my microphone"}>{!talking || talking.muted ? "🔇 Unmute" : "🎙 Mute"}</button>
-      <button type="button" onClick={myCamera} disabled={!talking} className={barBtn(!!talking?.v)} aria-label={talking?.v ? "Turn my camera off" : "Turn my camera on"}>📷 {talking?.v ? "Stop video" : "Start video"}</button>
+      {VIDEO && <button type="button" onClick={myCamera} disabled={!talking} className={barBtn(!!talking?.v)} aria-label={talking?.v ? "Turn my camera off" : "Turn my camera on"}>📷 {talking?.v ? "Stop video" : "Start video"}</button>}
+      <VolumeButton link={get} dark />
       <button type="button" onClick={leave} className={barBtn(false, true)}>Leave call</button>
       {call && !call.open && <span className="text-xs font-bold text-white/60">Your teacher controls unmuting</span>}
       {err && <span role="alert" className="w-full text-center text-xs font-bold text-red-300">{err}</span>}
@@ -531,8 +542,25 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
   const shown = [...speakers].reverse().find((sp) => sp.v && sp.s !== get().sessionId);
   const theirs = watch && shown ? get().videoFor(shown.v) : null;
   const overlay = () => inCall ? cs.render(bar)
-    : talking?.v ? <SpeakerVideo stream={get().cameraStream} label="You" mirror />
-      : <SpeakerVideo stream={theirs} label={shown?.name || "Teacher"} />;
+    : !VIDEO ? null
+      : talking?.v ? <SpeakerVideo stream={get().cameraStream} label="You" mirror />
+        : <SpeakerVideo stream={theirs} label={shown?.name || "Teacher"} />;
   return { controls, overlay, teacherOn, listening };
 }
 
+
+// How loud the class sound plays on this device: Normal, Loud (the default) or
+// Extra loud — past what a web page's own volume allows (lib/loudAudio).
+function VolumeButton({ link, dark }: { link: () => VoiceLink; dark?: boolean }) {
+  const [v, setV] = useState(() => { try { return Number(localStorage.getItem("board-volume")) || 2; } catch { return 2; } });
+  useEffect(() => { link().setVolume(v); }, [v, link]);
+  const next = VOLUMES[(VOLUMES.findIndex((x) => x.v === v) + 1) % VOLUMES.length];
+  const now = VOLUMES.find((x) => x.v === v) ?? VOLUMES[1];
+  return (
+    <button type="button" onClick={() => { wakeAudio(); setV(next.v); try { localStorage.setItem("board-volume", String(next.v)); } catch { /* storage blocked */ } }}
+      className={`${btnBase} ${dark ? "bg-white/10 text-white ring-1 ring-white/20 hover:bg-white/20" : "bg-white text-ink ring-1 ring-line hover:ring-[#0E6E72]"}`}
+      aria-label={`Volume: ${now.label}. Tap for ${next.label}`} title={`Tap for ${next.label}`}>
+      <span aria-hidden>{v >= 3 ? "📢" : v >= 2 ? "🔊" : "🔉"}</span>{now.label}
+    </button>
+  );
+}
