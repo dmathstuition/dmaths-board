@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 // A tiny dependency-free celebration burst. Renders a handful of brand-coloured
 // pieces that fall and fade, then unmounts itself. Skipped entirely under
 // prefers-reduced-motion, so it can be fired anywhere without an a11y worry.
-const COLORS = ["#F5951E", "#1657C9", "#059669", "#F9B24E", "#7BA3CA", "#C56A12"];
+const COLORS = ["#F5951E", "#0E6E72", "#059669", "#F9B24E", "#7BA3CA", "#C56A12"];
 
 export default function Confetti({ fire, pieces = 28 }: { fire: boolean; pieces?: number }) {
   const [show, setShow] = useState(false);

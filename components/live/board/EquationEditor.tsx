@@ -37,18 +37,18 @@ export default function EquationEditor({ value, colour, dark, changing, style, o
       <input id="eq-input" ref={input} value={value} maxLength={MATH_MAX} autoComplete="off" spellCheck={false}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onDone(); } if (e.key === "Escape") onCancel(); }}
-        className="mt-1 w-full rounded-lg bg-slate-50 px-3 py-2 font-mono text-base ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1657C9]" />
+        className="mt-1 w-full rounded-lg bg-slate-50 px-3 py-2 font-mono text-base ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0E6E72]" />
       <div className={`mt-2 flex min-h-[70px] items-center justify-center overflow-auto rounded-lg ring-1 ring-slate-200 ${dark ? "bg-[#1F2937]" : "bg-white"}`}>
         <canvas ref={canvas} role="img" aria-label={value.trim() ? `Preview of ${value}` : "Preview"} />
       </div>
       <div className="mt-2 flex flex-wrap gap-1" role="toolbar" aria-label="Insert">
         {EXAMPLES.map(([t, label]) => (
           <button key={t} type="button" onPointerDown={(e) => e.preventDefault()} onClick={() => insert(t)} title={label} aria-label={`Insert ${label}`}
-            className="min-h-[32px] rounded-md bg-slate-100 px-2 font-mono text-xs font-bold text-ink/80 hover:bg-[#EEF6FF]">{t}</button>
+            className="min-h-[32px] rounded-md bg-slate-100 px-2 font-mono text-xs font-bold text-ink/80 hover:bg-[#E2F3F2]">{t}</button>
         ))}
       </div>
       <div className="mt-2 flex gap-2">
-        <button type="button" onClick={onDone} className="min-h-[40px] rounded-xl bg-[#1657C9] px-4 text-sm font-black text-white">{changing ? (value.trim() ? "Update" : "Remove it") : "Put on the board"}</button>
+        <button type="button" onClick={onDone} className="min-h-[40px] rounded-xl bg-[#0E6E72] px-4 text-sm font-black text-white">{changing ? (value.trim() ? "Update" : "Remove it") : "Put on the board"}</button>
         <button type="button" onClick={onCancel} className="min-h-[40px] rounded-xl bg-ink/5 px-4 text-sm font-black text-ink/70">Cancel</button>
       </div>
     </div>

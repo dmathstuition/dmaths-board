@@ -14,7 +14,7 @@ export default function ActivityDialog({ kind, by, idp, onDone, onClose }: {
   const items = kind === "sorting"
     ? buildSorting({ title, groups: groups.map((g) => ({ name: g.name, items: parseLines(g.items) })) }, { by, idp })
     : buildMatching({ title, pairs: pairs.split("\n").map((l) => { const [left, ...rest] = l.split("="); return { left: left ?? "", right: rest.join("=") }; }) }, { by, idp });
-  const field = "w-full rounded-lg bg-slate-50 px-2.5 py-2 text-sm font-semibold text-ink ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1657C9]";
+  const field = "w-full rounded-lg bg-slate-50 px-2.5 py-2 text-sm font-semibold text-ink ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0E6E72]";
   return (
     <div role="dialog" aria-modal="true" aria-label={kind === "sorting" ? "Make a sorting activity" : "Make a matching activity"} className="fixed inset-0 z-[97] flex items-center justify-center bg-black/60 p-4">
       <div className="max-h-full w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-4 text-ink shadow-2xl">
@@ -51,7 +51,7 @@ export default function ActivityDialog({ kind, by, idp, onDone, onClose }: {
         </p>
         <div className="mt-3 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-sm font-black text-ink/70 hover:bg-ink/5">Cancel</button>
-          <button type="button" disabled={!items.length} onClick={() => onDone(items)} className="rounded-xl bg-[#1657C9] px-4 py-2 text-sm font-black text-white disabled:opacity-40">Put it on the board</button>
+          <button type="button" disabled={!items.length} onClick={() => onDone(items)} className="rounded-xl bg-[#0E6E72] px-4 py-2 text-sm font-black text-white disabled:opacity-40">Put it on the board</button>
         </div>
       </div>
     </div>

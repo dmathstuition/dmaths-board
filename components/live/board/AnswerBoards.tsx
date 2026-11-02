@@ -22,7 +22,7 @@ import { useKeptRef, useKeptState, type KeepStore } from "@/lib/keptState";
 // whole answer — drawing and typed text — sent as it changes and again every 8s).
 
 type Person = { id: string; name: string; online?: boolean };
-const PEN_COLOURS = ["#0B1220", "#1657C9", "#DC2626", "#16A34A"];
+const PEN_COLOURS = ["#0B1220", "#0E6E72", "#DC2626", "#16A34A"];
 
 export default function AnswerBoards({ sessionId, host, myId, myName, people, open, onOpen, onClose, keep }: {
   sessionId?: string; // marks are kept for the class results (supabase/migration-class-marks.sql)
@@ -210,7 +210,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     if (!open && !round) return null;
     if (!open && round) { // panel hidden while the round runs: a button to come back
       return (
-        <button type="button" onClick={onOpen} className="fixed bottom-4 right-4 z-[95] flex items-center gap-2 rounded-full bg-[#1657C9] px-4 py-3 text-sm font-black text-white shadow-2xl">
+        <button type="button" onClick={onOpen} className="fixed bottom-4 right-4 z-[95] flex items-center gap-2 rounded-full bg-[#0E6E72] px-4 py-3 text-sm font-black text-white shadow-2xl">
           <BoardIcon name="answers" /> Answers ({answers.size})
         </button>
       );
@@ -224,18 +224,18 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
       <div role="dialog" aria-modal="true" aria-label="Answer boards" className="fixed inset-0 z-[96] flex items-center justify-center bg-black/60 p-3">
         <div className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white text-ink shadow-2xl">
           <div className="flex flex-wrap items-center gap-2 border-b border-line p-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#EEF6FF] text-[#1657C9]"><BoardIcon name="answers" /></span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#E2F3F2] text-[#0E6E72]"><BoardIcon name="answers" /></span>
             <div className="min-w-0 flex-1">
               <p className="text-base font-black">Answer boards</p>
               {round && <p className="truncate text-xs font-bold text-ink/55">{round.q || "No question — learners answer what you ask out loud"} · {answered} of {online.length || list.length} answered · {handedIn} handed in · {Object.keys(round.marks).length} marked (out of {round.max})</p>}
             </div>
             {round && (
               <label className="flex items-center gap-2 text-xs font-black text-ink/70">
-                <input type="checkbox" checked={anon} onChange={(e) => setAnon(e.target.checked)} className="h-4 w-4 accent-[#1657C9]" /> Hide names
+                <input type="checkbox" checked={anon} onChange={(e) => setAnon(e.target.checked)} className="h-4 w-4 accent-[#0E6E72]" /> Hide names
               </label>
             )}
             {round?.endsAt && !round.closed && (
-              <span role="timer" className={`rounded-xl px-3 py-2 text-xs font-black ${timeUp ? "bg-red-100 text-red-700" : "bg-[#EEF6FF] text-[#1657C9]"}`}>{timeUp ? "⏱ Time’s up" : `⏱ ${timeLeft(round.endsAt, now)} left`}</span>
+              <span role="timer" className={`rounded-xl px-3 py-2 text-xs font-black ${timeUp ? "bg-red-100 text-red-700" : "bg-[#E2F3F2] text-[#0E6E72]"}`}>{timeUp ? "⏱ Time’s up" : `⏱ ${timeLeft(round.endsAt, now)} left`}</span>
             )}
             {round && (round.closed || timeUp
               ? <button type="button" onClick={() => setClosed(false)} className="rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800">Reopen answers</button>
@@ -253,13 +253,13 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                 <div className="flex flex-wrap gap-2">
                   {([["all", "Same for everyone"], ["each", "Different for each learner"]] as const).map(([m, label]) => (
                     <button key={m} type="button" onClick={() => setSetFor(m)} aria-pressed={setFor === m}
-                      className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 transition ${setFor === m ? "bg-[#1657C9] text-white ring-[#1657C9]" : "bg-white text-ink/70 ring-slate-200 hover:ring-[#BFD7FF]"}`}>{label}</button>
+                      className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 transition ${setFor === m ? "bg-[#0E6E72] text-white ring-[#0E6E72]" : "bg-white text-ink/70 ring-slate-200 hover:ring-[#A9D6D3]"}`}>{label}</button>
                   ))}
                 </div>
               </fieldset>
               <label className="text-xs font-black text-ink/60">{setFor === "each" ? "Question for anyone without their own (optional)" : "Question (optional)"}
                 <input value={question} maxLength={200} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") start(); }}
-                  placeholder="e.g. Draw a quarter of a circle" className="mt-1 w-full rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1657C9]" />
+                  placeholder="e.g. Draw a quarter of a circle" className="mt-1 w-full rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0E6E72]" />
               </label>
               <PicturePick label="Add a picture for everyone (a worksheet, a diagram)" url={qImg} disabled={!!busy && !busy.startsWith("That")}
                 onPick={async (f) => { const u = await upload(f, false); if (u) setQImg(u); }} onRemove={() => setQImg(null)} />
@@ -268,33 +268,33 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                   {!online.length && <p className="text-xs font-bold text-ink/55">No learners have joined yet — their names appear here as they join.</p>}
                   {online.length > 0 && (
                     <details className="text-xs font-bold text-ink/70">
-                      <summary className="cursor-pointer font-black text-[#1657C9]">Paste a list of questions and share them out</summary>
+                      <summary className="cursor-pointer font-black text-[#0E6E72]">Paste a list of questions and share them out</summary>
                       <label className="mt-2 block">Questions, one on each line
                         <textarea value={pasted} onChange={(e) => setPasted(e.target.value)} rows={4} placeholder={"Solve 2x + 3 = 11\nSolve 5x − 4 = 21\nSolve 3(x + 2) = 18"}
-                          className="mt-1 w-full rounded-lg bg-white p-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1657C9]" />
+                          className="mt-1 w-full rounded-lg bg-white p-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0E6E72]" />
                       </label>
                       <button type="button" disabled={!pasted.trim()} onClick={() => { setPer((cur) => { const out = shareOut(pasted.split("\n"), online.map((p) => p.id)); for (const id of Object.keys(out)) out[id].img = cur[id]?.img ?? null; return { ...cur, ...out }; }); }}
-                        className="mt-1 rounded-lg bg-[#1657C9] px-3 py-2 text-xs font-black text-white disabled:opacity-40">Share out ({online.length} learner{online.length === 1 ? "" : "s"})</button>
+                        className="mt-1 rounded-lg bg-[#0E6E72] px-3 py-2 text-xs font-black text-white disabled:opacity-40">Share out ({online.length} learner{online.length === 1 ? "" : "s"})</button>
                     </details>
                   )}
                   {online.slice(0, 60).map((p) => (
                     <div key={p.id} className="grid gap-1 sm:grid-cols-[9rem_1fr_auto] sm:items-center">
                       <span className="truncate text-xs font-black">{p.name}</span>
                       <input value={per[p.id]?.q ?? ""} maxLength={300} onChange={(e) => setTask(p.id, { q: e.target.value })} aria-label={`Class work for ${p.name}`}
-                        placeholder="Their question" className="w-full rounded-lg bg-white px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1657C9]" />
+                        placeholder="Their question" className="w-full rounded-lg bg-white px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0E6E72]" />
                       <PicturePick small label={`Picture for ${p.name}`} url={per[p.id]?.img ?? null} disabled={!!busy && !busy.startsWith("That")}
                         onPick={async (f) => { const u = await upload(f, false); if (u) setTask(p.id, { img: u }); }} onRemove={() => setTask(p.id, { img: null })} />
                     </div>
                   ))}
                 </div>
               )}
-              {busy && <p role="status" className="text-xs font-bold text-[#1657C9]">{busy}</p>}
+              {busy && <p role="status" className="text-xs font-bold text-[#0E6E72]">{busy}</p>}
               <fieldset className="grid gap-1.5">
                 <legend className="text-xs font-black text-ink/60">Learners answer by</legend>
                 <div className="flex flex-wrap gap-2">
                   {([["both", "Drawing or typing"], ["draw", "Drawing only"], ["type", "Typing only"]] as const).map(([m, label]) => (
                     <button key={m} type="button" onClick={() => setMode(m)} aria-pressed={mode === m}
-                      className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 transition ${mode === m ? "bg-[#1657C9] text-white ring-[#1657C9]" : "bg-white text-ink/70 ring-slate-200 hover:ring-[#BFD7FF]"}`}>{label}</button>
+                      className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 transition ${mode === m ? "bg-[#0E6E72] text-white ring-[#0E6E72]" : "bg-white text-ink/70 ring-slate-200 hover:ring-[#A9D6D3]"}`}>{label}</button>
                   ))}
                 </div>
               </fieldset>
@@ -303,7 +303,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                 <div className="flex flex-wrap gap-2">
                   {TIME_LIMITS.map((m) => (
                     <button key={m} type="button" onClick={() => setLimit(m)} aria-pressed={limit === m}
-                      className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 transition ${limit === m ? "bg-[#1657C9] text-white ring-[#1657C9]" : "bg-white text-ink/70 ring-slate-200 hover:ring-[#BFD7FF]"}`}>{m ? `${m} min` : "No limit"}</button>
+                      className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 transition ${limit === m ? "bg-[#0E6E72] text-white ring-[#0E6E72]" : "bg-white text-ink/70 ring-slate-200 hover:ring-[#A9D6D3]"}`}>{m ? `${m} min` : "No limit"}</button>
                   ))}
                 </div>
               </fieldset>
@@ -312,11 +312,11 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                 <div className="flex flex-wrap gap-2">
                   {MARK_CHOICES.map((m) => (
                     <button key={m} type="button" onClick={() => setWorth(m)} aria-pressed={worth === m}
-                      className={`min-h-[40px] min-w-[52px] rounded-xl px-3 text-xs font-black ring-1 transition ${worth === m ? "bg-[#1657C9] text-white ring-[#1657C9]" : "bg-white text-ink/70 ring-slate-200 hover:ring-[#BFD7FF]"}`}>{m} mark{m === 1 ? "" : "s"}</button>
+                      className={`min-h-[40px] min-w-[52px] rounded-xl px-3 text-xs font-black ring-1 transition ${worth === m ? "bg-[#0E6E72] text-white ring-[#0E6E72]" : "bg-white text-ink/70 ring-slate-200 hover:ring-[#A9D6D3]"}`}>{m} mark{m === 1 ? "" : "s"}</button>
                   ))}
                 </div>
               </fieldset>
-              <button type="button" onClick={start} disabled={!!busy && !busy.startsWith("That")} className="justify-self-start rounded-xl bg-[#1657C9] px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">Send to learners</button>
+              <button type="button" onClick={start} disabled={!!busy && !busy.startsWith("That")} className="justify-self-start rounded-xl bg-[#0E6E72] px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">Send to learners</button>
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -325,7 +325,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                 {list.map((a) => {
                   const showing = !!round.show && showBy === a.by;
                   return (
-                    <div key={a.by} className={`overflow-hidden rounded-xl ring-2 transition ${showing ? "ring-amber-400" : round.marks[a.by] != null ? (round.marks[a.by] > 0 ? "ring-emerald-400" : "ring-red-300") : "ring-line hover:ring-[#BFD7FF]"}`}>
+                    <div key={a.by} className={`overflow-hidden rounded-xl ring-2 transition ${showing ? "ring-amber-400" : round.marks[a.by] != null ? (round.marks[a.by] > 0 ? "ring-emerald-400" : "ring-red-300") : "ring-line hover:ring-[#A9D6D3]"}`}>
                       <button type="button" onClick={() => { setFocus(a.by); setDraft(round.notes[a.by] ?? ""); }} aria-label={`Open ${labelFor(a)}'s answer`} className="block w-full text-left">
                         <AnswerView a={{ ...a, bg: taskFor(round, a.by).img }} />
                       </button>
@@ -353,7 +353,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                 <p className="text-sm font-black text-ink">{labelFor(focused)}{focused.done && <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-800">Handed in</span>}</p>
                 <div className="flex flex-wrap items-center gap-2">
                   <MarkButtons who={labelFor(focused)} max={round.max} mark={round.marks[focused.by]} onMark={(m) => giveMark(focused, m)} big />
-                  <button type="button" onClick={() => { showToClass(focused); setFocus(null); }} className="rounded-xl bg-[#1657C9] px-3 py-2 text-xs font-black text-white">Show to class{anon ? " (no name)" : ""}</button>
+                  <button type="button" onClick={() => { showToClass(focused); setFocus(null); }} className="rounded-xl bg-[#0E6E72] px-3 py-2 text-xs font-black text-white">Show to class{anon ? " (no name)" : ""}</button>
                   <button type="button" onClick={() => setFocus(null)} aria-label="Back to all answers" className="flex h-9 w-9 items-center justify-center rounded-lg text-ink/60 hover:bg-ink/5"><BoardIcon name="close" /></button>
                 </div>
               </div>
@@ -363,14 +363,14 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                 <label className="text-xs font-black text-ink/60" htmlFor="ab-feedback">Feedback for {labelFor(focused)} <span className="font-bold text-ink/45">— only they see it, and it’s kept with their mark</span></label>
                 <div className="flex flex-wrap gap-1.5">
                   {["Well done! ⭐", "Show your working", "Check your signs", "Nearly — look again", "Great method!"].map((t) => (
-                    <button key={t} type="button" onClick={() => setDraft(t)} className="min-h-[32px] rounded-full bg-white px-3 text-xs font-bold text-ink/70 ring-1 ring-slate-200 hover:ring-[#1657C9]">{t}</button>
+                    <button key={t} type="button" onClick={() => setDraft(t)} className="min-h-[32px] rounded-full bg-white px-3 text-xs font-bold text-ink/70 ring-1 ring-slate-200 hover:ring-[#0E6E72]">{t}</button>
                   ))}
                 </div>
                 <textarea id="ab-feedback" value={draft} maxLength={MAX_NOTE} rows={2} onChange={(e) => setDraft(e.target.value)} placeholder="e.g. Good start — now divide both sides by 3"
-                  className="w-full rounded-lg bg-white p-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1657C9]" />
+                  className="w-full rounded-lg bg-white p-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0E6E72]" />
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => giveNote(focused, draft)} disabled={(round.notes[focused.by] ?? "") === draft.trim()}
-                    className="min-h-[40px] rounded-xl bg-[#1657C9] px-4 text-xs font-black text-white disabled:opacity-40">{round.notes[focused.by] ? "Update feedback" : "Send feedback"}</button>
+                    className="min-h-[40px] rounded-xl bg-[#0E6E72] px-4 text-xs font-black text-white disabled:opacity-40">{round.notes[focused.by] ? "Update feedback" : "Send feedback"}</button>
                   <button type="button" onClick={() => { if (draft.trim() !== (round.notes[focused.by] ?? "")) giveNote(focused, draft); sendBack(focused); }}
                     className="min-h-[40px] rounded-xl bg-amber-100 px-4 text-xs font-black text-amber-900">↩ Send back to try again</button>
                   {(round.back[focused.by] ?? 0) > 0 && <span className="self-center text-xs font-bold text-ink/50">Sent back {round.back[focused.by]}×</span>}
@@ -393,7 +393,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
   const handIn = (yes: boolean) => { setDone(yes); doneRef.current = yes; if (yes) setSentBack(false); version.current++; sendMine(true); };
   if (hidden) {
     return (
-      <button type="button" onClick={() => setHidden(false)} className="fixed bottom-4 right-4 z-[96] flex items-center gap-2 rounded-full bg-[#1657C9] px-4 py-3 text-sm font-black text-white shadow-2xl">
+      <button type="button" onClick={() => setHidden(false)} className="fixed bottom-4 right-4 z-[96] flex items-center gap-2 rounded-full bg-[#0E6E72] px-4 py-3 text-sm font-black text-white shadow-2xl">
         <BoardIcon name="answers" /> Your answer board
       </button>
     );
@@ -403,17 +403,17 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
       <div className="flex max-h-full w-full max-w-3xl flex-col gap-2 overflow-y-auto rounded-2xl bg-white p-3 text-ink shadow-2xl">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-wider text-[#1657C9]">{round.mode === "type" ? "Type your answer" : round.mode === "draw" ? "Answer on your board" : "Draw or type your answer"}</p>
+            <p className="text-[11px] font-black uppercase tracking-wider text-[#0E6E72]">{round.mode === "type" ? "Type your answer" : round.mode === "draw" ? "Answer on your board" : "Draw or type your answer"}</p>
             <p className="text-lg font-black leading-snug">{task.q || "Answer the tutor’s question"}</p>
             {round.per[myId] && <p className="text-xs font-bold text-ink/50">This class work is just for you</p>}
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <button type="button" onClick={() => setHidden(true)} className="rounded-lg bg-ink/5 px-3 py-2 text-xs font-black text-ink/70 hover:bg-ink/10">See the class board</button>
-            {round.endsAt && !round.closed && <span role="timer" className={`rounded-lg px-2 py-1 text-xs font-black ${timeUp ? "bg-red-100 text-red-700" : "bg-[#EEF6FF] text-[#1657C9]"}`}>{timeUp ? "⏱ Time’s up" : `⏱ ${timeLeft(round.endsAt, now)} left`}</span>}
+            {round.endsAt && !round.closed && <span role="timer" className={`rounded-lg px-2 py-1 text-xs font-black ${timeUp ? "bg-red-100 text-red-700" : "bg-[#E2F3F2] text-[#0E6E72]"}`}>{timeUp ? "⏱ Time’s up" : `⏱ ${timeLeft(round.endsAt, now)} left`}</span>}
           </div>
         </div>
         {sentBack && !done && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm font-black text-amber-900 ring-1 ring-amber-200">↩ Your tutor sent this back — have another go, then hand it in again.</p>}
-        {note && <p role="status" className="rounded-xl bg-[#EEF6FF] p-3 text-sm font-bold text-ink ring-1 ring-[#BFD7FF]"><span className="block text-[11px] font-black uppercase tracking-wider text-[#1657C9]">💬 From your tutor</span>{note}</p>}
+        {note && <p role="status" className="rounded-xl bg-[#E2F3F2] p-3 text-sm font-bold text-ink ring-1 ring-[#A9D6D3]"><span className="block text-[11px] font-black uppercase tracking-wider text-[#0E6E72]">💬 From your tutor</span>{note}</p>}
         {round.marks[myId] != null && <YourMark mark={round.marks[myId]} max={round.max} />}
         {(round.closed || timeUp) && !done && <p role="status" className="rounded-xl bg-slate-100 p-3 text-sm font-black text-ink/75">{timeUp && !round.closed ? "Time’s up — " : ""}Your tutor has closed answers. They can see what you did.</p>}
         {round.show && (
@@ -426,7 +426,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
           <div role="tablist" aria-label="How to answer" className="flex gap-1 self-start rounded-xl bg-ink/5 p-1">
             {(["draw", "type"] as const).map((w) => (
               <button key={w} type="button" role="tab" aria-selected={way === w} onClick={() => setWay(w)}
-                className={`min-h-[40px] rounded-lg px-4 text-sm font-black transition ${way === w ? "bg-white text-[#1657C9] shadow" : "text-ink/60"}`}>
+                className={`min-h-[40px] rounded-lg px-4 text-sm font-black transition ${way === w ? "bg-white text-[#0E6E72] shadow" : "text-ink/60"}`}>
                 {w === "draw" ? "✏️ Draw" : "⌨️ Type"}
               </button>
             ))}
@@ -442,7 +442,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
               onChange={(e) => { const t = cleanAnswerText(e.target.value); setTyped(t); typedRef.current = t; version.current++; sendMine(); }}
               onBlur={() => sendMine(true)}
               placeholder="Type your answer here — e.g. x = 4, because 3 × 4 = 12"
-              className="w-full resize-y rounded-xl bg-white p-3 text-base font-semibold text-ink ring-2 ring-[#BFD7FF] focus:outline-none focus:ring-[#1657C9]" />
+              className="w-full resize-y rounded-xl bg-white p-3 text-base font-semibold text-ink ring-2 ring-[#A9D6D3] focus:outline-none focus:ring-[#0E6E72]" />
             <div className="flex items-center gap-2 text-xs font-bold">
               <span className="text-ink/45">{typed.length}/{MAX_ANSWER_TEXT}</span>
               <span className="ml-auto text-emerald-700">{typed.trim() ? "✓ Your tutor can see this" : "Type your answer"}</span>
@@ -568,7 +568,7 @@ function PicturePick({ label, url, onPick, onRemove, disabled, small = false }: 
   return (
     <div className="flex items-center gap-2">
       {url && <img src={url} alt="" className={`${small ? "h-9 w-14" : "h-14 w-24"} rounded-md bg-slate-100 object-contain ring-1 ring-slate-200`} />}
-      <label className={`flex min-h-[40px] cursor-pointer items-center gap-1.5 rounded-xl bg-white px-3 text-xs font-black text-[#1657C9] ring-1 ring-[#BFD7FF] hover:bg-[#EEF6FF] ${disabled ? "pointer-events-none opacity-50" : ""}`}>
+      <label className={`flex min-h-[40px] cursor-pointer items-center gap-1.5 rounded-xl bg-white px-3 text-xs font-black text-[#0E6E72] ring-1 ring-[#A9D6D3] hover:bg-[#E2F3F2] ${disabled ? "pointer-events-none opacity-50" : ""}`}>
         <span aria-hidden>🖼️</span>{small ? (url ? "Change" : "Picture") : url ? "Change the picture" : label}
         <input type="file" accept="image/*" className="sr-only" aria-label={label} disabled={disabled} onChange={(e) => { onPick(e.target.files?.[0]); e.target.value = ""; }} />
       </label>
@@ -583,10 +583,10 @@ function SnapWork({ photos, busy, locked, onPick, onRemove, onBig }: { photos: s
   const sending = !!busy && !busy.startsWith("That");
   const full = photos.length >= MAX_PHOTOS;
   return (
-    <div className="grid gap-2 rounded-xl bg-[#F5F9FF] p-2 ring-1 ring-[#BFD7FF]">
+    <div className="grid gap-2 rounded-xl bg-[#F1F8F7] p-2 ring-1 ring-[#A9D6D3]">
       <div className="flex flex-wrap items-center gap-2">
         {!locked && !full && (
-          <label className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl bg-[#1657C9] px-4 text-sm font-black text-white ${sending ? "pointer-events-none opacity-60" : ""}`}>
+          <label className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl bg-[#0E6E72] px-4 text-sm font-black text-white ${sending ? "pointer-events-none opacity-60" : ""}`}>
             <span aria-hidden>📷</span>{photos.length ? `Add another page (${photos.length + 1} of ${MAX_PHOTOS})` : "Snap my work"}
             <input type="file" accept="image/*" capture="environment" className="sr-only" aria-label="Snap a photo of my work" disabled={sending}
               onChange={(e) => { onPick(e.target.files?.[0]); e.target.value = ""; }} />
@@ -632,7 +632,7 @@ function Pad({ strokes, by, bg, locked = false, onChange, onDone }: { strokes: S
   const tool = "min-h-[40px] rounded-lg px-3 text-xs font-black";
   return (
     <div className="grid gap-2">
-      <div className="relative overflow-hidden rounded-xl bg-white ring-2 ring-[#BFD7FF]">
+      <div className="relative overflow-hidden rounded-xl bg-white ring-2 ring-[#A9D6D3]">
       {bg && <img src={bg} alt="The question — write on it" className="pointer-events-none absolute inset-0 h-full w-full object-contain" draggable={false} />}
       <canvas ref={ref} width={BOARD_W * 0.6} height={BOARD_H * 0.6} role="img" aria-label="Your answer — draw here"
         className="relative block aspect-[16/10] w-full touch-none"
@@ -645,9 +645,9 @@ function Pad({ strokes, by, bg, locked = false, onChange, onDone }: { strokes: S
       <div className="flex flex-wrap items-center gap-1.5">
         {PEN_COLOURS.map((c) => (
           <button key={c} type="button" onClick={() => { setColour(c); setRubber(false); }} aria-label={`Pen colour ${c}`} aria-pressed={!rubber && colour === c}
-            className={`h-9 w-9 rounded-full ring-2 ring-offset-2 ${!rubber && colour === c ? "ring-[#38BDF8]" : "ring-transparent"}`} style={{ background: c }} />
+            className={`h-9 w-9 rounded-full ring-2 ring-offset-2 ${!rubber && colour === c ? "ring-[#14B8A6]" : "ring-transparent"}`} style={{ background: c }} />
         ))}
-        <button type="button" onClick={() => setRubber(!rubber)} aria-pressed={rubber} className={`${tool} ${rubber ? "bg-[#1657C9] text-white" : "bg-ink/5"}`}>Rubber</button>
+        <button type="button" onClick={() => setRubber(!rubber)} aria-pressed={rubber} className={`${tool} ${rubber ? "bg-[#0E6E72] text-white" : "bg-ink/5"}`}>Rubber</button>
         <button type="button" onClick={() => onChange(strokes.slice(0, -1))} disabled={!strokes.length} className={`${tool} bg-ink/5 disabled:opacity-40`}>Undo</button>
         <button type="button" onClick={() => onChange([])} disabled={!strokes.length} className={`${tool} bg-ink/5 disabled:opacity-40`}>Clear</button>
         <span className="ml-auto text-xs font-bold text-emerald-700">{strokes.length ? "✓ Your tutor can see this" : "Draw or write your answer"}</span>

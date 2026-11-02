@@ -117,13 +117,13 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
     if (!pick) return null;
     if (hidden) {
       return (
-        <button type="button" onClick={() => setHidden(false)} className="fixed left-1/2 top-2 z-[96] flex max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-full bg-[#4C1D95] px-4 py-2.5 text-sm font-black text-white shadow-2xl ring-1 ring-white/20">
+        <button type="button" onClick={() => setHidden(false)} className="fixed left-1/2 top-2 z-[96] flex max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-full bg-[#0A4F52] px-4 py-2.5 text-sm font-black text-white shadow-2xl ring-1 ring-white/20">
           <BoardIcon name="game" /> <span className="truncate">Play {titleOf(pick)}</span>
         </button>
       );
     }
     return (
-      <div role="dialog" aria-label={`Game: ${titleOf(pick)}`} data-board-overlay className="fixed inset-0 z-[96] overflow-y-auto overscroll-contain bg-[#1E1B4B]">
+      <div role="dialog" aria-label={`Game: ${titleOf(pick)}`} data-board-overlay className="fixed inset-0 z-[96] overflow-y-auto overscroll-contain bg-[#0A3B3E]">
         <Player pick={pick} onExit={() => setHidden(true)} exitLabel="Back to the class board" sessionId={live ? sessionId : undefined} />
       </div>
     );
@@ -135,7 +135,7 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
   if (!open) {
     if (!current) return null;
     return (
-      <div className="fixed left-1/2 top-2 z-[95] flex max-w-[92vw] -translate-x-1/2 items-center gap-1 rounded-full bg-[#4C1D95] p-1 text-white shadow-2xl ring-1 ring-white/20">
+      <div className="fixed left-1/2 top-2 z-[95] flex max-w-[92vw] -translate-x-1/2 items-center gap-1 rounded-full bg-[#0A4F52] p-1 text-white shadow-2xl ring-1 ring-white/20">
         <button type="button" onClick={onOpen} className="flex min-h-[40px] min-w-0 items-center gap-2 rounded-full px-3 text-sm font-black hover:bg-white/10">
           <BoardIcon name="game" /> <span className="truncate">{titleOf(current)}{shared ? " · learners playing" : ""}</span>
         </button>
@@ -145,7 +145,7 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
     );
   }
 
-  const chip = (on: boolean) => `min-h-[36px] shrink-0 rounded-full px-3 text-xs font-black transition ${on ? "bg-white text-[#1E1B4B]" : "bg-white/10 text-white/80 hover:bg-white/15"}`;
+  const chip = (on: boolean) => `min-h-[36px] shrink-0 rounded-full px-3 text-xs font-black transition ${on ? "bg-white text-[#0A3B3E]" : "bg-white/10 text-white/80 hover:bg-white/15"}`;
   const btn = "flex min-h-[40px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-black disabled:opacity-50";
   async function launch(s: UKSet) {
     if (!onLaunchQuiz) return;
@@ -155,7 +155,7 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
     if (err) setNote(err); else onClose();
   }
   return (
-    <div role="dialog" aria-modal="true" aria-label="Games and quizzes" data-board-overlay className="fixed inset-0 z-[96] flex flex-col bg-[#1E1B4B] text-white">
+    <div role="dialog" aria-modal="true" aria-label="Games and quizzes" data-board-overlay className="fixed inset-0 z-[96] flex flex-col bg-[#0A3B3E] text-white">
       <div className="flex items-center gap-2 border-b border-white/10 px-2 py-1.5 sm:px-3">
         <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 sm:flex"><BoardIcon name="game" /></span>
         <p className="min-w-0 flex-1 truncate text-sm font-black">{current ? `${titleOf(current)}` : "Games & quizzes"}</p>
@@ -181,7 +181,7 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
             <div role="tablist" aria-label="Games or quizzes" className="flex gap-1 rounded-2xl bg-white/5 p-1 sm:inline-flex">
               {([["games", "🎮 Class games"], ["quizzes", "⚡ Ready-made quizzes"]] as const).map(([k, label]) => (
                 <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-                  className={`min-h-[40px] flex-1 rounded-xl px-4 text-sm font-black ${tab === k ? "bg-white text-[#1E1B4B]" : "text-white/75"}`}>{label}</button>
+                  className={`min-h-[40px] flex-1 rounded-xl px-4 text-sm font-black ${tab === k ? "bg-white text-[#0A3B3E]" : "text-white/75"}`}>{label}</button>
               ))}
             </div>
             <p className="mt-3 text-xs text-white/55">Following the England curriculum: the EYFS for Reception, and the National Curriculum for Key Stages 1 and 2.</p>
@@ -222,7 +222,7 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
                       <div className="ml-auto flex gap-1 rounded-full bg-white/5 p-1" role="radiogroup" aria-label="Difficulty">
                         {(["easy", "medium", "hard"] as const).map((d) => (
                           <button key={d} type="button" role="radio" aria-checked={difficulty === d} onClick={() => setDifficulty(d)}
-                            className={`min-h-[32px] rounded-full px-3 text-xs font-black capitalize ${difficulty === d ? "bg-amber-400 text-[#1E1B4B]" : "text-white/70"}`}>{d}</button>
+                            className={`min-h-[32px] rounded-full px-3 text-xs font-black capitalize ${difficulty === d ? "bg-amber-400 text-[#0A3B3E]" : "text-white/70"}`}>{d}</button>
                         ))}
                       </div>
                     </div>
@@ -264,7 +264,7 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
                       <button type="button" onClick={() => setPlaying(pickKey({ kind: "uk", id: s.id }))} className={`${btn} bg-white/10 hover:bg-white/15`}>Game</button>
                       {live && onLaunchQuiz && (
                         <button type="button" disabled={!!launching} onClick={() => launch(s)} aria-label={`Launch ${s.title} as a live quiz`}
-                          className={`${btn} bg-amber-400 text-[#1E1B4B] hover:bg-amber-300`}>{launching === s.id ? "Launching…" : "Live quiz"}</button>
+                          className={`${btn} bg-amber-400 text-[#0A3B3E] hover:bg-amber-300`}>{launching === s.id ? "Launching…" : "Live quiz"}</button>
                       )}
                     </li>
                   ))}

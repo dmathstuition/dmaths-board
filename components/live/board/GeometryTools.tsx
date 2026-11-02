@@ -57,15 +57,15 @@ export function Compass({ c, host, onChange, onDraw }: { c: CompassState; host: 
   return (
     <>
       <svg ref={svg} viewBox={`0 0 ${BOARD_W} ${BOARD_H}`} className="pointer-events-none absolute inset-0 z-[16] h-full w-full" role="img" aria-label={`Compasses opened to ${c.r} centimetres`}>
-        <line x1={nx} y1={ny} x2={px} y2={py} stroke="#1657C9" strokeWidth="2" strokeDasharray="8 6" opacity=".7" />
-        <text x={mx + ux * 22} y={my + uy * 22} fontSize="22" fontWeight="800" fill="#1657C9" textAnchor="middle" fontFamily="Poppins, system-ui">r = {c.r} cm</text>
+        <line x1={nx} y1={ny} x2={px} y2={py} stroke="#0E6E72" strokeWidth="2" strokeDasharray="8 6" opacity=".7" />
+        <text x={mx + ux * 22} y={my + uy * 22} fontSize="22" fontWeight="800" fill="#0E6E72" textAnchor="middle" fontFamily="Poppins, system-ui">r = {c.r} cm</text>
         <line x1={hx} y1={hy} x2={nx} y2={ny} stroke="#475569" strokeWidth="12" strokeLinecap="round" />
         <line x1={hx} y1={hy} x2={px} y2={py} stroke="#94A3B8" strokeWidth="12" strokeLinecap="round" />
         <polygon points={`${px - 7},${py - 16} ${px + 7},${py - 16} ${px},${py}`} fill="#F59E0B" transform={`rotate(${(Math.atan2(py - hy, px - hx) * 180) / Math.PI - 90} ${px} ${py})`} />
         <circle cx={hx} cy={hy} r="14" fill="#1E293B" />
         <circle cx={nx} cy={ny} r="5" fill="#DC2626" />
         {host && <circle cx={nx} cy={ny} r="26" fill="rgba(220,38,38,.12)" stroke="#DC2626" strokeWidth="2" className="pointer-events-auto cursor-move" onPointerDown={drag("needle")} aria-label="Move the compasses" />}
-        {host && <circle cx={px} cy={py} r="26" fill={arc ? "rgba(245,158,11,.3)" : "rgba(22,87,201,.12)"} stroke={arc ? "#F59E0B" : "#1657C9"} strokeWidth="2" className="pointer-events-auto cursor-grab" onPointerDown={drag("pencil")} aria-label={arc ? "Turn to draw an arc" : "Open the compasses"} />}
+        {host && <circle cx={px} cy={py} r="26" fill={arc ? "rgba(245,158,11,.3)" : "rgba(22,87,201,.12)"} stroke={arc ? "#F59E0B" : "#0E6E72"} strokeWidth="2" className="pointer-events-auto cursor-grab" onPointerDown={drag("pencil")} aria-label={arc ? "Turn to draw an arc" : "Open the compasses"} />}
       </svg>
       {host && (
         <div className="absolute left-1/2 top-12 z-[17] flex -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-xl bg-white/80 p-1 shadow ring-1 ring-black/10 backdrop-blur" role="toolbar" aria-label="Compasses">
@@ -100,7 +100,7 @@ export function SolidPanel({ s, host, boxW, onChange }: { s: SolidState; host: b
     const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); onChange(cur, true); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
-  const chip = (on: boolean) => `min-h-[32px] rounded-lg px-2 text-[11px] font-black ${on ? "bg-[#1657C9] text-white" : "bg-slate-100 text-ink/70"}`;
+  const chip = (on: boolean) => `min-h-[32px] rounded-lg px-2 text-[11px] font-black ${on ? "bg-[#0E6E72] text-white" : "bg-slate-100 text-ink/70"}`;
   return (
     <Floating p={s} host={host} title="3D shapes" icon="solid" width={width} onChange={onChange}>
       <div className="grid gap-2 p-2">
@@ -132,7 +132,7 @@ export function SolidPanel({ s, host, boxW, onChange }: { s: SolidState; host: b
         )}
         {s.shape === "sphere" && s.net && <p className="text-xs font-bold text-ink/60">A sphere has no net — it can't be flattened.</p>}
         {s.facts && (
-          <div className="rounded-xl bg-[#EEF6FF] p-2 font-mono text-[12px] font-bold leading-relaxed text-ink" aria-label="Volume and surface area">
+          <div className="rounded-xl bg-[#E2F3F2] p-2 font-mono text-[12px] font-bold leading-relaxed text-ink" aria-label="Volume and surface area">
             {facts.lines.map((l) => <p key={l}>{l}</p>)}
           </div>
         )}

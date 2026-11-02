@@ -76,7 +76,7 @@ function TimerCard({ w, host, onChange }: { w: Widgets; host: boolean; onChange:
         <div className="mt-2 space-y-1.5">
           {!timerRunning(t) && t.left == null && t.mode === "down" && (
             <div className="flex flex-wrap justify-center gap-1">
-              {[30, 60, 120, 300, 600].map((s) => <button key={s} type="button" onClick={() => set({ ...t, seconds: s })} className={`${mini} ${t.seconds === s ? "bg-[#1657C9] text-white" : "bg-ink/5"}`}>{s < 60 ? `${s}s` : `${s / 60}m`}</button>)}
+              {[30, 60, 120, 300, 600].map((s) => <button key={s} type="button" onClick={() => set({ ...t, seconds: s })} className={`${mini} ${t.seconds === s ? "bg-[#0E6E72] text-white" : "bg-ink/5"}`}>{s < 60 ? `${s}s` : `${s / 60}m`}</button>)}
             </div>
           )}
           <div className="flex justify-center gap-1">
@@ -111,13 +111,13 @@ function Dice({ values, at, host, onRoll, onClose }: { values: number[]; at: num
       <div className="flex gap-2" aria-label={`Dice show ${values.join(" and ")}`}>
         {shown.map((v, i) => (
           <svg key={i} viewBox="0 0 100 100" className="h-16 w-16 drop-shadow"><rect x="4" y="4" width="92" height="92" rx="18" fill="#fff" stroke="#CBD5E1" strokeWidth="4" />
-            {PIPS[v].map(([cx, cy], k) => <circle key={k} cx={cx} cy={cy} r="9" fill="#1E1B4B" />)}</svg>
+            {PIPS[v].map(([cx, cy], k) => <circle key={k} cx={cx} cy={cy} r="9" fill="#0A3B3E" />)}</svg>
         ))}
       </div>
       {values.length > 1 && <p className="mt-1 text-center text-sm font-black">Total {values.reduce((a, b) => a + b, 0)}</p>}
       {host && (
         <div className="mt-2 flex justify-center gap-1">
-          {[1, 2, 3].map((n) => <button key={n} type="button" onClick={() => onRoll(n)} className={`${mini} bg-[#1657C9] text-white`}>Roll {n}</button>)}
+          {[1, 2, 3].map((n) => <button key={n} type="button" onClick={() => onRoll(n)} className={`${mini} bg-[#0E6E72] text-white`}>Roll {n}</button>)}
           <button type="button" onClick={onClose} aria-label="Close dice" className={`${mini} bg-ink/5`}>✕</button>
         </div>
       )}
@@ -129,11 +129,11 @@ function Picker({ name, at, host, onPick, onClose }: { name: string; at: number;
   return (
     <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
       <div key={at} className={`${card} arcade-pop px-8 py-5 text-center`}>
-        <p className="text-[11px] font-black uppercase tracking-[.2em] text-[#1657C9]">🎯 It&apos;s your turn</p>
+        <p className="text-[11px] font-black uppercase tracking-[.2em] text-[#0E6E72]">🎯 It&apos;s your turn</p>
         <p className="mt-1 font-display text-4xl font-black text-ink">{name}</p>
         {host && (
           <div className="mt-3 flex justify-center gap-1.5">
-            <button type="button" onClick={onPick} className={`${mini} bg-[#1657C9] text-white`}>Pick again</button>
+            <button type="button" onClick={onPick} className={`${mini} bg-[#0E6E72] text-white`}>Pick again</button>
             <button type="button" onClick={onClose} className={`${mini} bg-ink/5`}>Close</button>
           </div>
         )}
@@ -279,7 +279,7 @@ function Spotlight({ s, host, boxW, onChange }: { s: SpotState; host: boolean; b
       {host && (
         <div className="absolute z-[13] flex -translate-x-1/2 items-center gap-1 rounded-full bg-white/95 p-1 shadow-lg ring-1 ring-black/10"
           style={{ left: `${s.x * 100}%`, top: `calc(${s.y * 100}% + ${Math.min(rPx + 8, 9999)}px)` }}>
-          <button type="button" onPointerDown={drag} aria-label="Drag the spotlight" title="Drag to move" className="flex h-8 cursor-move touch-none items-center gap-1 rounded-full bg-[#1657C9] px-2.5 text-xs font-black text-white">
+          <button type="button" onPointerDown={drag} aria-label="Drag the spotlight" title="Drag to move" className="flex h-8 cursor-move touch-none items-center gap-1 rounded-full bg-[#0E6E72] px-2.5 text-xs font-black text-white">
             <BoardIcon name="spotlight" className="h-4 w-4" /> Move
           </button>
           <button type="button" onClick={() => resize(0.8)} aria-label="Smaller spotlight" className="h-8 w-8 rounded-full text-base font-black text-ink hover:bg-slate-100">−</button>

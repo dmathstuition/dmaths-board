@@ -140,7 +140,7 @@ function Editor({ id, onClose, bank: canBank }: { id: string | null; onClose: ()
 
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => setPanel(panel === "ai" ? null : "ai")} aria-expanded={panel === "ai"} className={`min-h-[44px] rounded-xl px-4 text-sm font-bold ring-1 ${panel === "ai" ? "bg-violet-600 text-white ring-violet-600" : "bg-white text-ink/75 ring-line"}`}>✨ Draft with A.I</button>
-        {canBank && <button type="button" onClick={() => setPanel(panel === "bank" ? null : "bank")} aria-expanded={panel === "bank"} className={`min-h-[44px] rounded-xl px-4 text-sm font-bold ring-1 ${panel === "bank" ? "bg-[#1657C9] text-white ring-[#1657C9]" : "bg-white text-ink/75 ring-line"}`}>From question bank</button>}
+        {canBank && <button type="button" onClick={() => setPanel(panel === "bank" ? null : "bank")} aria-expanded={panel === "bank"} className={`min-h-[44px] rounded-xl px-4 text-sm font-bold ring-1 ${panel === "bank" ? "bg-[#0E6E72] text-white ring-[#0E6E72]" : "bg-white text-ink/75 ring-line"}`}>From question bank</button>}
       </div>
 
       {panel === "ai" && (
@@ -159,7 +159,7 @@ function Editor({ id, onClose, bank: canBank }: { id: string | null; onClose: ()
         <div className="card p-4">
           <div className="flex gap-2">
             <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder={`Topic${subject ? ` in ${subject}` : ""} (optional)`} aria-label="Topic" className="field flex-1" />
-            <button type="button" onClick={searchBank} className="min-h-[48px] rounded-xl bg-[#1657C9] px-4 font-bold text-white">Search</button>
+            <button type="button" onClick={searchBank} className="min-h-[48px] rounded-xl bg-[#0E6E72] px-4 font-bold text-white">Search</button>
           </div>
           {bank && (
             <ul className="mt-3 max-h-64 space-y-1.5 overflow-y-auto">
@@ -204,7 +204,7 @@ function Editor({ id, onClose, bank: canBank }: { id: string | null; onClose: ()
         ))}
       </ol>
 
-      <button type="button" onClick={() => setQs((d) => [...d, blank(d[d.length - 1]?.seconds ?? 20)])} className="w-full rounded-2xl border-2 border-dashed border-line py-3 text-sm font-bold text-ink/60 hover:border-[#1657C9] hover:text-[#1657C9]">+ Add question</button>
+      <button type="button" onClick={() => setQs((d) => [...d, blank(d[d.length - 1]?.seconds ?? 20)])} className="w-full rounded-2xl border-2 border-dashed border-line py-3 text-sm font-bold text-ink/60 hover:border-[#0E6E72] hover:text-[#0E6E72]">+ Add question</button>
 
       <div className="sticky bottom-20 z-10 flex flex-wrap items-center gap-3 rounded-2xl bg-white/95 p-3 shadow-lg ring-1 ring-line backdrop-blur lg:bottom-4">
         <p className="flex-1 text-sm text-ink/60">{complete.length} of {qs.length} question{qs.length === 1 ? "" : "s"} ready{complete.length < qs.length ? " · incomplete ones are skipped" : ""}</p>

@@ -21,7 +21,7 @@ import {
 
 type Person = { id: string; name: string; online?: boolean };
 type InkMap = Map<string, Map<string, Stroke[]>>; // group → member → their ink
-const PEN_COLOURS = ["#0B1220", "#1657C9", "#DC2626", "#16A34A", "#F5951E"];
+const PEN_COLOURS = ["#0B1220", "#0E6E72", "#DC2626", "#16A34A", "#F5951E"];
 
 export default function GroupBoards({ host, myId, myName, people, open, onOpen, onClose, onBring, keep }: {
   host: boolean; myId: string; myName: string; people: Person[]; open: boolean; onOpen: () => void; onClose: () => void;
@@ -113,7 +113,7 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
     if (!open && !plan) return null;
     if (!open && plan) {
       return (
-        <button type="button" onClick={onOpen} className="fixed bottom-4 right-4 z-[95] flex items-center gap-2 rounded-full bg-[#1657C9] px-4 py-3 text-sm font-black text-white shadow-2xl">
+        <button type="button" onClick={onOpen} className="fixed bottom-4 right-4 z-[95] flex items-center gap-2 rounded-full bg-[#0E6E72] px-4 py-3 text-sm font-black text-white shadow-2xl">
           <BoardIcon name="groups" /> Groups ({plan.groups.length})
         </button>
       );
@@ -145,7 +145,7 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
       <div role="dialog" aria-modal="true" aria-label="Group boards" className="fixed inset-0 z-[96] flex items-center justify-center bg-black/60 p-3">
         <div className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white text-ink shadow-2xl">
           <div className="flex flex-wrap items-center gap-2 border-b border-line p-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#EEF6FF] text-[#1657C9]"><BoardIcon name="groups" /></span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#E2F3F2] text-[#0E6E72]"><BoardIcon name="groups" /></span>
             <div className="min-w-0 flex-1">
               <p className="text-base font-black">Group boards</p>
               {plan && <p className="truncate text-xs font-bold text-ink/55">{plan.task || "Groups work together on their own board"} · {plan.groups.length} groups</p>}
@@ -162,14 +162,14 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
               <p className="text-sm font-semibold text-ink/70">Split the class into groups. Each group draws together on its own board; you watch them all here and can bring the best work onto the main board.</p>
               <label className="text-xs font-black text-ink/60">Task for the groups (optional)
                 <input value={task} maxLength={200} onChange={(e) => setTask(e.target.value)} placeholder="e.g. Draw three shapes with a line of symmetry"
-                  className="mt-1 w-full rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1657C9]" />
+                  className="mt-1 w-full rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0E6E72]" />
               </label>
               <fieldset className="grid gap-1.5">
                 <legend className="text-xs font-black text-ink/60">Number of groups</legend>
                 <div className="flex flex-wrap gap-2">
                   {Array.from({ length: MAX_GROUPS - 1 }, (_, i) => i + 2).map((n) => (
                     <button key={n} type="button" onClick={() => setCount(n)} aria-pressed={nGroups === n}
-                      className={`h-10 min-w-[44px] rounded-xl px-3 text-sm font-black ring-1 transition ${nGroups === n ? "bg-[#1657C9] text-white ring-[#1657C9]" : "bg-white text-ink/70 ring-slate-200 hover:ring-[#BFD7FF]"}`}>{n}</button>
+                      className={`h-10 min-w-[44px] rounded-xl px-3 text-sm font-black ring-1 transition ${nGroups === n ? "bg-[#0E6E72] text-white ring-[#0E6E72]" : "bg-white text-ink/70 ring-slate-200 hover:ring-[#A9D6D3]"}`}>{n}</button>
                   ))}
                 </div>
               </fieldset>
@@ -185,7 +185,7 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => setSeed(seed + 1)} className="rounded-xl bg-ink/5 px-4 py-2.5 text-sm font-black text-ink/70">Shuffle</button>
-                    <button type="button" onClick={start} className="rounded-xl bg-[#1657C9] px-5 py-2.5 text-sm font-black text-white">Start groups</button>
+                    <button type="button" onClick={start} className="rounded-xl bg-[#0E6E72] px-5 py-2.5 text-sm font-black text-white">Start groups</button>
                   </div>
                 </>
               )}
@@ -202,7 +202,7 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
                         <p className="text-xs font-black">{g.name}</p>
                         <p className="truncate text-[11px] font-semibold text-ink/55">{g.members.map(nameOf).join(", ") || "Empty"}</p>
                       </div>
-                      <button type="button" onClick={() => bring(g.id)} className="shrink-0 rounded-lg bg-[#1657C9] px-2.5 py-1.5 text-[11px] font-black text-white">To main board</button>
+                      <button type="button" onClick={() => bring(g.id)} className="shrink-0 rounded-lg bg-[#0E6E72] px-2.5 py-1.5 text-[11px] font-black text-white">To main board</button>
                     </div>
                   </div>
                 ))}
@@ -216,7 +216,7 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-black text-ink">{focused.name}</p>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => bring(focused.id)} className="rounded-xl bg-[#1657C9] px-3 py-2 text-xs font-black text-white">Bring to main board</button>
+                  <button type="button" onClick={() => bring(focused.id)} className="rounded-xl bg-[#0E6E72] px-3 py-2 text-xs font-black text-white">Bring to main board</button>
                   <button type="button" onClick={() => setFocus(null)} aria-label="Back to all groups" className="flex h-9 w-9 items-center justify-center rounded-lg text-ink/60 hover:bg-ink/5"><BoardIcon name="close" /></button>
                 </div>
               </div>
@@ -245,7 +245,7 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
   if (!plan || !g) return null;
   if (hidden) {
     return (
-      <button type="button" onClick={() => setHidden(false)} className="fixed bottom-4 right-4 z-[96] flex items-center gap-2 rounded-full bg-[#1657C9] px-4 py-3 text-sm font-black text-white shadow-2xl">
+      <button type="button" onClick={() => setHidden(false)} className="fixed bottom-4 right-4 z-[96] flex items-center gap-2 rounded-full bg-[#0E6E72] px-4 py-3 text-sm font-black text-white shadow-2xl">
         <BoardIcon name="groups" /> {g.name} board
       </button>
     );
@@ -257,7 +257,7 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
       <div className="flex max-h-full w-full max-w-3xl flex-col gap-2 overflow-y-auto rounded-2xl bg-white p-3 text-ink shadow-2xl">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-wider text-[#1657C9]">{g.name}{mates.length ? ` · with ${mates.join(", ")}` : ""}</p>
+            <p className="text-[11px] font-black uppercase tracking-wider text-[#0E6E72]">{g.name}{mates.length ? ` · with ${mates.join(", ")}` : ""}</p>
             <p className="text-lg font-black leading-snug">{plan.task || "Work together on your group's board"}</p>
           </div>
           <button type="button" onClick={() => setHidden(true)} className="rounded-lg bg-ink/5 px-3 py-2 text-xs font-black text-ink/70 hover:bg-ink/10">See the class board</button>
@@ -288,7 +288,7 @@ function GroupPad({ others, mine, me, onChange, onDone }: { others: Stroke[]; mi
   return (
     <div className="grid gap-2">
       <canvas ref={ref} width={BOARD_W * 0.6} height={BOARD_H * 0.6} role="img" aria-label="Your group's board — draw here"
-        className="block aspect-[16/10] w-full touch-none rounded-xl bg-white ring-2 ring-[#BFD7FF]"
+        className="block aspect-[16/10] w-full touch-none rounded-xl bg-white ring-2 ring-[#A9D6D3]"
         onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); cur.current = { id: inkId(me), by: me, color: colour, w: rubber ? 10 : 4, erase: rubber, pts: pt(e) }; paint(); }}
         onPointerMove={(e) => { const s = cur.current; if (!s || !e.buttons) return; const [x, y] = pt(e); const L = s.pts.length; if (Math.hypot(x - s.pts[L - 2], y - s.pts[L - 1]) < 0.002) return; s.pts.push(x, y); paint(); }}
         onPointerUp={() => { const s = cur.current; cur.current = null; if (s) onChange([...mine, s].slice(-300)); onDone(); }}
@@ -296,9 +296,9 @@ function GroupPad({ others, mine, me, onChange, onDone }: { others: Stroke[]; mi
       <div className="flex flex-wrap items-center gap-1.5">
         {PEN_COLOURS.map((c) => (
           <button key={c} type="button" onClick={() => { setColour(c); setRubber(false); }} aria-label={`Pen colour ${c}`} aria-pressed={!rubber && colour === c}
-            className={`h-9 w-9 rounded-full ring-2 ring-offset-2 ${!rubber && colour === c ? "ring-[#38BDF8]" : "ring-transparent"}`} style={{ background: c }} />
+            className={`h-9 w-9 rounded-full ring-2 ring-offset-2 ${!rubber && colour === c ? "ring-[#14B8A6]" : "ring-transparent"}`} style={{ background: c }} />
         ))}
-        <button type="button" onClick={() => setRubber(!rubber)} aria-pressed={rubber} className={`${tool} ${rubber ? "bg-[#1657C9] text-white" : "bg-ink/5"}`}>Rubber</button>
+        <button type="button" onClick={() => setRubber(!rubber)} aria-pressed={rubber} className={`${tool} ${rubber ? "bg-[#0E6E72] text-white" : "bg-ink/5"}`}>Rubber</button>
         <button type="button" onClick={() => onChange(mine.slice(0, -1))} disabled={!mine.length} className={`${tool} bg-ink/5 disabled:opacity-40`}>Undo mine</button>
         <button type="button" onClick={() => onChange([])} disabled={!mine.length} className={`${tool} bg-ink/5 disabled:opacity-40`}>Clear mine</button>
         <span className="ml-auto text-xs font-bold text-emerald-700">Your group and teacher see this live</span>

@@ -18,14 +18,14 @@ export default function ResultsBreakdown({ d }: { d: LearnerDetail }) {
       </div>
       {r.percent != null && (
         <div className="relative h-3 overflow-hidden rounded-full bg-slate-100" role="img" aria-label={`You scored ${r.percent}%${d.classAverage != null ? `; the class average was ${d.classAverage}%` : ""}`}>
-          <div className="h-full rounded-full bg-[#1657C9]" style={{ width: `${r.percent}%` }} />
+          <div className="h-full rounded-full bg-[#0E6E72]" style={{ width: `${r.percent}%` }} />
           {d.classAverage != null && <div className="absolute top-0 h-full w-0.5 bg-amber-500" style={{ left: `${d.classAverage}%` }} />}
         </div>
       )}
 
       {d.work.length > 0 && (
         <section aria-label="Class work">
-          <h3 className="text-xs font-black uppercase tracking-wider text-[#1657C9]">Class work</h3>
+          <h3 className="text-xs font-black uppercase tracking-wider text-[#0E6E72]">Class work</h3>
           <ol className="mt-2 grid gap-2">
             {d.work.map((w, i) => (
               <li key={i} className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
@@ -44,7 +44,7 @@ export default function ResultsBreakdown({ d }: { d: LearnerDetail }) {
                     ))}
                   </div>
                 )}
-                {w.feedback && <p className="mt-2 rounded-lg bg-[#EEF6FF] px-2 py-1.5 text-sm font-semibold"><span className="font-black text-[#1657C9]">💬 Your tutor: </span>{w.feedback}</p>}
+                {w.feedback && <p className="mt-2 rounded-lg bg-[#E2F3F2] px-2 py-1.5 text-sm font-semibold"><span className="font-black text-[#0E6E72]">💬 Your tutor: </span>{w.feedback}</p>}
               </li>
             ))}
           </ol>
@@ -53,7 +53,7 @@ export default function ResultsBreakdown({ d }: { d: LearnerDetail }) {
 
       {d.exams?.length > 0 && (
         <section aria-label="Exams">
-          <h3 className="text-xs font-black uppercase tracking-wider text-[#1657C9]">Exams</h3>
+          <h3 className="text-xs font-black uppercase tracking-wider text-[#0E6E72]">Exams</h3>
           <ul className="mt-2 grid gap-2">
             {d.exams.map((e, i) => (
               <li key={i} className="flex items-center gap-2 rounded-xl bg-white p-3 ring-1 ring-slate-200">
@@ -67,7 +67,7 @@ export default function ResultsBreakdown({ d }: { d: LearnerDetail }) {
 
       {d.quizzes.map((q, qi) => (
         <section key={qi} aria-label={`Quiz: ${q.title}`}>
-          <h3 className="text-xs font-black uppercase tracking-wider text-[#1657C9]">Live quiz · {q.title} <span className="text-ink/45">({q.items.filter((i) => i.correct).length} / {q.items.length})</span></h3>
+          <h3 className="text-xs font-black uppercase tracking-wider text-[#0E6E72]">Live quiz · {q.title} <span className="text-ink/45">({q.items.filter((i) => i.correct).length} / {q.items.length})</span></h3>
           <ol className="mt-2 grid gap-2">
             {q.items.map((it, i) => (
               <li key={i} className={`rounded-xl p-3 ring-1 ${it.correct ? "bg-emerald-50 ring-emerald-200" : "bg-red-50 ring-red-200"}`}>
@@ -89,7 +89,7 @@ export default function ResultsBreakdown({ d }: { d: LearnerDetail }) {
 
 function Stat({ label, value, sub, strong = false }: { label: string; value: string; sub?: string; strong?: boolean }) {
   return (
-    <div className={`rounded-xl p-3 ring-1 ${strong ? "bg-[#1657C9] text-white ring-[#1657C9]" : "bg-white ring-slate-200"}`}>
+    <div className={`rounded-xl p-3 ring-1 ${strong ? "bg-[#0E6E72] text-white ring-[#0E6E72]" : "bg-white ring-slate-200"}`}>
       <p className={`text-[11px] font-black uppercase tracking-wider ${strong ? "text-white/75" : "text-ink/50"}`}>{label}</p>
       <p className="mt-0.5 text-2xl font-black">{value}</p>
       {sub && <p className={`text-xs font-bold ${strong ? "text-white/80" : "text-ink/55"}`}>{sub}</p>}

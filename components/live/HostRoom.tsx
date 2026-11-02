@@ -111,20 +111,20 @@ function Host({ id, base }: { id: string; base: HostBase }) {
   return (
     <div className="space-y-4">
       {/* Header: title, PIN, invite */}
-      <div className="card flex flex-wrap items-center gap-4 p-4 sm:p-5">
+      <div className="flex flex-wrap items-center gap-4 p-4 sm:p-5 rounded-2xl bg-[#0E6E72] bg-[linear-gradient(rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(135deg,#0E6E72,#0A4F52)] bg-[length:28px_28px,28px_28px,100%_100%] text-white shadow-card">
         <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[.18em] text-[#1657C9]">
-            {ended ? <span className="rounded-full bg-ink/10 px-2 py-0.5 text-ink/60">Ended</span> : <span className="flex items-center gap-1.5 rounded-full bg-red-500 px-2 py-0.5 text-white"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />Live</span>}
+          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[.18em] text-[#C6F35C]">
+            {ended ? <span className="rounded-full bg-white/15 px-2 py-0.5 text-white/80">Ended</span> : <span className="flex items-center gap-1.5 rounded-full bg-red-500 px-2 py-0.5 text-white"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />Live</span>}
             Interactive class{s.subject ? ` · ${s.subject}` : ""}
           </p>
-          <h1 className="mt-1 truncate font-display text-2xl font-black text-ink">{s.title}</h1>
-          <p className="text-sm text-ink/55">{here} learner{here === 1 ? "" : "s"} here · {room.people.length} joined</p>
+          <h1 className="mt-1 truncate font-display text-2xl font-black text-white">{s.title}</h1>
+          <p className="text-sm text-white/70">{here} learner{here === 1 ? "" : "s"} here · {room.people.length} joined</p>
         </div>
         {!ended && (
           <>
-            <div className="rounded-2xl bg-[#EEF6FF] px-4 py-2 text-center ring-1 ring-[#1657C9]/20">
-              <p className="text-[11px] font-black uppercase tracking-wider text-[#1657C9]">Class PIN</p>
-              <p className="font-display text-3xl font-black tracking-wider text-ink">{formatCode(s.code)}</p>
+            <div className="rounded-2xl bg-white/10 px-4 py-2 text-center ring-1 ring-white/20 backdrop-blur">
+              <p className="text-[11px] font-black uppercase tracking-wider text-[#C6F35C]">Class PIN</p>
+              <p className="font-display text-3xl font-black tracking-wider text-white">{formatCode(s.code)}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={copy} className="btn-gold !min-h-[44px]">{copied ? "Copied ✓" : "Copy join link"}</button>
@@ -157,7 +157,7 @@ function Host({ id, base }: { id: string; base: HostBase }) {
               <div role="tablist" aria-label="Stage" className="flex gap-1 rounded-2xl bg-white p-1 ring-1 ring-line">
                 {(["board", "quiz", "results"] as const).map((t) => (
                   <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
-                    className={`min-h-[40px] rounded-xl px-4 text-sm font-black transition ${tab === t ? (t === "quiz" ? "bg-violet-600 text-white" : t === "results" ? "bg-emerald-600 text-white" : "bg-[#1657C9] text-white") : "text-ink/60 hover:text-ink"}`}>
+                    className={`min-h-[40px] rounded-xl px-4 text-sm font-black transition ${tab === t ? (t === "quiz" ? "bg-violet-600 text-white" : t === "results" ? "bg-emerald-600 text-white" : "bg-[#0E6E72] text-white") : "text-ink/60 hover:text-ink"}`}>
                     {t === "board" ? "✏️ Board" : t === "quiz" ? "⚡ Live quiz" : "📊 Results"}
                   </button>
                 ))}
@@ -168,7 +168,7 @@ function Host({ id, base }: { id: string; base: HostBase }) {
               {tab === "quiz" && <button type="button" onClick={fullScreen} className="min-h-[40px] rounded-xl bg-white px-3 text-sm font-bold text-ink/70 ring-1 ring-line hover:text-ink">⛶ Full screen</button>}
             </div>
             <p className="text-xs text-ink/50">Share this screen in your call — {base === "/app" ? "students join on their phones with the PIN and follow along." : "learners follow along and take part from their own portal."}</p>
-            <div ref={stageRef} className="rounded-[1.75rem] bg-[#F4F9FF] [&:fullscreen]:overflow-y-auto [&:fullscreen]:p-6">
+            <div ref={stageRef} className="rounded-[1.75rem] bg-[#F4F8F8] [&:fullscreen]:overflow-y-auto [&:fullscreen]:p-6">
               <div hidden={tab !== "board"}>
                 <Whiteboard sessionId={id} host myId={room.me.id} myName={room.me.name} canDraw writers={room.writers} canLog={!!s.classId} people={room.people}
                   onQuizLaunched={() => setTab("quiz")} extra={voice.controls} overlay={voice.overlay}
@@ -205,11 +205,11 @@ function Host({ id, base }: { id: string; base: HostBase }) {
                 <button type="button" disabled={busy} onClick={() => act({ action: "lowerAll" })} className="text-xs font-bold text-amber-900 hover:underline">Lower all</button>
               </div>
             )}
-            <div className="mt-3 rounded-2xl bg-[#F4F9FF] p-3">
+            <div className="mt-3 rounded-2xl bg-[#F4F8F8] p-3">
               <p className="text-xs font-black uppercase tracking-wider text-ink/50">Who can write on the board</p>
               <div className="mt-2 grid grid-cols-2 gap-1.5">
                 <button type="button" disabled={busy} onClick={() => act({ action: "everyoneOff" })}
-                  className={`min-h-[40px] rounded-xl text-sm font-bold ${!s.allCanWrite && !room.people.some((p) => p.canWrite) ? "bg-[#1657C9] text-white" : "bg-white text-ink/70 ring-1 ring-line"}`}>Only me</button>
+                  className={`min-h-[40px] rounded-xl text-sm font-bold ${!s.allCanWrite && !room.people.some((p) => p.canWrite) ? "bg-[#0E6E72] text-white" : "bg-white text-ink/70 ring-1 ring-line"}`}>Only me</button>
                 <button type="button" disabled={busy} onClick={() => act({ action: "allWrite", value: true })}
                   className={`min-h-[40px] rounded-xl text-sm font-bold ${s.allCanWrite ? "bg-emerald-600 text-white" : "bg-white text-ink/70 ring-1 ring-line"}`}>Everyone</button>
               </div>

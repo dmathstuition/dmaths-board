@@ -57,10 +57,10 @@ export default function Replay({ pages, papers, bgs, img, onClose }: {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => { if (step >= events.length) setStep(0); setPlaying((p) => !p); }} disabled={!events.length}
-            aria-label={playing ? "Pause" : "Play"} className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1657C9] disabled:opacity-40">
+            aria-label={playing ? "Pause" : "Play"} className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0E6E72] disabled:opacity-40">
             <BoardIcon name={playing ? "pause" : "play"} />
           </button>
-          <input type="range" min={0} max={events.length} value={step} onChange={(e) => scrub(Number(e.target.value))} aria-label="Replay position" className="min-w-[160px] flex-1 accent-[#38BDF8]" />
+          <input type="range" min={0} max={events.length} value={step} onChange={(e) => scrub(Number(e.target.value))} aria-label="Replay position" className="min-w-[160px] flex-1 accent-[#14B8A6]" />
           <span className="w-16 text-right text-xs font-black tabular-nums text-white/70">{step}/{events.length}</span>
           <div className="flex gap-1" role="group" aria-label="Speed">
             {SPEEDS.map((s) => (

@@ -10,7 +10,7 @@ import { localDelta, localPoint } from "@/components/live/board/rotation";
 // scientific calculator and a number line. The host works them; learners see
 // exactly the same thing live.
 
-export const GRAPH_COLORS = ["#1657C9", "#DC2626", "#16A34A", "#7C3AED", "#EA580C", "#0F172A"];
+export const GRAPH_COLORS = ["#0E6E72", "#DC2626", "#16A34A", "#7C3AED", "#EA580C", "#0F172A"];
 
 // A floating card with a draggable title bar (host only).
 export function Floating<T extends Panel>({ p, host, title, icon, width, onChange, children }: {
@@ -119,7 +119,7 @@ export function GraphPanel({ g, host, boxW, onChange }: { g: GraphState; host: b
         {letters.map((l) => {
           const s = slider(l);
           return (
-            <div key={l} className="flex items-center gap-2 rounded-lg bg-indigo-50 px-2 py-1 text-sm ring-1 ring-indigo-100">
+            <div key={l} className="flex items-center gap-2 rounded-lg bg-[#E2F3F2] px-2 py-1 text-sm ring-1 ring-[#A9D6D3]">
               <span className="w-16 shrink-0 font-mono font-bold">{l} = {fmtNumber(tidy(s.v))}</span>
               {host && <input type="number" value={s.min} step="any" aria-label={`Smallest ${l}`} onChange={(e) => setSlider(l, { ...s, min: Number(e.target.value) }, true)} className="w-12 rounded bg-white px-1 text-xs" />}
               <input type="range" min={s.min} max={s.max} step={s.step} value={s.v} disabled={!host} aria-label={`Slider ${l}`}
@@ -198,9 +198,9 @@ export function GraphPanel({ g, host, boxW, onChange }: { g: GraphState; host: b
           <button type="button" onClick={() => zoom(0.5)} className="min-h-[32px] rounded-lg bg-slate-100 px-2.5 hover:bg-slate-200">Zoom in</button>
           <button type="button" onClick={() => zoom(2)} className="min-h-[32px] rounded-lg bg-slate-100 px-2.5 hover:bg-slate-200">Zoom out</button>
           <button type="button" onClick={() => onChange({ ...g, xMin: -10, xMax: 10, yMin: -10, yMax: 10 }, true)} className="min-h-[32px] rounded-lg bg-slate-100 px-2.5 hover:bg-slate-200">Reset</button>
-          <button type="button" onClick={() => flip("keys")} aria-pressed={g.keys} className={`min-h-[32px] rounded-lg px-2.5 ${g.keys ? "bg-[#1657C9] text-white" : "bg-slate-100 hover:bg-slate-200"}`}>Key points</button>
-          <button type="button" onClick={() => flip("table")} aria-pressed={g.table} className={`min-h-[32px] rounded-lg px-2.5 ${g.table ? "bg-[#1657C9] text-white" : "bg-slate-100 hover:bg-slate-200"}`}>Table</button>
-          <button type="button" onClick={() => flip("big")} aria-pressed={g.big} className={`min-h-[32px] rounded-lg px-2.5 ${g.big ? "bg-[#1657C9] text-white" : "bg-slate-100 hover:bg-slate-200"}`}>{g.big ? "Smaller" : "Bigger"}</button>
+          <button type="button" onClick={() => flip("keys")} aria-pressed={g.keys} className={`min-h-[32px] rounded-lg px-2.5 ${g.keys ? "bg-[#0E6E72] text-white" : "bg-slate-100 hover:bg-slate-200"}`}>Key points</button>
+          <button type="button" onClick={() => flip("table")} aria-pressed={g.table} className={`min-h-[32px] rounded-lg px-2.5 ${g.table ? "bg-[#0E6E72] text-white" : "bg-slate-100 hover:bg-slate-200"}`}>Table</button>
+          <button type="button" onClick={() => flip("big")} aria-pressed={g.big} className={`min-h-[32px] rounded-lg px-2.5 ${g.big ? "bg-[#0E6E72] text-white" : "bg-slate-100 hover:bg-slate-200"}`}>{g.big ? "Smaller" : "Bigger"}</button>
           <span className="ml-auto text-ink/50">drag to move · x {fmtNumber(tidy(g.xMin))}…{fmtNumber(tidy(g.xMax))}</span>
         </div>
       )}
@@ -217,7 +217,7 @@ const KEYS: { k: string; ins?: string; tone?: "fn" | "op" | "eq" | "clr" }[][] =
   [{ k: "1" }, { k: "2" }, { k: "3" }, { k: "−", tone: "op" }, { k: "x²", ins: "^2", tone: "fn" }],
   [{ k: "0" }, { k: "." }, { k: "%", ins: "/100", tone: "fn" }, { k: "+", tone: "op" }, { k: "=", tone: "eq" }],
 ];
-const TONE = { fn: "bg-slate-100 text-ink", op: "bg-sky-100 text-sky-900", eq: "bg-[#1657C9] text-white", clr: "bg-red-50 text-red-700" } as const;
+const TONE = { fn: "bg-slate-100 text-ink", op: "bg-sky-100 text-sky-900", eq: "bg-[#0E6E72] text-white", clr: "bg-red-50 text-red-700" } as const;
 
 export function CalcPanel({ c, host, onChange }: { c: CalcState; host: boolean; onChange: (c: CalcState, final?: boolean) => void }) {
   const preview = c.expr ? evaluate(c.expr, c.deg) : null;
@@ -293,7 +293,7 @@ export function NumberLinePanel({ l, host, boxW, onChange }: { l: LineState; hos
         <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-200 p-2 text-xs font-bold">
           {NUMBER_LINES.map((r) => (
             <button key={r.label} type="button" onClick={() => onChange({ ...l, min: r.min, max: r.max, step: r.step, marks: [] }, true)}
-              className={`min-h-[32px] rounded-lg px-2.5 ${l.min === r.min && l.max === r.max && l.step === r.step ? "bg-[#1657C9] text-white" : "bg-slate-100 hover:bg-slate-200"}`}>{r.label}</button>
+              className={`min-h-[32px] rounded-lg px-2.5 ${l.min === r.min && l.max === r.max && l.step === r.step ? "bg-[#0E6E72] text-white" : "bg-slate-100 hover:bg-slate-200"}`}>{r.label}</button>
           ))}
           <span className="ml-auto text-ink/50">Tap the line to mark a number</span>
           {l.marks.length > 0 && <button type="button" onClick={() => onChange({ ...l, marks: [] }, true)} className="min-h-[32px] rounded-lg bg-red-50 px-2.5 text-red-700">Clear marks</button>}

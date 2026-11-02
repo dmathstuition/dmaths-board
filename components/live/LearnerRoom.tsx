@@ -68,14 +68,14 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
   return (
     <div className="space-y-3">
       {/* On a phone the quiz needs the whole screen, so the class card steps aside. */}
-      <div className={`card flex flex-wrap items-center gap-3 p-4 ${showQuiz ? "max-sm:hidden [@media(max-height:520px)]:hidden" : ""}`}>
+      <div className={`flex flex-wrap items-center gap-3 p-4 rounded-2xl bg-[#0E6E72] bg-[linear-gradient(rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(135deg,#0E6E72,#0A4F52)] bg-[length:28px_28px,28px_28px,100%_100%] text-white shadow-card ${showQuiz ? "max-sm:hidden [@media(max-height:520px)]:hidden" : ""}`}>
         <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[.18em] text-[#1657C9]">
-            {ended ? <span className="rounded-full bg-ink/10 px-2 py-0.5 text-ink/60">Ended</span> : <span className="flex items-center gap-1.5 rounded-full bg-red-500 px-2 py-0.5 text-white"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />Live</span>}
+          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[.18em] text-[#C6F35C]">
+            {ended ? <span className="rounded-full bg-white/15 px-2 py-0.5 text-white/80">Ended</span> : <span className="flex items-center gap-1.5 rounded-full bg-red-500 px-2 py-0.5 text-white"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />Live</span>}
             {s.subject ?? "Interactive class"}
           </p>
-          <h1 className="mt-1 truncate font-display text-xl font-black text-ink sm:text-2xl">{s.title}</h1>
-          <p className="text-sm text-ink/55">with {s.hostName} · {here} here</p>
+          <h1 className="mt-1 truncate font-display text-xl font-black text-white sm:text-2xl">{s.title}</h1>
+          <p className="text-sm text-white/70">with {s.hostName} · {here} here</p>
         </div>
         {!ended && (
           <button type="button" onClick={toggleHand} aria-pressed={handUp}
@@ -85,10 +85,10 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
         )}
         {!ended && (
           <button type="button" onClick={() => setMine((m) => !m)} aria-expanded={mine}
-            className="min-h-[40px] rounded-full bg-white px-4 text-sm font-black text-[#1657C9] ring-1 ring-[#BFD7FF] hover:ring-[#1657C9]">📊 {mine ? "Hide my results" : "My results"}</button>
+            className="min-h-[40px] rounded-full bg-white px-4 text-sm font-black text-[#0E6E72] ring-1 ring-[#A9D6D3] hover:ring-[#0E6E72]">📊 {mine ? "Hide my results" : "My results"}</button>
         )}
         {!ended && (
-          <span className={`rounded-full px-3 py-1.5 text-sm font-bold ${room.me.canWrite ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-300" : "bg-ink/5 text-ink/60"}`} role="status">
+          <span className={`rounded-full px-3 py-1.5 text-sm font-bold ${room.me.canWrite ? "bg-[#C6F35C] text-ink" : "bg-white/10 text-white/80"}`} role="status">
             {room.me.canWrite ? "✏️ You can write" : "👀 Watching"}
           </span>
         )}

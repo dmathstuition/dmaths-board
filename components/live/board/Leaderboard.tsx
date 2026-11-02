@@ -39,7 +39,7 @@ export default function Leaderboard({ sessionId, host, myName, open, onClose }: 
     if (!shown || hidden) return null;
     return (
       <div role="dialog" aria-label={shown.title} className="fixed inset-x-0 bottom-0 z-[97] mx-auto max-w-md p-3">
-        <div className="rounded-2xl bg-[#1E1B4B] p-4 text-white shadow-2xl ring-1 ring-white/10">
+        <div className="rounded-2xl bg-[#0A3B3E] p-4 text-white shadow-2xl ring-1 ring-white/10">
           <div className="flex items-center justify-between gap-2">
             <p className="text-lg font-black">🏆 {shown.title}</p>
             <button type="button" onClick={() => setHidden(true)} className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-black">Close</button>
@@ -53,7 +53,7 @@ export default function Leaderboard({ sessionId, host, myName, open, onClose }: 
   const toShow = list ? shownBoard(list, scope) : null;
   return (
     <div role="dialog" aria-modal="true" aria-label="Leaderboard" className="fixed inset-0 z-[96] flex items-center justify-center bg-black/60 p-3">
-      <div className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-[#1E1B4B] text-white shadow-2xl">
+      <div className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-[#0A3B3E] text-white shadow-2xl">
         <div className="flex flex-wrap items-center gap-2 border-b border-white/10 p-3">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10"><BoardIcon name="trophy" /></span>
           <div className="min-w-0 flex-1">
@@ -62,7 +62,7 @@ export default function Leaderboard({ sessionId, host, myName, open, onClose }: 
           </div>
           <div role="tablist" className="flex gap-1 rounded-xl bg-white/10 p-1">
             {([["class", "This class"], ["all", "All my classes"]] as const).map(([k, l]) => (
-              <button key={k} type="button" role="tab" aria-selected={scope === k} onClick={() => setScope(k)} className={`min-h-[36px] rounded-lg px-3 text-xs font-black ${scope === k ? "bg-white text-[#1E1B4B]" : "text-white/75"}`}>{l}</button>
+              <button key={k} type="button" role="tab" aria-selected={scope === k} onClick={() => setScope(k)} className={`min-h-[36px] rounded-lg px-3 text-xs font-black ${scope === k ? "bg-white text-[#0A3B3E]" : "text-white/75"}`}>{l}</button>
             ))}
           </div>
           <button type="button" onClick={onClose} aria-label="Close the leaderboard" className="flex h-9 w-9 items-center justify-center rounded-lg text-white/70 hover:bg-white/10"><BoardIcon name="close" /></button>
@@ -98,7 +98,7 @@ export default function Leaderboard({ sessionId, host, myName, open, onClose }: 
         <div className="flex flex-wrap gap-2 border-t border-white/10 p-3">
           {shown
             ? <button type="button" onClick={stop} className="min-h-[44px] rounded-xl bg-white/15 px-4 text-sm font-black">Stop showing</button>
-            : <button type="button" disabled={!toShow?.rows.length} onClick={() => toShow && setShown(toShow)} className="min-h-[44px] rounded-xl bg-amber-400 px-4 text-sm font-black text-[#1E1B4B] disabled:opacity-40">Show on everyone’s screen</button>}
+            : <button type="button" disabled={!toShow?.rows.length} onClick={() => toShow && setShown(toShow)} className="min-h-[44px] rounded-xl bg-amber-400 px-4 text-sm font-black text-[#0A3B3E] disabled:opacity-40">Show on everyone’s screen</button>}
           <button type="button" onClick={load} className="min-h-[44px] rounded-xl bg-white/10 px-4 text-sm font-black">Refresh</button>
         </div>
       </div>
@@ -112,7 +112,7 @@ function Rows({ rows, me }: { rows: Shown["rows"]; me: string }) {
       {rows.map((r, i) => {
         const mine = r.name.trim().toLowerCase() === me.trim().toLowerCase();
         return (
-          <li key={i} className={`flex items-center gap-2 rounded-xl px-3 py-1.5 ${mine ? "bg-amber-400 text-[#1E1B4B]" : "bg-white/5"}`}>
+          <li key={i} className={`flex items-center gap-2 rounded-xl px-3 py-1.5 ${mine ? "bg-amber-400 text-[#0A3B3E]" : "bg-white/5"}`}>
             <span className="w-6 text-center font-black">{MEDAL[i] ?? i + 1}</span>
             <span className="min-w-0 flex-1 truncate font-black">{r.name}{mine ? " (you)" : ""}</span>
             <span>{r.badges.join("")}</span>

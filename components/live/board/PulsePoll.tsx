@@ -148,7 +148,7 @@ export default function PulsePoll({ host, myId, myName, people, pollOpen, onPoll
           </div>
         )}
         {poll && !pollOpen && (
-          <button type="button" onClick={onPollOpen} className="fixed bottom-4 right-4 z-[95] flex items-center gap-2 rounded-full bg-[#1657C9] px-4 py-3 text-sm font-black text-white shadow-2xl">
+          <button type="button" onClick={onPollOpen} className="fixed bottom-4 right-4 z-[95] flex items-center gap-2 rounded-full bg-[#0E6E72] px-4 py-3 text-sm font-black text-white shadow-2xl">
             <BoardIcon name="poll" /> Poll ({t?.total ?? 0} voted)
           </button>
         )}
@@ -156,7 +156,7 @@ export default function PulsePoll({ host, myId, myName, people, pollOpen, onPoll
           <div role="dialog" aria-modal="true" aria-label="Quick poll" className="fixed inset-0 z-[96] flex items-center justify-center bg-black/60 p-3">
             <div className="flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white text-ink shadow-2xl">
               <div className="flex items-center gap-2 border-b border-line p-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#EEF6FF] text-[#1657C9]"><BoardIcon name="poll" /></span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#E2F3F2] text-[#0E6E72]"><BoardIcon name="poll" /></span>
                 <div className="min-w-0 flex-1">
                   <p className="text-base font-black">Quick poll</p>
                   {poll && t && <p className="text-xs font-bold text-ink/55">{t.total} of {online} voted</p>}
@@ -168,24 +168,24 @@ export default function PulsePoll({ host, myId, myName, people, pollOpen, onPoll
                 <div className="grid gap-3 overflow-y-auto p-4">
                   <label className="text-xs font-black text-ink/60">Question (optional)
                     <input value={q} maxLength={200} onChange={(e) => setQ(e.target.value)} placeholder="e.g. Is 0.5 the same as ½?"
-                      className="mt-1 w-full rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1657C9]" />
+                      className="mt-1 w-full rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0E6E72]" />
                   </label>
                   <fieldset className="grid gap-1.5">
                     <legend className="text-xs font-black text-ink/60">Choices</legend>
                     <div className="flex flex-wrap gap-2">
                       {[...POLL_PRESETS, { id: "custom", label: "My own…", options: [] }].map((p) => (
                         <button key={p.id} type="button" onClick={() => setPreset(p.id)} aria-pressed={preset === p.id}
-                          className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 transition ${preset === p.id ? "bg-[#1657C9] text-white ring-[#1657C9]" : "bg-white text-ink/70 ring-slate-200 hover:ring-[#BFD7FF]"}`}>{p.label}</button>
+                          className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 transition ${preset === p.id ? "bg-[#0E6E72] text-white ring-[#0E6E72]" : "bg-white text-ink/70 ring-slate-200 hover:ring-[#A9D6D3]"}`}>{p.label}</button>
                       ))}
                     </div>
                   </fieldset>
                   {preset === "custom" && (
                     <label className="text-xs font-black text-ink/60">Your choices — one per line (2 to 6)
                       <textarea value={custom} onChange={(e) => setCustom(e.target.value)} rows={4} placeholder={"Lagos\nAbuja\nKano"}
-                        className="mt-1 w-full rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1657C9]" />
+                        className="mt-1 w-full rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0E6E72]" />
                     </label>
                   )}
-                  <button type="button" onClick={startPoll} disabled={options.length < 2} className="justify-self-start rounded-xl bg-[#1657C9] px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">Ask the class</button>
+                  <button type="button" onClick={startPoll} disabled={options.length < 2} className="justify-self-start rounded-xl bg-[#0E6E72] px-5 py-2.5 text-sm font-black text-white disabled:opacity-40">Ask the class</button>
                 </div>
               ) : t && (
                 <div className="grid gap-3 overflow-y-auto p-4">
@@ -193,10 +193,10 @@ export default function PulsePoll({ host, myId, myName, people, pollOpen, onPoll
                   <PollBars options={poll.options} counts={t.counts} pct={t.pct} names={hideNames ? null : t.names} />
                   <div className="flex flex-wrap items-center gap-2">
                     <button type="button" onClick={() => setPoll({ ...poll, reveal: poll.reveal ? null : t.counts })}
-                      className="rounded-xl bg-[#1657C9] px-4 py-2 text-xs font-black text-white">{poll.reveal ? "Hide results from class" : "Show results to class"}</button>
+                      className="rounded-xl bg-[#0E6E72] px-4 py-2 text-xs font-black text-white">{poll.reveal ? "Hide results from class" : "Show results to class"}</button>
                     {poll.reveal && <button type="button" onClick={() => setPoll({ ...poll, reveal: t.counts })} className="rounded-xl bg-ink/5 px-3 py-2 text-xs font-black text-ink/70">Update class view</button>}
                     <label className="ml-auto flex items-center gap-2 text-xs font-black text-ink/70">
-                      <input type="checkbox" checked={hideNames} onChange={(e) => setHideNames(e.target.checked)} className="h-4 w-4 accent-[#1657C9]" /> Hide names
+                      <input type="checkbox" checked={hideNames} onChange={(e) => setHideNames(e.target.checked)} className="h-4 w-4 accent-[#0E6E72]" /> Hide names
                     </label>
                   </div>
                 </div>
@@ -218,14 +218,14 @@ export default function PulsePoll({ host, myId, myName, people, pollOpen, onPoll
           className={`min-h-[40px] rounded-full px-3 text-sm font-black transition ${myPulse === "lost" ? "bg-amber-400 text-ink" : "text-ink/70 hover:bg-amber-50"}`}>😕 <span className="max-sm:sr-only">I&apos;m lost</span></button>
       </div>
       {poll && (pollHidden ? (
-        <button type="button" onClick={() => setPollHidden(false)} className="fixed bottom-4 right-4 z-[95] flex items-center gap-2 rounded-full bg-[#1657C9] px-4 py-3 text-sm font-black text-white shadow-2xl">
+        <button type="button" onClick={() => setPollHidden(false)} className="fixed bottom-4 right-4 z-[95] flex items-center gap-2 rounded-full bg-[#0E6E72] px-4 py-3 text-sm font-black text-white shadow-2xl">
           <BoardIcon name="poll" /> Poll
         </button>
       ) : (
         <div role="dialog" aria-label="Quick poll" className="fixed inset-x-3 bottom-20 z-[95] mx-auto max-w-md rounded-2xl bg-white p-4 text-ink shadow-2xl ring-1 ring-line">
           <div className="mb-2 flex items-start justify-between gap-2">
             <div>
-              <p className="text-[11px] font-black uppercase tracking-wider text-[#1657C9]">Quick poll</p>
+              <p className="text-[11px] font-black uppercase tracking-wider text-[#0E6E72]">Quick poll</p>
               <p className="text-base font-black leading-snug">{poll.q || "Choose one"}</p>
             </div>
             <button type="button" onClick={() => setPollHidden(true)} className="rounded-lg bg-ink/5 px-2.5 py-1.5 text-xs font-black text-ink/70">Hide</button>
@@ -236,7 +236,7 @@ export default function PulsePoll({ host, myId, myName, people, pollOpen, onPoll
             <div className="grid gap-2">
               {poll.options.map((o, i) => (
                 <button key={i} type="button" onClick={() => vote(i)} aria-pressed={myVote === i}
-                  className={`min-h-[48px] rounded-xl px-4 text-left text-base font-black ring-2 transition ${myVote === i ? "bg-[#1657C9] text-white ring-[#1657C9]" : "bg-white text-ink ring-[#BFD7FF] hover:ring-[#1657C9]"}`}>{o}</button>
+                  className={`min-h-[48px] rounded-xl px-4 text-left text-base font-black ring-2 transition ${myVote === i ? "bg-[#0E6E72] text-white ring-[#0E6E72]" : "bg-white text-ink ring-[#A9D6D3] hover:ring-[#0E6E72]"}`}>{o}</button>
               ))}
               <p className="text-xs font-bold text-emerald-700" role="status">{myVote != null ? "✓ Sent — you can change it until the teacher ends the poll" : ""}</p>
             </div>
@@ -259,7 +259,7 @@ function PollBars({ options, counts, pct, names, mine = null }: { options: strin
             <span className="tabular-nums text-ink/60">{counts[i] ?? 0} · {pct[i] ?? 0}%</span>
           </div>
           <div className="mt-1 h-3 overflow-hidden rounded-full bg-ink/5">
-            <div className="h-full rounded-full bg-[#1657C9] transition-[width] duration-300" style={{ width: `${pct[i] ?? 0}%` }} />
+            <div className="h-full rounded-full bg-[#0E6E72] transition-[width] duration-300" style={{ width: `${pct[i] ?? 0}%` }} />
           </div>
           {names && names[i]?.length > 0 && <p className="mt-0.5 text-xs font-semibold text-ink/55">{names[i].join(", ")}</p>}
         </li>

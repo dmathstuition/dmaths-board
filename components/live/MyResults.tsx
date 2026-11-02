@@ -23,7 +23,7 @@ export default function MyResults({ sessionId, ended }: { sessionId: string; end
     <section aria-label="My results" className="card p-4 sm:p-5">
       <div className="flex flex-wrap items-start gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-black uppercase tracking-[.18em] text-[#1657C9]">{ended ? "Class finished" : "So far"}</p>
+          <p className="text-xs font-black uppercase tracking-[.18em] text-[#0E6E72]">{ended ? "Class finished" : "So far"}</p>
           <h2 className="font-display text-2xl font-black text-ink">My results</h2>
         </div>
         <button type="button" onClick={load} className="min-h-[40px] rounded-xl bg-ink/5 px-3 text-xs font-black text-ink/70 hover:bg-ink/10">Refresh</button>
@@ -31,7 +31,7 @@ export default function MyResults({ sessionId, ended }: { sessionId: string; end
       {err && <p role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{err}</p>}
       {!d && !err && <div className="mt-3 h-40 animate-pulse rounded-xl bg-slate-100" />}
       {stars && (
-        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-[#1E1B4B] p-3 text-white" aria-label="My stars">
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-[#0A3B3E] p-3 text-white" aria-label="My stars">
           <span className="text-3xl font-black text-amber-300">⭐ {stars.stars}</span>
           <span className="min-w-0 flex-1 text-xs font-bold text-white/75">{stars.classStars} this class · #{stars.rank} of {stars.of} in your teacher’s classes</span>
           <span className="flex flex-wrap gap-1">{stars.badges.map((b) => <span key={b.id} title={b.label} className="rounded-full bg-white/10 px-2 py-1 text-xs font-black">{b.icon} {b.label.split(" — ")[0]}</span>)}</span>
@@ -41,7 +41,7 @@ export default function MyResults({ sessionId, ended }: { sessionId: string; end
       {d && full && (
         <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
           <p className="min-w-0 flex-1 text-xs font-bold text-ink/65">Keep your results: this link opens them any time — share it with a parent too.</p>
-          <a href={full} target="_blank" rel="noreferrer" className="min-h-[40px] rounded-xl bg-[#1657C9] px-3 py-2.5 text-xs font-black text-white">Open my report</a>
+          <a href={full} target="_blank" rel="noreferrer" className="min-h-[40px] rounded-xl bg-[#0E6E72] px-3 py-2.5 text-xs font-black text-white">Open my report</a>
           <button type="button" onClick={() => navigator.clipboard?.writeText(full).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); }).catch(() => {})}
             className="min-h-[40px] rounded-xl bg-white px-3 text-xs font-black text-ink/75 ring-1 ring-slate-200">{copied ? "Copied ✓" : "Copy link"}</button>
           <a href={`https://wa.me/?text=${encodeURIComponent(`My class results: ${full}`)}`} target="_blank" rel="noreferrer" className="min-h-[40px] rounded-xl bg-[#25D366] px-3 py-2.5 text-xs font-black text-white">WhatsApp</a>

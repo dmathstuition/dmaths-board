@@ -10,7 +10,7 @@ export const metadata = { title: "Class", robots: { index: false } };
 export default function BoardClassPage({ params }: { params: { id: string } }) {
   if (!/^[0-9a-f-]{36}$/i.test(params.id)) notFound();
   return (
-    <div className="min-h-dvh bg-[#F4F9FF]">
+    <div className="min-h-dvh bg-[#F4F8F8]">
       <header className="border-b border-line bg-white [@media(max-height:520px)]:hidden">
         <div className="mx-auto flex max-w-7xl items-center px-3 py-2"><BoardBrand href="/join" /></div>
       </header>

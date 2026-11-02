@@ -54,7 +54,7 @@ function Person({ t, large = false }: { t: Tile; large?: boolean }) {
     <div className={`relative h-full min-h-0 overflow-hidden rounded-xl bg-[#1E293B] ring-2 transition ${t.talking && !t.muted ? "ring-emerald-400" : "ring-transparent"}`} aria-label={`${t.name}${t.me ? " (you)" : ""}${t.muted ? ", muted" : ""}${t.talking && !t.muted ? ", talking" : ""}`}>
       {t.stream ? <Frame name={t.name} stream={t.stream} mirror={t.me} /> : (
         <div className="flex h-full items-center justify-center">
-          <span className={`flex items-center justify-center rounded-full bg-[#1657C9] font-black ${large ? "h-28 w-28 text-4xl" : "h-12 w-12 text-lg"}`} aria-hidden>{initials(t.name)}</span>
+          <span className={`flex items-center justify-center rounded-full bg-[#0E6E72] font-black ${large ? "h-28 w-28 text-4xl" : "h-12 w-12 text-lg"}`} aria-hidden>{initials(t.name)}</span>
         </div>
       )}
       <span className="absolute bottom-1 left-1 flex max-w-[90%] items-center gap-1 truncate rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-bold">

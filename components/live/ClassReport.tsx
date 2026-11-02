@@ -126,7 +126,7 @@ export default function ClassReport({ sessionId, people, title, teacher, date, b
                 <div className="flex flex-wrap gap-1.5">
                   {c?.kind === "email" && (
                     <button type="button" disabled={!ready || st === "sending" || st === "sent"} onClick={() => email(row.id)}
-                      className="min-h-[40px] rounded-lg bg-[#1657C9] px-3 text-xs font-black text-white disabled:opacity-50">{st === "sent" ? "Emailed ✓" : st === "sending" ? "Sending…" : st === "failed" ? "Try again" : "Email"}</button>
+                      className="min-h-[40px] rounded-lg bg-[#0E6E72] px-3 text-xs font-black text-white disabled:opacity-50">{st === "sent" ? "Emailed ✓" : st === "sending" ? "Sending…" : st === "failed" ? "Try again" : "Email"}</button>
                   )}
                   {wa ? <a href={wa} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-[40px] items-center rounded-lg bg-[#25D366] px-3 text-xs font-black text-white">WhatsApp</a>
                     : <span className="inline-flex min-h-[40px] items-center rounded-lg bg-[#25D366]/40 px-3 text-xs font-black text-white" aria-disabled>WhatsApp</span>}

@@ -16,8 +16,8 @@ import {
 
 type P<T> = { s: T; host: boolean; boxW: number; onChange: (s: T, final?: boolean) => void };
 const chip = "min-h-[32px] rounded-lg bg-slate-100 px-2.5 text-xs font-black text-ink hover:bg-slate-200 disabled:opacity-40";
-const primary = "min-h-[32px] rounded-lg bg-[#1657C9] px-3 text-xs font-black text-white hover:bg-[#1249a8] disabled:opacity-40";
-const field = "min-h-[34px] w-full rounded-lg bg-slate-50 px-2.5 text-sm font-semibold text-ink ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1657C9]";
+const primary = "min-h-[32px] rounded-lg bg-[#0E6E72] px-3 text-xs font-black text-white hover:bg-[#0A4F52] disabled:opacity-40";
+const field = "min-h-[34px] w-full rounded-lg bg-slate-50 px-2.5 text-sm font-semibold text-ink ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0E6E72]";
 
 // ── Clock ────────────────────────────────────────────────────────────────
 export function ClockPanel({ s, host, onChange }: P<ClockState>) {
@@ -39,7 +39,7 @@ export function ClockPanel({ s, host, onChange }: P<ClockState>) {
             return <text key={n} x={100 + 66 * Math.sin(a)} y={100 - 66 * Math.cos(a) + 6} textAnchor="middle" fontSize="17" fontWeight="800" fill="#0B1220" fontFamily="Poppins, system-ui">{n}</text>;
           })}
           <line x1="100" y1="100" x2={hh.x} y2={hh.y} stroke="#0B1220" strokeWidth="7" strokeLinecap="round" />
-          <line x1="100" y1="100" x2={mh.x} y2={mh.y} stroke="#1657C9" strokeWidth="4.5" strokeLinecap="round" />
+          <line x1="100" y1="100" x2={mh.x} y2={mh.y} stroke="#0E6E72" strokeWidth="4.5" strokeLinecap="round" />
           <circle cx="100" cy="100" r="6" fill="#DC2626" />
         </svg>
         <div className="mt-2 min-h-[44px] text-center" aria-live="polite">
@@ -70,7 +70,7 @@ export function ClockPanel({ s, host, onChange }: P<ClockState>) {
 }
 
 // ── Fraction wall ────────────────────────────────────────────────────────
-const BAR_COLORS = ["#1657C9", "#DC2626", "#16A34A", "#D97706", "#7C3AED"];
+const BAR_COLORS = ["#0E6E72", "#DC2626", "#16A34A", "#D97706", "#7C3AED"];
 export function FractionPanel({ s, host, boxW, onChange }: P<FractionState>) {
   const width = Math.max(320, Math.min(560, boxW * 0.5));
   const setBar = (i: number, d: number, on: number[]) => onChange({ ...s, bars: s.bars.map((b, j) => (j === i ? { d, on } : b)) }, true);
@@ -125,7 +125,7 @@ export function HundredPanel({ s, host, boxW, onChange }: P<HundredState>) {
             const n = i + 1, on = s.marks.includes(n);
             return (
               <button key={n} type="button" disabled={!host} onClick={() => toggle(n)} aria-pressed={on}
-                className={`aspect-square rounded-[3px] text-[11px] font-black tabular-nums disabled:cursor-default ${on ? "bg-[#1657C9] text-white" : n % 10 === 0 ? "bg-sky-50 text-ink" : "bg-white text-ink"}`}>{n}</button>
+                className={`aspect-square rounded-[3px] text-[11px] font-black tabular-nums disabled:cursor-default ${on ? "bg-[#0E6E72] text-white" : n % 10 === 0 ? "bg-sky-50 text-ink" : "bg-white text-ink"}`}>{n}</button>
             );
           })}
         </div>
@@ -143,7 +143,7 @@ export function HundredPanel({ s, host, boxW, onChange }: P<HundredState>) {
 }
 
 // ── Place value chart ────────────────────────────────────────────────────
-const PV_COLORS = ["#7C3AED", "#DB2777", "#DC2626", "#D97706", "#16A34A", "#0EA5E9", "#1657C9"];
+const PV_COLORS = ["#7C3AED", "#DB2777", "#DC2626", "#D97706", "#16A34A", "#0EA5E9", "#0E6E72"];
 export function PlaceValuePanel({ s, host, boxW, onChange }: P<PlaceState>) {
   const width = Math.max(340, Math.min(620, boxW * 0.6));
   const n = placeValue(s.digits);
@@ -183,10 +183,10 @@ export function WordCardPanel({ s, host, onChange }: P<WordCardState>) {
   return (
     <Floating p={s} host={host} title="Word card" icon="wordcard" width={330} onChange={onChange}>
       <div className="p-3">
-        <div className="rounded-xl bg-gradient-to-br from-[#EEF6FF] to-white p-3 ring-1 ring-[#BFD7FF]">
+        <div className="rounded-xl bg-gradient-to-br from-[#E2F3F2] to-white p-3 ring-1 ring-[#A9D6D3]">
           <div className="flex items-start justify-between gap-2">
             <p className="break-words text-3xl font-black text-[#0B1220]">{s.word || <span className="text-ink/30">Word</span>}</p>
-            <span className="shrink-0 rounded-full bg-[#1657C9] px-2 py-0.5 text-[11px] font-black italic text-white">{s.kind}</span>
+            <span className="shrink-0 rounded-full bg-[#0E6E72] px-2 py-0.5 text-[11px] font-black italic text-white">{s.kind}</span>
           </div>
           {s.reveal || host ? (
             <>
@@ -235,13 +235,13 @@ export function SentencePanel({ s, host, boxW, onChange }: P<SentenceState>) {
             <div className={`flex min-h-[52px] flex-wrap items-center gap-1.5 rounded-xl border-2 border-dashed p-2 ${s.checked ? (right ? "border-emerald-500 bg-emerald-50" : "border-red-400 bg-red-50") : "border-slate-300 bg-slate-50"}`}>
               {s.built.length ? s.built.map((i, k) => (
                 <button key={k} type="button" disabled={!host} onClick={() => onChange({ ...s, built: s.built.filter((_, j) => j !== k), checked: false }, true)}
-                  className={`${tile} bg-[#1657C9] text-white ring-[#1657C9]`}>{s.words[i]}</button>
+                  className={`${tile} bg-[#0E6E72] text-white ring-[#0E6E72]`}>{s.words[i]}</button>
               )) : <span className="px-1 text-sm font-bold text-ink/40">Tap the words in the right order…</span>}
             </div>
             <div className="flex min-h-[44px] flex-wrap gap-1.5">
               {pool.map((i) => (
                 <button key={i} type="button" disabled={!host} onClick={() => onChange({ ...s, built: [...s.built, i], checked: false }, true)}
-                  className={`${tile} bg-white text-ink ring-slate-300 hover:ring-[#1657C9]`}>{s.words[i]}</button>
+                  className={`${tile} bg-white text-ink ring-slate-300 hover:ring-[#0E6E72]`}>{s.words[i]}</button>
               ))}
             </div>
             {s.checked && <p className={`text-sm font-black ${right ? "text-emerald-700" : "text-red-600"}`} aria-live="polite">{right ? "✓ Well done — that's right!" : "Not yet — try again."}</p>}
@@ -289,7 +289,7 @@ export function SpellPanel({ s, host, boxW, onChange }: P<SpellState>) {
           <>
             <div className="flex flex-wrap justify-center gap-1.5" aria-label="The word so far">
               {shown.map((ch, i) => /[A-Z]/.test(s.word[i]) ? (
-                <span key={i} className={`flex h-12 w-10 items-end justify-center border-b-4 pb-1 font-mono text-3xl font-black ${ch ? (done || s.reveal ? "border-emerald-500 text-emerald-700" : "border-[#1657C9] text-ink") : "border-slate-400"}`}>{ch}</span>
+                <span key={i} className={`flex h-12 w-10 items-end justify-center border-b-4 pb-1 font-mono text-3xl font-black ${ch ? (done || s.reveal ? "border-emerald-500 text-emerald-700" : "border-[#0E6E72] text-ink") : "border-slate-400"}`}>{ch}</span>
               ) : <span key={i} className="w-4" aria-hidden>{s.word[i] === " " ? "" : s.word[i]}</span>)}
             </div>
             <p className="text-center text-sm font-bold" aria-live="polite">
@@ -328,7 +328,7 @@ export function SpellPanel({ s, host, boxW, onChange }: P<SpellState>) {
 }
 
 // ── Group maker ──────────────────────────────────────────────────────────
-const GROUP_COLORS = ["#1657C9", "#DC2626", "#16A34A", "#D97706", "#7C3AED", "#DB2777", "#0EA5E9", "#65A30D", "#EA580C", "#4F46E5", "#0D9488", "#BE123C"];
+const GROUP_COLORS = ["#0E6E72", "#DC2626", "#16A34A", "#D97706", "#7C3AED", "#DB2777", "#0EA5E9", "#65A30D", "#EA580C", "#4F46E5", "#0D9488", "#BE123C"];
 export function GroupsPanel({ s, host, boxW, names, onChange }: P<GroupsState> & { names: string[] }) {
   const width = Math.max(320, Math.min(640, boxW * 0.6));
   const make = () => onChange({ ...s, groups: makeGroups(names, s.size) }, true);

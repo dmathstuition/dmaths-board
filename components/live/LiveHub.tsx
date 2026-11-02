@@ -74,7 +74,7 @@ export default function LiveHub({ base, classes }: { base: HostBase; classes: Cl
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <form onSubmit={start} className="card space-y-4 p-5 sm:p-6">
           <div>
-            <p className="text-xs font-black uppercase tracking-[.18em] text-[#1657C9]">Start an interactive class</p>
+            <p className="text-xs font-black uppercase tracking-[.18em] text-[#0E6E72]">Start an interactive class</p>
             <p className="mt-1 text-sm text-ink/60">{board ? "You get a board and live quizzes here. Share your screen in your usual call (or project it in class), then give students the PIN — they join on their phones with just their name." : "You get a board and live quizzes here. Share your screen in your usual call, then send learners the PIN or link — they join from their portal."}</p>
           </div>
           <label className="block text-sm font-bold text-ink/80">Title
@@ -88,13 +88,13 @@ export default function LiveHub({ base, classes }: { base: HostBase; classes: Cl
           </label>}
           {classId && (
             <label className="flex items-center gap-2 text-sm text-ink/75">
-              <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="h-4 w-4 accent-[#1657C9]" />
+              <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="h-4 w-4 accent-[#0E6E72]" />
               Notify the class with the PIN and link
             </label>
           )}
           {err && <p className="text-sm font-semibold text-red-600" role="alert">{err}</p>}
           <button type="submit" disabled={busy} className="btn-gold w-full !min-h-[52px] text-base">{busy ? "Starting…" : "▶ Start interactive class"}</button>
-          <p className="text-center text-xs text-ink/55">Before class: <Link href="/check" className="font-bold text-[#1657C9] underline">check my class</Link> — tests the live board, PDFs and uploads on this device.</p>
+          <p className="text-center text-xs text-ink/55">Before class: <Link href="/check" className="font-bold text-[#0E6E72] underline">check my class</Link> — tests the live board, PDFs and uploads on this device.</p>
         </form>
 
         <div className="quiz-stage rounded-[1.75rem] p-6 text-white">
@@ -134,7 +134,7 @@ export default function LiveHub({ base, classes }: { base: HostBase; classes: Cl
                   <p className="truncate font-semibold text-ink">{r.title}</p>
                   <p className="text-xs text-ink/55">{when(r.createdAt)}{r.subject ? ` · ${r.subject}` : ""}</p>
                 </div>
-                <Link href={`${base}/live/${r.id}`} className="text-sm font-bold text-[#1657C9] hover:underline">View board</Link>
+                <Link href={`${base}/live/${r.id}`} className="text-sm font-bold text-[#0E6E72] hover:underline">View board</Link>
                 {r.mine && (
                   <button type="button" onClick={() => reopen(r)} disabled={reopening === r.id} aria-label={`Continue ${r.title}`}
                     className="min-h-[36px] rounded-lg px-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">{reopening === r.id ? "Opening…" : "Continue class"}</button>

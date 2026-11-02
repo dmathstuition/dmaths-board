@@ -63,7 +63,7 @@ const MAIN_TOOLS: (Tool | "shapes")[] = ["select", "pen", "hl", "eraser", "shape
 const STAMP_LOOK: Record<StampId, { label: string; bg: string; icon: BoardIconName }> = {
   tick: { label: "Tick", bg: "#16A34A", icon: "tick" }, cross: { label: "Cross", bg: "#DC2626", icon: "close" },
   star: { label: "Star", bg: "#EAB308", icon: "stamp" }, heart: { label: "Heart", bg: "#EC4899", icon: "heart" },
-  smiley: { label: "Smiley", bg: "#F59E0B", icon: "smiley" }, question: { label: "Question", bg: "#1657C9", icon: "question" },
+  smiley: { label: "Smiley", bg: "#F59E0B", icon: "smiley" }, question: { label: "Question", bg: "#0E6E72", icon: "question" },
 };
 type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "graph" | "calc" | "numberLine"
   | "clock" | "fractions" | "hundred" | "placeValue" | "wordCard" | "sentence" | "spell" | "groups" | "spotlight";
@@ -742,7 +742,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
     const kind: ItemKind = tool === "eraser" ? "pen" : (tool as ItemKind);
     liveSent.current = 0;
     drawing.current = { id: newId(), by: myId, color: tool === "hl" && color === "#0B1220" ? "#FACC15" : color, w: size, erase: tool === "eraser", pts: isBoxTool(tool) ? [x, y, x, y] : [x, y], ...(kind !== "pen" ? { kind } : {}), ...((fill && FILLABLE.includes(tool as ItemKind)) || tool === "cover" ? { fill: true } : {}), t: Date.now() };
-    if (tool === "cover" && /^#(f|e)/i.test(color)) drawing.current.color = "#1657C9"; // a light colour wouldn't hide anything
+    if (tool === "cover" && /^#(f|e)/i.test(color)) drawing.current.color = "#0E6E72"; // a light colour wouldn't hide anything
     redraw();
   }
   function move(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -1221,7 +1221,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
 
   const btn = "flex h-10 min-w-[40px] shrink-0 items-center justify-center gap-1 rounded-xl px-2 text-sm font-bold transition";
   const idle = full ? "bg-white/10 text-white hover:bg-white/20" : "bg-ink/5 text-ink/75 hover:bg-ink/10";
-  const on = "bg-[#1657C9] text-white";
+  const on = "bg-[#0E6E72] text-white";
   const sep = <span className={full ? "my-0.5 h-px w-full bg-white/15" : "mx-0.5 h-7 w-px bg-line"} aria-hidden />;
   const names = people.filter((p) => p.online !== false).map((p) => p.name);
   const cursor = tool === "hand" || (!drawOk && !isHome(view)) ? "cursor-grab" : !drawOk ? "" : tool === "text" || tool === "math" ? "cursor-text" : tool === "laser" || tool === "stamp" ? "cursor-pointer" : tool === "select" ? "cursor-default" : "cursor-crosshair";
@@ -1230,7 +1230,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const editStyle: CSSProperties | undefined = edit ? {
     left: `${edX * 100}%`, top: `${edY * 100}%`,
     ...(edit.kind === "note"
-      ? { width: (NOTE_W * box.w * view.z) / BOARD_W, height: (NOTE_H * box.h * view.z) / BOARD_H, background: noteColor, color: "#1E1B4B", fontSize: (22 * box.w * view.z) / BOARD_W }
+      ? { width: (NOTE_W * box.w * view.z) / BOARD_W, height: (NOTE_H * box.h * view.z) / BOARD_H, background: noteColor, color: "#0A3B3E", fontSize: (22 * box.w * view.z) / BOARD_W }
       : { minWidth: 180, maxWidth: `${Math.max(0.2, 1 - edX) * 100}%`, color, fontSize: (fontFor(size) * box.w * view.z) / BOARD_W }),
   } : undefined;
   const swatch = full ? "h-7 w-7" : "h-8 w-8";
@@ -1251,8 +1251,8 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
               const act = isOn(i.k);
               return (
                 <button key={i.k} type="button" onClick={() => openTool(i.k)} aria-pressed={act} title={i.hint}
-                  className={`relative flex min-h-[70px] flex-col items-center justify-center gap-1 rounded-xl p-2 text-center text-[11px] font-bold leading-tight ring-1 transition ${act ? "bg-[#EEF6FF] text-[#1657C9] ring-[#1657C9]" : "bg-white text-ink/80 ring-line hover:bg-[#F5F9FF] hover:ring-[#BFD7FF]"}`}>
-                  <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${act ? "bg-[#1657C9] text-white" : "bg-[#EEF6FF] text-[#1657C9]"}`}><BoardIcon name={i.icon} /></span>
+                  className={`relative flex min-h-[70px] flex-col items-center justify-center gap-1 rounded-xl p-2 text-center text-[11px] font-bold leading-tight ring-1 transition ${act ? "bg-[#E2F3F2] text-[#0E6E72] ring-[#0E6E72]" : "bg-white text-ink/80 ring-line hover:bg-[#F1F8F7] hover:ring-[#A9D6D3]"}`}>
+                  <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${act ? "bg-[#0E6E72] text-white" : "bg-[#E2F3F2] text-[#0E6E72]"}`}><BoardIcon name={i.icon} /></span>
                   {i.label}
                   {act && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-500" aria-hidden />}
                 </button>
@@ -1285,7 +1285,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
               const t = TOOLS.find((x) => x.id === id)!;
               return (
                 <button key={id} type="button" onClick={() => { setShape(id); setTool(id); }} aria-pressed={tool === id} title={`${t.label} (${t.key.toUpperCase()})`} aria-label={t.label}
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${tool === id ? "bg-[#38BDF8] text-[#0B1220]" : full ? "bg-white/5 text-white/80 hover:bg-white/15" : "bg-ink/5 text-ink/70 hover:bg-ink/10"}`}>
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${tool === id ? "bg-[#14B8A6] text-[#0B1220]" : full ? "bg-white/5 text-white/80 hover:bg-white/15" : "bg-ink/5 text-ink/70 hover:bg-ink/10"}`}>
                   <BoardIcon name={t.icon} className="h-4 w-4" />
                 </button>
               );
@@ -1299,7 +1299,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
           <div className={full ? "grid grid-cols-2 gap-1" : "flex flex-wrap items-center gap-1"} role="group" aria-label="Stamps">
             {STAMPS.map((id) => (
               <button key={id} type="button" onClick={() => setStamp(id)} aria-pressed={stamp === id} title={STAMP_LOOK[id].label} aria-label={`${STAMP_LOOK[id].label} stamp`}
-                className={`${swatch} flex items-center justify-center rounded-full text-white ring-2 ring-offset-1 ${full ? "ring-offset-[#0B1220]" : ""} ${stamp === id ? "ring-[#38BDF8]" : "ring-transparent"}`} style={{ background: STAMP_LOOK[id].bg }}>
+                className={`${swatch} flex items-center justify-center rounded-full text-white ring-2 ring-offset-1 ${full ? "ring-offset-[#0B1220]" : ""} ${stamp === id ? "ring-[#14B8A6]" : "ring-transparent"}`} style={{ background: STAMP_LOOK[id].bg }}>
                 <BoardIcon name={STAMP_LOOK[id].icon} className="h-4 w-4" />
               </button>
             ))}
@@ -1310,12 +1310,12 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
       <div className={`${full ? "grid grid-cols-2 gap-1" : "flex flex-wrap items-center gap-1"} ${tool === "stamp" || tool === "select" ? "hidden" : ""}`}>
         {tool === "note" ? NOTE_COLORS.map((c) => (
           <button key={c} type="button" onClick={() => setNoteColor(c)} aria-label={`Note colour ${c}`} aria-pressed={noteColor === c}
-            className={`${swatch} rounded-md ring-2 ring-offset-1 ${noteColor === c ? "ring-[#1657C9]" : "ring-transparent"}`} style={{ background: c }} />
+            className={`${swatch} rounded-md ring-2 ring-offset-1 ${noteColor === c ? "ring-[#0E6E72]" : "ring-transparent"}`} style={{ background: c }} />
         )) : (
           <>
             {COLORS.map((c) => (
               <button key={c} type="button" onClick={() => { setColor(c); if (tool === "eraser" || tool === "laser") setTool("pen"); }} aria-label={`Colour ${c}`} aria-pressed={color === c}
-                className={`${swatch} rounded-full ring-2 ring-offset-1 ${full ? "ring-offset-[#0B1220]" : ""} ${color === c ? "ring-[#38BDF8]" : "ring-transparent"} ${c === "#FFFFFF" ? "border border-slate-300" : ""}`} style={{ background: c }} />
+                className={`${swatch} rounded-full ring-2 ring-offset-1 ${full ? "ring-offset-[#0B1220]" : ""} ${color === c ? "ring-[#14B8A6]" : "ring-transparent"} ${c === "#FFFFFF" ? "border border-slate-300" : ""}`} style={{ background: c }} />
             ))}
             <label className={`relative ${swatch} cursor-pointer overflow-hidden rounded-full ring-1 ring-line`} title="Any colour" style={{ background: "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)" }}>
               <span className="sr-only">Pick any colour</span>
@@ -1429,7 +1429,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
           )}
           <div className={full ? "" : "relative"}>
             <button type="button" onClick={() => setToolsOpen((v) => !v)} aria-expanded={toolsOpen} title="Class tools" aria-label="Class tools" className={`${btn} ${toolsOpen ? on : idle}`}>
-              <BoardIcon name="toolbox" />{full ? "" : "Class tools"}{activeTools > 0 && <span className="ml-0.5 rounded-full bg-[#38BDF8] px-1.5 text-[10px] font-black text-[#0B1220]">{activeTools}</span>}
+              <BoardIcon name="toolbox" />{full ? "" : "Class tools"}{activeTools > 0 && <span className="ml-0.5 rounded-full bg-[#14B8A6] px-1.5 text-[10px] font-black text-[#0B1220]">{activeTools}</span>}
             </button>
             {toolsOpen && !full && toolsPanel}
           </div>
@@ -1493,9 +1493,9 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {Array.from({ length: pageCount }, (_, i) => (
             <button key={i} type="button" onClick={() => { goPage(i); setOverview(false); }} aria-label={`Go to page ${i + 1}`}
-              className={`group relative overflow-hidden rounded-xl text-left ring-2 transition ${i === page ? "ring-[#1657C9]" : "ring-line hover:ring-[#BFD7FF]"}`}>
+              className={`group relative overflow-hidden rounded-xl text-left ring-2 transition ${i === page ? "ring-[#0E6E72]" : "ring-line hover:ring-[#A9D6D3]"}`}>
               <PageThumb items={pages.current[i] ?? []} bg={bgs[i] ?? null} paper={papers[i] ?? "plain"} img={getImg} />
-              <span className={`absolute left-1.5 top-1.5 rounded-md px-1.5 text-xs font-black ${i === page ? "bg-[#1657C9] text-white" : "bg-white/90 text-ink"}`}>{i + 1}</span>
+              <span className={`absolute left-1.5 top-1.5 rounded-md px-1.5 text-xs font-black ${i === page ? "bg-[#0E6E72] text-white" : "bg-white/90 text-ink"}`}>{i + 1}</span>
             </button>
           ))}
         </div>
@@ -1566,7 +1566,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
           <textarea ref={editRef} autoFocus value={edit.value} onChange={(e) => setEdit({ ...edit, value: e.target.value })} onBlur={finishEdit}
             onKeyDown={(e) => { if (e.key === "Escape") setEdit(null); if (e.key === "Enter" && (e.ctrlKey || e.metaKey || edit.kind === "text") && !e.shiftKey) { e.preventDefault(); finishEdit(); } }}
             placeholder={edit.kind === "note" ? "Write a note…" : "Type, then press Enter"} aria-label={edit.kind === "note" ? "Sticky note text" : "Text on the board"}
-            className={`absolute z-40 resize-none p-2 font-semibold leading-tight outline-none ${edit.kind === "note" ? "rounded shadow-xl" : `rounded-lg bg-transparent ring-2 ring-[#38BDF8] ${dark ? "placeholder:text-white/40" : ""}`}`}
+            className={`absolute z-40 resize-none p-2 font-semibold leading-tight outline-none ${edit.kind === "note" ? "rounded shadow-xl" : `rounded-lg bg-transparent ring-2 ring-[#14B8A6] ${dark ? "placeholder:text-white/40" : ""}`}`}
             style={editStyle} rows={edit.kind === "note" ? 5 : 2} />
         </>)}
       </div>

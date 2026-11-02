@@ -238,10 +238,10 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
     <span className="inline-flex flex-wrap items-center gap-1">
       {!mine ? (
         <>
-          <button type="button" onClick={start} disabled={busy} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line hover:ring-[#1657C9]"}`} title="Talk to the class from the board">
+          <button type="button" onClick={start} disabled={busy} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line hover:ring-[#0E6E72]"}`} title="Talk to the class from the board">
             <span aria-hidden>🎙</span>{busy ? "Starting…" : full ? "" : "Start voice"}
           </button>
-          <button type="button" onClick={startCall} disabled={busy} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line hover:ring-[#1657C9]"}`} title="A video call with the class — everyone can switch on their camera and microphone">
+          <button type="button" onClick={startCall} disabled={busy} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line hover:ring-[#0E6E72]"}`} title="A video call with the class — everyone can switch on their camera and microphone">
             <span aria-hidden>📹</span>{full ? "" : "Video call"}
           </button>
         </>
@@ -250,7 +250,7 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
           <button type="button" onClick={mute} aria-pressed={get().muted} className={`${btnBase} ${get().muted ? "bg-amber-400 text-ink" : "bg-red-500 text-white"}`} title={get().muted ? "Unmute" : "Mute"} aria-label={get().muted ? "Unmute my microphone" : "Mute my microphone"}>
             {get().muted ? <><span aria-hidden>🔇</span>{full ? "" : "Muted"}</> : <><span aria-hidden className="h-2 w-2 animate-pulse rounded-full bg-white" />{full ? "" : "On air"}</>}
           </button>
-          <button type="button" onClick={camera} aria-pressed={!!mine.v} className={`${btnBase} ${mine.v ? "bg-[#1657C9] text-white" : full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line"}`} aria-label={mine.v ? "Turn my camera off" : "Turn my camera on"}>
+          <button type="button" onClick={camera} aria-pressed={!!mine.v} className={`${btnBase} ${mine.v ? "bg-[#0E6E72] text-white" : full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line"}`} aria-label={mine.v ? "Turn my camera off" : "Turn my camera on"}>
             <span aria-hidden>📷</span>{full ? "" : mine.v ? "Camera on" : "Camera"}
           </button>
           {call ? (
@@ -435,7 +435,7 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
         </button>
       )}
       {teacherOn && !listening && !call && (
-        <button type="button" onClick={listen} className={`${btnBase} animate-pulse bg-[#1657C9] text-white`} aria-label="Listen to the class">
+        <button type="button" onClick={listen} className={`${btnBase} animate-pulse bg-[#0E6E72] text-white`} aria-label="Listen to the class">
           <span aria-hidden>🔊</span>{full ? "Listen" : "Tap to listen"}
         </button>
       )}
@@ -450,13 +450,13 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
         </span>
       )}
       {teacherOn && listening && hasVideo && !inCall && (
-        <button type="button" onClick={() => setWatch((w) => !w)} aria-pressed={watch} className={`${btnBase} ${watch ? "bg-[#1657C9] text-white" : full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line"}`}
+        <button type="button" onClick={() => setWatch((w) => !w)} aria-pressed={watch} className={`${btnBase} ${watch ? "bg-[#0E6E72] text-white" : full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line"}`}
           aria-label={watch ? "Turn video off" : "Show the video"} title="Video uses more data than sound">
           <span aria-hidden>📺</span>{full ? "" : watch ? "Video on" : "Show video"}
         </button>
       )}
       {talking && !inCall && (
-        <button type="button" onClick={myCamera} aria-pressed={!!talking.v} className={`${btnBase} ${talking.v ? "bg-[#1657C9] text-white" : "bg-white text-ink ring-1 ring-line"}`} aria-label={talking.v ? "Turn my camera off" : "Turn my camera on"}>
+        <button type="button" onClick={myCamera} aria-pressed={!!talking.v} className={`${btnBase} ${talking.v ? "bg-[#0E6E72] text-white" : "bg-white text-ink ring-1 ring-line"}`} aria-label={talking.v ? "Turn my camera off" : "Turn my camera on"}>
           <span aria-hidden>📷</span>{full ? "" : talking.v ? "Camera on" : "Camera"}
         </button>
       )}

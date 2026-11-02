@@ -80,7 +80,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   if (!open) {
     if (!running) return null;
     return (
-      <button type="button" onClick={onOpen} className="fixed bottom-4 left-4 z-[95] flex items-center gap-2 rounded-full bg-[#7C2D12] px-4 py-3 text-sm font-black text-white shadow-2xl">
+      <button type="button" onClick={onOpen} className="fixed bottom-4 left-4 z-[95] flex items-center gap-2 rounded-full bg-[#C2451C] px-4 py-3 text-sm font-black text-white shadow-2xl">
         <BoardIcon name="exam" /> Exam · {clockLeft(exam!.endsAt - now)} left
       </button>
     );
@@ -108,8 +108,8 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
     const url = URL.createObjectURL(new Blob([rows.map((r) => r.map(esc).join(",")).join("\n")], { type: "text/csv" }));
     const a = document.createElement("a"); a.href = url; a.download = `${exam.title.replace(/[^\w ]+/g, "")}.csv`; a.click(); URL.revokeObjectURL(url);
   }
-  const chip = (on: boolean) => `min-h-[38px] rounded-xl px-3 text-xs font-black ring-1 ${on ? "bg-[#7C2D12] text-white ring-[#7C2D12]" : "bg-white text-ink/70 ring-slate-200"}`;
-  const field = "w-full rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#7C2D12]";
+  const chip = (on: boolean) => `min-h-[38px] rounded-xl px-3 text-xs font-black ring-1 ${on ? "bg-[#C2451C] text-white ring-[#C2451C]" : "bg-white text-ink/70 ring-slate-200"}`;
+  const field = "w-full rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#C2451C]";
   const showBuilder = building || !exam;
   const marked = entries.filter((e) => e.submitted);
   const avg = marked.length && exam ? Math.round((marked.reduce((s, e) => s + (e.score ?? 0), 0) / marked.length / Math.max(1, exam.total)) * 100) : null;
@@ -118,15 +118,15 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
     <div role="dialog" aria-modal="true" aria-label="Exam mode" className="fixed inset-0 z-[96] flex items-center justify-center bg-black/60 p-3">
       <div className="flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white text-ink shadow-2xl">
         <div className="flex flex-wrap items-center gap-2 border-b border-line p-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-[#7C2D12]"><BoardIcon name="exam" /></span>
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-[#C2451C]"><BoardIcon name="exam" /></span>
           <div className="min-w-0 flex-1">
             <p className="text-base font-black">Exam mode</p>
             <p className="truncate text-xs font-bold text-ink/55">{showBuilder ? "A timed test on every learner’s phone — marked for you" : `${exam!.title} · ${exam!.count} questions · ${exam!.total} marks`}</p>
           </div>
-          {running && !showBuilder && <span role="timer" className="rounded-xl bg-orange-50 px-3 py-2 text-sm font-black text-[#7C2D12]">⏱ {clockLeft(exam!.endsAt - now)}</span>}
+          {running && !showBuilder && <span role="timer" className="rounded-xl bg-orange-50 px-3 py-2 text-sm font-black text-[#C2451C]">⏱ {clockLeft(exam!.endsAt - now)}</span>}
           {running && !showBuilder && <button type="button" onClick={() => act("extend", { minutes: 5 })} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black">+5 min</button>}
           {running && !showBuilder && <button type="button" onClick={() => act("close")} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white">End exam</button>}
-          {!running && exam && !showBuilder && <button type="button" onClick={() => { setBuilding(true); setQs([]); }} className="rounded-xl bg-[#7C2D12] px-3 py-2 text-xs font-black text-white">New exam</button>}
+          {!running && exam && !showBuilder && <button type="button" onClick={() => { setBuilding(true); setQs([]); }} className="rounded-xl bg-[#C2451C] px-3 py-2 text-xs font-black text-white">New exam</button>}
           <button type="button" onClick={onClose} aria-label="Close exam mode" className="flex h-9 w-9 items-center justify-center rounded-lg text-ink/60 hover:bg-ink/5"><BoardIcon name="close" /></button>
         </div>
         {note && <p role="alert" className="mx-3 mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{note}</p>}
@@ -136,7 +136,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
               <label className="text-xs font-black text-ink/60">Title<input value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} className={`${field} mt-1`} /></label>
-              <label className="flex items-end gap-2 text-xs font-black text-ink/70"><input type="checkbox" checked={review} onChange={(e) => setReview(e.target.checked)} className="mb-3 h-4 w-4 accent-[#7C2D12]" /><span className="mb-2.5">Learners see the right answers when it ends</span></label>
+              <label className="flex items-end gap-2 text-xs font-black text-ink/70"><input type="checkbox" checked={review} onChange={(e) => setReview(e.target.checked)} className="mb-3 h-4 w-4 accent-[#C2451C]" /><span className="mb-2.5">Learners see the right answers when it ends</span></label>
             </div>
             <fieldset className="mt-3"><legend className="text-xs font-black text-ink/60">Time</legend>
               <div className="mt-1 flex flex-wrap gap-1.5">{EXAM_MINUTES.map((m) => <button key={m} type="button" aria-pressed={minutes === m} onClick={() => setMinutes(m)} className={chip(minutes === m)}>{m} min</button>)}</div>
@@ -169,7 +169,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
               {aiNote && <p role="status" className={`mt-2 text-xs font-bold ${aiNote.startsWith("✓") ? "text-violet-800" : "text-red-700"}`}>{aiNote}</p>}
             </div>
             <div className="mt-3 rounded-xl bg-orange-50/60 p-3 ring-1 ring-orange-100">
-              <p className="text-xs font-black text-[#7C2D12]">Or make questions from a maths topic (instant, no A.I)</p>
+              <p className="text-xs font-black text-[#C2451C]">Or make questions from a maths topic (instant, no A.I)</p>
               <div className="mt-2 flex flex-wrap items-end gap-2">
                 <label className="text-xs font-bold text-ink/60">Topic
                   <select value={topic} onChange={(e) => setTopic(e.target.value)} className={`${field} mt-1 min-w-[12rem]`}>
@@ -184,7 +184,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                 <label className="text-xs font-bold text-ink/60">How many
                   <input type="number" min={1} max={30} value={count} onChange={(e) => setCount(Math.max(1, Math.min(30, Number(e.target.value) || 1)))} className={`${field} mt-1 w-20`} />
                 </label>
-                <button type="button" onClick={() => setQs((cur) => [...cur, ...topicQuestions(topic, level, count)].slice(0, 60))} className="min-h-[40px] rounded-xl bg-[#7C2D12] px-4 text-xs font-black text-white">Add {count} questions</button>
+                <button type="button" onClick={() => setQs((cur) => [...cur, ...topicQuestions(topic, level, count)].slice(0, 60))} className="min-h-[40px] rounded-xl bg-[#C2451C] px-4 text-xs font-black text-white">Add {count} questions</button>
               </div>
             </div>
             <ol className="mt-4 grid gap-2">
@@ -220,7 +220,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
               <button type="button" onClick={() => setQs((cur) => [...cur, { q: "", kind: "typed", options: [], answer: "", marks: 1 }])} className="min-h-[40px] rounded-xl bg-slate-100 px-3 text-xs font-black">+ Typed-answer question</button>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-3">
-              <button type="button" onClick={start} disabled={busy || !qs.length} className="min-h-[44px] rounded-xl bg-[#7C2D12] px-5 text-sm font-black text-white disabled:opacity-40">{busy ? "Starting…" : `Start the exam (${qs.length} question${qs.length === 1 ? "" : "s"}, ${minutes} min)`}</button>
+              <button type="button" onClick={start} disabled={busy || !qs.length} className="min-h-[44px] rounded-xl bg-[#C2451C] px-5 text-sm font-black text-white disabled:opacity-40">{busy ? "Starting…" : `Start the exam (${qs.length} question${qs.length === 1 ? "" : "s"}, ${minutes} min)`}</button>
               {exam && <button type="button" onClick={() => setBuilding(false)} className="text-xs font-black text-ink/60 underline">Back to the last exam’s results</button>}
               <p className="text-xs font-semibold text-ink/55">Each phone gets the questions in its own order. Leaving the exam page is reported to you.</p>
             </div>
@@ -328,7 +328,7 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
   if (exam.status === "open" && !entry) {
     return shell(
       <div className="my-auto rounded-2xl bg-white p-6 text-center shadow-xl ring-1 ring-orange-200">
-        <p className="text-xs font-black uppercase tracking-[.2em] text-[#7C2D12]">Exam</p>
+        <p className="text-xs font-black uppercase tracking-[.2em] text-[#C2451C]">Exam</p>
         <h2 className="mt-1 font-display text-3xl font-black">{exam.title}</h2>
         <p className="mt-2 text-sm font-bold text-ink/65">{exam.count} questions · {exam.total} marks · {clockLeft(left)} left</p>
         <ul className="mx-auto mt-4 max-w-sm space-y-1 text-left text-sm font-semibold text-ink/75">
@@ -338,7 +338,7 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
           <li>⏱ When time is up, your exam is handed in for you.</li>
         </ul>
         <button type="button" onClick={async () => { const { ok, j } = await api({ action: "start", examId: exam.id }); if (!ok) setNote(j.error); await reload(); }}
-          className="mt-5 min-h-[52px] w-full rounded-2xl bg-[#7C2D12] text-lg font-black text-white">Start the exam</button>
+          className="mt-5 min-h-[52px] w-full rounded-2xl bg-[#C2451C] text-lg font-black text-white">Start the exam</button>
         {note && <p role="alert" className="mt-3 text-sm font-bold text-red-700">{note}</p>}
       </div>,
     );
@@ -350,11 +350,11 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
       <div className="sticky top-0 z-10 -mx-3 flex items-center gap-2 bg-[#FFF7ED]/95 px-3 py-2 backdrop-blur sm:-mx-6 sm:px-6">
         <p className="min-w-0 flex-1 truncate text-sm font-black">{exam.title}</p>
         <span className="text-xs font-bold text-ink/60">{done}/{paper.length} answered</span>
-        <span role="timer" className={`rounded-xl px-3 py-1.5 text-sm font-black ${left < 60_000 ? "bg-red-600 text-white" : "bg-white text-[#7C2D12] ring-1 ring-orange-200"}`}>⏱ {clockLeft(left)}</span>
+        <span role="timer" className={`rounded-xl px-3 py-1.5 text-sm font-black ${left < 60_000 ? "bg-red-600 text-white" : "bg-white text-[#C2451C] ring-1 ring-orange-200"}`}>⏱ {clockLeft(left)}</span>
       </div>
       {warned > 0 && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-black text-red-700 ring-1 ring-red-200">⚠️ You left the exam page{warned > 1 ? ` ${warned} times` : ""}. Your teacher has been told.</p>}
       <div className="select-none rounded-2xl bg-white p-4 shadow ring-1 ring-orange-200">
-        <p className="text-xs font-black uppercase tracking-wider text-[#7C2D12]">Question {at + 1} of {paper.length} · {q.marks} mark{q.marks === 1 ? "" : "s"}</p>
+        <p className="text-xs font-black uppercase tracking-wider text-[#C2451C]">Question {at + 1} of {paper.length} · {q.marks} mark{q.marks === 1 ? "" : "s"}</p>
         <p className="mt-2 whitespace-pre-wrap text-xl font-black leading-snug">{q.q}</p>
         {q.kind === "choice" ? (
           <div className="mt-4 grid gap-2" role="radiogroup" aria-label="Your answer">
@@ -362,8 +362,8 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
               const on = answers[String(q.n)] === o.i;
               return (
                 <button key={o.i} type="button" role="radio" aria-checked={on} onClick={() => answer(q.n, o.i)}
-                  className={`flex min-h-[52px] items-center gap-3 rounded-xl px-4 text-left text-base font-bold ring-2 ${on ? "bg-[#7C2D12] text-white ring-[#7C2D12]" : "bg-white ring-orange-100 hover:ring-orange-300"}`}>
-                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-black ${on ? "bg-white text-[#7C2D12]" : "bg-orange-50 text-[#7C2D12]"}`}>{String.fromCharCode(65 + k)}</span>{o.text}
+                  className={`flex min-h-[52px] items-center gap-3 rounded-xl px-4 text-left text-base font-bold ring-2 ${on ? "bg-[#C2451C] text-white ring-[#C2451C]" : "bg-white ring-orange-100 hover:ring-orange-300"}`}>
+                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-black ${on ? "bg-white text-[#C2451C]" : "bg-orange-50 text-[#C2451C]"}`}>{String.fromCharCode(65 + k)}</span>{o.text}
                 </button>
               );
             })}
@@ -371,13 +371,13 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
         ) : (
           <label className="mt-4 block text-sm font-bold text-ink/60">Your answer
             <input value={String(answers[String(q.n)] ?? "")} maxLength={120} onChange={(e) => answer(q.n, e.target.value, true)} autoComplete="off" autoCapitalize="off" spellCheck={false}
-              className="mt-1 w-full rounded-xl bg-white px-4 py-3 text-xl font-black text-ink ring-2 ring-orange-200 focus:outline-none focus:ring-[#7C2D12]" />
+              className="mt-1 w-full rounded-xl bg-white px-4 py-3 text-xl font-black text-ink ring-2 ring-orange-200 focus:outline-none focus:ring-[#C2451C]" />
           </label>
         )}
         <div className="mt-4 flex gap-2">
-          <button type="button" disabled={at === 0} onClick={() => setAt(at - 1)} className="min-h-[48px] flex-1 rounded-xl bg-orange-50 text-sm font-black text-[#7C2D12] disabled:opacity-40">← Back</button>
+          <button type="button" disabled={at === 0} onClick={() => setAt(at - 1)} className="min-h-[48px] flex-1 rounded-xl bg-orange-50 text-sm font-black text-[#C2451C] disabled:opacity-40">← Back</button>
           {at < paper.length - 1
-            ? <button type="button" onClick={() => setAt(at + 1)} className="min-h-[48px] flex-1 rounded-xl bg-[#7C2D12] text-sm font-black text-white">Next →</button>
+            ? <button type="button" onClick={() => setAt(at + 1)} className="min-h-[48px] flex-1 rounded-xl bg-[#C2451C] text-sm font-black text-white">Next →</button>
             : <button type="button" onClick={() => submit()} className="min-h-[48px] flex-1 rounded-xl bg-emerald-600 text-sm font-black text-white">Hand in</button>}
         </div>
       </div>
@@ -385,7 +385,7 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
         {paper.map((x, i) => {
           const a = answers[String(x.n)] != null && answers[String(x.n)] !== "";
           return <button key={x.n} type="button" onClick={() => setAt(i)} aria-label={`Question ${i + 1}${a ? ", answered" : ""}`} aria-current={i === at}
-            className={`h-10 w-10 rounded-lg text-sm font-black ${i === at ? "ring-2 ring-[#7C2D12]" : ""} ${a ? "bg-[#7C2D12] text-white" : "bg-white text-ink/60 ring-1 ring-orange-200"}`}>{i + 1}</button>;
+            className={`h-10 w-10 rounded-lg text-sm font-black ${i === at ? "ring-2 ring-[#C2451C]" : ""} ${a ? "bg-[#C2451C] text-white" : "bg-white text-ink/60 ring-1 ring-orange-200"}`}>{i + 1}</button>;
         })}
       </nav>
       <button type="button" onClick={() => submit()} className="min-h-[48px] rounded-xl bg-emerald-600 text-sm font-black text-white">Hand in my exam</button>
@@ -395,17 +395,17 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
   // Handed in (or time's up).
   if (entry?.submitted || result) {
     if (hidden) {
-      return <button type="button" onClick={() => setHidden(false)} className="fixed bottom-4 left-4 z-[95] rounded-full bg-[#7C2D12] px-4 py-3 text-sm font-black text-white shadow-2xl">📝 My exam</button>;
+      return <button type="button" onClick={() => setHidden(false)} className="fixed bottom-4 left-4 z-[95] rounded-full bg-[#C2451C] px-4 py-3 text-sm font-black text-white shadow-2xl">📝 My exam</button>;
     }
     const score = result?.score ?? entry?.score, total = result?.total ?? entry?.total ?? exam.total;
     return shell(<>
       <div className="rounded-2xl bg-white p-6 text-center shadow-xl ring-1 ring-orange-200">
         <p className="text-xs font-black uppercase tracking-[.2em] text-emerald-700">Handed in ✓</p>
         <h2 className="mt-1 font-display text-2xl font-black">{exam.title}</h2>
-        {score != null && <p className="mt-3 font-display text-5xl font-black text-[#7C2D12]">{score} / {total}</p>}
+        {score != null && <p className="mt-3 font-display text-5xl font-black text-[#C2451C]">{score} / {total}</p>}
         {score != null && <p className="mt-1 text-sm font-bold text-ink/60">{Math.round((score / Math.max(1, total)) * 100)}%</p>}
         {exam.status === "open" && <p className="mt-3 text-sm font-semibold text-ink/60">{exam.review ? "You can see the right answers when the exam ends." : "Wait for your teacher."}</p>}
-        <button type="button" onClick={() => setHidden(true)} className="mt-4 min-h-[44px] rounded-xl bg-[#7C2D12] px-5 text-sm font-black text-white">Back to the class</button>
+        <button type="button" onClick={() => setHidden(true)} className="mt-4 min-h-[44px] rounded-xl bg-[#C2451C] px-5 text-sm font-black text-white">Back to the class</button>
       </div>
       {review && (
         <ol className="grid gap-2" aria-label="Your answers">

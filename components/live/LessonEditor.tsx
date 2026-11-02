@@ -32,7 +32,7 @@ export default function LessonEditor({ id, base, myId }: { id: string; base: Hos
           <>
             <input defaultValue={meta.title} maxLength={100} aria-label="Lesson title" onBlur={(e) => e.target.value !== meta.title && save({ title: e.target.value })} className="field min-w-[200px] flex-1 !w-auto !font-black" />
             <input defaultValue={meta.subject} maxLength={60} placeholder="Subject" aria-label="Subject" onBlur={(e) => e.target.value !== meta.subject && save({ subject: e.target.value })} className="field !w-36" />
-            {base !== "/app" && <label className="flex items-center gap-1.5 text-xs font-black text-ink/70"><input type="checkbox" checked={meta.shared} onChange={(e) => save({ shared: e.target.checked })} className="h-4 w-4 accent-[#1657C9]" /> Share with tutors</label>}
+            {base !== "/app" && <label className="flex items-center gap-1.5 text-xs font-black text-ink/70"><input type="checkbox" checked={meta.shared} onChange={(e) => save({ shared: e.target.checked })} className="h-4 w-4 accent-[#0E6E72]" /> Share with tutors</label>}
             <span className="text-xs font-bold text-ink/50" aria-live="polite">{saved}</span>
           </>
         ) : (
