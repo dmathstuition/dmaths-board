@@ -40,6 +40,10 @@ export class VoiceLink {
   onShareEnded: () => void = () => {}; // the browser's own "Stop sharing" was pressed
   private pulled = new Map<string, Got>(); // by track name
   onState: (s: RTCPeerConnectionState) => void = () => {};
+  // The connection dropped for good (or never came up): everything sent and
+  // received is gone; the next action opens a fresh one.
+  onLost: () => void = () => {};
+  private dropTimer: ReturnType<typeof setTimeout> | null = null;
   onChange: () => void = () => {};
 
   constructor(private api: Api) {}
@@ -58,9 +62,47 @@ export class VoiceLink {
     const r = await this.api("start");
     this.session = r.session; this.ticket = r.ticket;
     const pc = new RTCPeerConnection({ iceServers: r.iceServers ?? [], bundlePolicy: "max-bundle" });
-    pc.addEventListener("connectionstatechange", () => this.onState(pc.connectionState));
+    pc.addEventListener("connectionstatechange", () => {
+      this.onState(pc.connectionState);
+      if (this.pc !== pc) return;
+      if (this.dropTimer) { clearTimeout(this.dropTimer); this.dropTimer = null; }
+      // "disconnected" often comes back by itself (a network blip); "failed" doesn't.
+      if (pc.connectionState === "failed") this.lose();
+      else if (pc.connectionState === "disconnected") this.dropTimer = setTimeout(() => { if (this.pc === pc && pc.connectionState !== "connected") this.lose(); }, 8000);
+    });
     this.pc = pc;
     return pc;
+  }
+
+  private lose() { this.close(); this.onLost(); }
+
+  // Cloudflare only takes new tracks on a connection that is up ("Session
+  // appears to be disconnected"): after the first exchange, wait for it.
+  private ready(ms = 15_000): Promise<void> {
+    const pc = this.pc;
+    if (!pc || !pc.remoteDescription || pc.connectionState === "connected") return Promise.resolve();
+    if (pc.connectionState === "failed" || pc.connectionState === "closed") return Promise.reject(new Error("The call connection dropped — try again."));
+    return new Promise((ok, no) => {
+      const done = (f: () => void) => { clearTimeout(t); pc.removeEventListener("connectionstatechange", on); f(); };
+      const on = () => {
+        if (pc.connectionState === "connected") done(ok);
+        else if (pc.connectionState === "failed" || pc.connectionState === "closed") done(() => no(new Error("The call connection dropped — try again.")));
+      };
+      const t = setTimeout(() => done(() => no(new Error("The call is taking long to connect — check the internet and try again."))), ms);
+      pc.addEventListener("connectionstatechange", on);
+    });
+  }
+  // One request to Cloudflare (through our server), waiting for the connection
+  // first, and once more if Cloudflare says it isn't up yet.
+  private async cf(op: string, extra: Record<string, unknown>) {
+    await this.ready();
+    try { return await this.api(op, { session: this.session, ticket: this.ticket, ...extra }); }
+    catch (e) {
+      if (!/disconnected|PeerConnection is connected/i.test(String((e as Error)?.message))) throw e;
+      await new Promise((r) => setTimeout(r, 1200));
+      await this.ready();
+      return this.api(op, { session: this.session, ticket: this.ticket, ...extra });
+    }
   }
 
   // Send one of my tracks to Cloudflare (offer → answer). Video: some phones
@@ -81,10 +123,11 @@ export class VoiceLink {
     const track = kind === "mic" ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
     const tx = pc.addTransceiver(track, { direction: "sendonly" });
     if (kind !== "mic" && preferVp8) preferCodec(tx, "video/VP8");
+    await this.ready().catch((e) => { try { tx.stop(); } catch { /* */ } throw e; });
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     try {
-      const r = await this.api("push", { session: this.session, ticket: this.ticket, sdp: offer.sdp, mid: tx.mid, kind, ...(pass ?? {}) })
+      const r = await this.cf("push", { sdp: offer.sdp, mid: tx.mid, kind, ...(pass ?? {}) })
         .catch((e) => { throw Object.assign(e, { denied: true }); }); // the server said no: don't retry
       await pc.setRemoteDescription({ type: "answer", sdp: r.sdp });
       if (kind !== "mic") await limit(tx.sender, kind === "cam" ? CAMERA_SEND : SCREEN_SEND);
@@ -175,12 +218,12 @@ export class VoiceLink {
       const add = [...want.entries()].filter(([t]) => !this.pulled.has(t));
       if (!add.length) return;
       const pc = await this.open();
-      const r = await this.api("pull", { session: this.session, ticket: this.ticket, tracks: add.map(([t, w]) => ({ s: w.s, t })) });
+      const r = await this.cf("pull", { tracks: add.map(([t, w]) => ({ s: w.s, t })) });
       if (r.sdp) {
         await pc.setRemoteDescription({ type: "offer", sdp: r.sdp });
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        await this.api("answer", { session: this.session, ticket: this.ticket, sdp: answer.sdp });
+        await this.api("answer", { session: this.session, ticket: this.ticket, sdp: answer.sdp }); // part of the same exchange: no waiting
       }
       for (const t of r.tracks ?? []) {
         if (!t.mid) continue;
@@ -219,9 +262,10 @@ export class VoiceLink {
     if (!pc || !mids.length || pc.connectionState === "closed") return;
     txs.forEach((t) => { try { t.stop(); } catch { /* already stopped */ } });
     try {
+      await this.ready();
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      const r = await this.api("close", { session: this.session, ticket: this.ticket, sdp: offer.sdp, mids });
+      const r = await this.cf("close", { sdp: offer.sdp, mids });
       if (r.sdp) await pc.setRemoteDescription({ type: "answer", sdp: r.sdp });
     } catch {
       // Don't leave the connection waiting for an answer: the next change starts clean.
@@ -234,8 +278,10 @@ export class VoiceLink {
     this.mic = null; this.cam = null; this.scr = null;
     for (const p of this.pulled.values()) { p.audio?.pause(); if (p.audio) p.audio.srcObject = null; }
     this.pulled.clear();
-    this.pc?.close();
+    if (this.dropTimer) { clearTimeout(this.dropTimer); this.dropTimer = null; }
+    const pc = this.pc;
     this.pc = null; this.session = ""; this.ticket = "";
+    pc?.close();
     this.onChange();
   }
 }

@@ -73,10 +73,21 @@ export async function GET(req: Request) {
     if (!entry && e.status === "closed") return NextResponse.json({ exam: null });
     const out: any = { exam: meta, entry: entry ? { started: true, submitted: !!entry.submitted_at, answers: entry.answers ?? {}, flags: entry.flags, score: entry.score, total: entry.total } : null };
     if (entry && !entry.submitted_at && e.status === "open") out.paper = learnerPaper(e.id, v.id, e.questions);
-    // Once it's over (and the teacher allows it): their answers against the right ones.
-    if (entry && e.status === "closed" && e.review) {
-      const m = markPaper(e.questions, entry.answers ?? {});
-      out.review = e.questions.map((q, i) => ({ q: q.q, kind: q.kind, options: q.options, answer: q.answer, given: (entry.answers ?? {})[String(i)] ?? null, right: m.right[i], marks: q.marks }));
+    // Once it's over: how they did, against the class — and (if the teacher
+    // allows it) their answers against the right ones.
+    if (entry && e.status === "closed") {
+      const given = entry.answers ?? {};
+      const m = markPaper(e.questions, given);
+      const blank = e.questions.filter((_, i) => given[String(i)] == null || given[String(i)] === "").length;
+      const { data: all } = await admin.from("board_exam_entries").select("score, total").eq("exam_id", e.id).not("submitted_at", "is", null).limit(500);
+      const pcts = (all ?? []).filter((x: any) => x.total).map((x: any) => (x.score / x.total) * 100);
+      const better = pcts.filter((p) => p > (m.score / Math.max(1, m.total)) * 100).length;
+      out.analysis = {
+        score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((r, i) => !r && !(given[String(i)] == null || given[String(i)] === "")).length, blank,
+        average: pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null, best: pcts.length ? Math.round(Math.max(...pcts)) : null,
+        takers: pcts.length, position: pcts.length ? better + 1 : null, flags: entry.flags,
+      };
+      if (e.review) out.review = e.questions.map((q, i) => ({ q: q.q, kind: q.kind, options: q.options, answer: q.answer, given: given[String(i)] ?? null, right: m.right[i], marks: q.marks }));
     }
     return NextResponse.json(out, { headers: { "Cache-Control": "no-store" } });
   } catch (err: any) { return dbFail(String(err?.message ?? err)); }

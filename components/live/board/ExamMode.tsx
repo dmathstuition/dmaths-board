@@ -14,6 +14,7 @@ import type { Difficulty } from "@/lib/games/generators";
 
 type Meta = { id: string; title: string; minutes: number; review: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number };
 type Entry = { id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null };
+type Analysis = { score: number; total: number; right: number; wrong: number; blank: number; average: number | null; best: number | null; takers: number; position: number | null; flags: number };
 type Review = { q: string; kind: ExamQ["kind"]; options: string[]; answer: number | string; given: unknown; right: boolean; marks: number };
 
 const api = (body: unknown) => fetch("/api/board/exams", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
@@ -265,6 +266,10 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
   const entry = data?.entry ?? null;
   const paper: LearnerQ[] | null = data?.paper ?? null;
   const review: Review[] | null = data?.review ?? null;
+  const analysis: Analysis | null = data?.analysis ?? null;
+  // An ended exam whose results the learner has looked at and closed: nothing more to show.
+  const [seen, setSeen] = useState<string | null>(() => { try { return sessionStorage.getItem("exam-seen"); } catch { return null; } });
+  const markSeen = (id: string) => { setSeen(id); try { sessionStorage.setItem("exam-seen", id); } catch { /* storage blocked */ } };
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [at, setAt] = useState(0);
   const [hidden, setHidden] = useState(false);
@@ -276,6 +281,9 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
 
   useEffect(() => { if (!exam?.endsAt) return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [exam?.endsAt]);
   // Their saved answers (after a refresh, or on another visit).
+  // The exam has just ended: open the results at once (unless already seen).
+  const status = exam?.status, examId = exam?.id;
+  useEffect(() => { if (status === "closed" && examId && seen !== examId) setHidden(false); }, [status, examId, seen]);
   useEffect(() => { if (exam && entry && seeded.current !== exam.id) { seeded.current = exam.id; setAnswers(entry.answers ?? {}); setAt(0); setResult(null); setHidden(false); } }, [exam, entry]);
   // Leaving the exam page (another app, another tab) is reported.
   const lastFlag = useRef(0);
@@ -394,7 +402,9 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
   }
   // Handed in (or time's up).
   if (entry?.submitted || result) {
-    if (hidden) {
+    const over = exam.status === "closed";
+    if (over && seen === exam.id) return null; // results seen and closed: no button left behind
+    if (hidden && !over) {
       return <button type="button" onClick={() => setHidden(false)} className="fixed bottom-4 left-4 z-[95] rounded-full bg-[#C2451C] px-4 py-3 text-sm font-black text-white shadow-2xl">📝 My exam</button>;
     }
     const score = result?.score ?? entry?.score, total = result?.total ?? entry?.total ?? exam.total;
@@ -405,10 +415,12 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
         {score != null && <p className="mt-3 font-display text-5xl font-black text-[#C2451C]">{score} / {total}</p>}
         {score != null && <p className="mt-1 text-sm font-bold text-ink/60">{Math.round((score / Math.max(1, total)) * 100)}%</p>}
         {exam.status === "open" && <p className="mt-3 text-sm font-semibold text-ink/60">{exam.review ? "You can see the right answers when the exam ends." : "Wait for your teacher."}</p>}
-        <button type="button" onClick={() => setHidden(true)} className="mt-4 min-h-[44px] rounded-xl bg-[#C2451C] px-5 text-sm font-black text-white">Back to the class</button>
+        {over && analysis && <ExamAnalysis a={analysis} />}
+        <button type="button" onClick={() => { if (over) markSeen(exam.id); else setHidden(true); }} className="mt-4 min-h-[44px] rounded-xl bg-[#C2451C] px-5 text-sm font-black text-white">{over ? "Done — back to the class" : "Back to the class"}</button>
       </div>
       {review && (
         <ol className="grid gap-2" aria-label="Your answers">
+          <li className="text-xs font-black uppercase tracking-wider text-ink/55">Question by question</li>
           {review.map((r, i) => (
             <li key={i} className={`rounded-xl p-3 ring-1 ${r.right ? "bg-emerald-50 ring-emerald-200" : "bg-red-50 ring-red-200"}`}>
               <p className="text-sm font-black">{r.right ? "✓" : "✗"} {i + 1}. {r.q}</p>
@@ -423,4 +435,32 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
     </>);
   }
   return null;
+}
+
+// How a learner did: their mark, against the class, and right / wrong / blank.
+function ExamAnalysis({ a }: { a: Analysis }) {
+  const pct = Math.round((a.score / Math.max(1, a.total)) * 100);
+  const word = pct >= 80 ? "Excellent work! 🎉" : pct >= 60 ? "Good work — keep it up." : pct >= 40 ? "A fair try — go over the ones you missed." : "Keep practising — look at the answers below.";
+  const cell = "rounded-xl bg-slate-50 p-2 ring-1 ring-slate-200";
+  return (
+    <section aria-label="Your exam results" className="mt-4 grid gap-2 text-left">
+      <p className="text-center text-sm font-black text-ink">{word}</p>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className={`${cell} bg-emerald-50 ring-emerald-200`}><p className="text-2xl font-black text-emerald-700">{a.right}</p><p className="text-[11px] font-bold text-ink/60">right</p></div>
+        <div className={`${cell} bg-red-50 ring-red-200`}><p className="text-2xl font-black text-red-600">{a.wrong}</p><p className="text-[11px] font-bold text-ink/60">wrong</p></div>
+        <div className={cell}><p className="text-2xl font-black text-ink/70">{a.blank}</p><p className="text-[11px] font-bold text-ink/60">not answered</p></div>
+      </div>
+      {a.average != null && (
+        <div className={cell}>
+          <div className="flex justify-between text-xs font-bold text-ink/65"><span>You: {pct}%</span><span>Class average: {a.average}%</span>{a.best != null && <span>Top: {a.best}%</span>}</div>
+          <div className="relative mt-1.5 h-3 overflow-hidden rounded-full bg-white ring-1 ring-slate-200" role="img" aria-label={`You scored ${pct}%; the class average was ${a.average}%`}>
+            <div className="h-full rounded-full bg-[#0E6E72]" style={{ width: `${pct}%` }} />
+            <div className="absolute top-0 h-full w-0.5 bg-[#C2451C]" style={{ left: `${a.average}%` }} />
+          </div>
+          {a.position != null && a.takers > 1 && <p className="mt-1 text-xs font-bold text-ink/60">{a.position === 1 ? "🏆 Top of the class" : `Position ${a.position} of ${a.takers}`}</p>}
+        </div>
+      )}
+      {a.flags > 0 && <p className="text-xs font-bold text-red-700">⚠ You left the exam page {a.flags} time{a.flags === 1 ? "" : "s"} — your teacher can see this.</p>}
+    </section>
+  );
 }

@@ -17,7 +17,8 @@ function examServer() {
         const e = entries.get(me.id);
         const out: any = { exam: meta(), entry: e ? { started: true, submitted: e.submitted, answers: e.answers, flags: e.flags, score: e.score, total: e.total } : null };
         if (e && !e.submitted && exam.status === "open") out.paper = learnerPaper(exam.id, me.id, exam.questions);
-        if (e && exam.status === "closed") { const m = markPaper(exam.questions, e.answers); out.review = exam.questions.map((q, i) => ({ q: q.q, kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks })); }
+        if (e && exam.status === "closed") { const m = markPaper(exam.questions, e.answers);
+          out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = exam.questions.map((q, i) => ({ q: q.q, kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks })); }
         return r.fulfill({ json: out });
       }
       const b = JSON.parse(r.request().postData() ?? "{}");
@@ -113,9 +114,24 @@ test("exam mode: a timed test on a learner's phone, leaving the page flagged, ma
   await expect(panel.getByText("⚠ 1×")).toBeVisible();
   await panel.screenshot({ path: "test-results/exam-teacher.png" });
 
-  // Ending the exam shows the learner the right answers.
+  // The learner goes back to the class while others finish: a button brings the exam back.
+  await exam.getByRole("button", { name: "Back to the class" }).click();
+  await expect(learner.getByRole("button", { name: "📝 My exam" })).toBeVisible();
+
+  // Ending the exam opens the learner's results at once: the analysis and the right answers.
   await panel.getByRole("button", { name: "End exam" }).click();
+  const results = exam.getByRole("region", { name: "Your exam results" });
+  await expect(results).toBeVisible({ timeout: 20_000 });
+  await expect(results.getByText("Class average: 75%")).toBeVisible();
+  await expect(results.getByText("🏆 Top of the class")).toBeVisible();
+  await expect(results.getByText(/You left the exam page 1 time/)).toBeVisible();
   await expect(exam.getByRole("list", { name: "Your answers" })).toBeVisible({ timeout: 20_000 });
   await expect(exam.getByText(/✓ \d\. What is 7 × 8\?/)).toBeVisible();
-  await learner.screenshot({ path: "test-results/exam-learner.png" });
+  await learner.screenshot({ path: "test-results/exam-learner.png", fullPage: true });
+  // Done: the exam and its button are gone.
+  await exam.getByRole("button", { name: /Done — back to the class/ }).click();
+  await expect(exam).toBeHidden();
+  await expect(learner.getByRole("button", { name: "📝 My exam" })).toHaveCount(0);
+  await learner.waitForTimeout(11_000); // the next check for the exam doesn't bring it back
+  await expect(learner.getByRole("dialog", { name: /Exam:/ })).toHaveCount(0);
 });

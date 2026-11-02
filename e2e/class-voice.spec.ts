@@ -66,6 +66,7 @@ async function fakeSfu(browser: Browser) {
 async function openClass(browser: Browser) {
   const hub = realtimeHub("normal"), server = classServer(), sfu = await fakeSfu(browser);
   const sessions: Record<string, string> = {};
+  const camTried = new Set<string>();
   const open = async (who: "teacher" | "learner") => {
     const ctx = await browser.newContext({ permissions: ["microphone", "camera"] });
     await hub.attach(ctx, who);
@@ -77,6 +78,11 @@ async function openClass(browser: Browser) {
       if (b.op === "config") json = { on: true };
       else if (b.op === "start") { const id = await run("start"); sessions[who] = id as string; json = { session: id, ticket: "t", iceServers: [] }; }
       else if (b.op === "allow") json = { pass: "pass", exp: Date.now() + 3_600_000 };
+      else if (b.op === "push" && b.kind === "cam" && !camTried.has(who)) {
+        // Cloudflare turning a track away while the connection is still coming up: the board waits and tries again.
+        camTried.add(who);
+        return r.fulfill({ status: 502, json: { error: "Session appears to be disconnected. Please check if the PeerConnection is connected." } });
+      }
       else if (b.op === "push") { const name = `${b.kind === "cam" ? "cam" : b.kind === "scr" ? "scr" : "mic"}-${who}`; const res: any = await run("push", b.session, b.sdp, b.mid, name); json = { sdp: res.sessionDescription.sdp, track: name }; }
       else if (b.op === "pull") {
         const res: any = await run("pull", b.session, b.tracks.map((t: any) => ({ sessionId: t.s, trackName: t.t })));

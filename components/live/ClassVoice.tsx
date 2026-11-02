@@ -25,20 +25,23 @@ type Person = { id: string; name: string; handAt?: string | null };
 const REPEAT_MS = 4000;
 const MAX_IN_CALL = 40;
 
+// `lost` counts dropped connections: the hooks reconnect when it goes up.
 function useVoiceLink(classId: string, onError: (m: string) => void) {
   const link = useRef<VoiceLink | null>(null);
   const [, bump] = useState(0);
+  const [lost, setLost] = useState(0);
   const get = useCallback(() => {
     if (!link.current) {
       link.current = new VoiceLink(voiceApi(classId));
-      link.current.onState = (st) => { if (st === "failed") onError("The voice connection dropped — tap to reconnect."); bump((n) => n + 1); };
+      link.current.onState = () => bump((n) => n + 1);
+      link.current.onLost = () => { onError("The connection dropped — reconnecting…"); setLost((n) => n + 1); };
       link.current.onChange = () => bump((n) => n + 1); // video arrived or left
     }
     return link.current;
   }, [classId, onError]);
   useEffect(() => () => { link.current?.close(); link.current = null; }, []);
   const refresh = useCallback(() => bump((n) => n + 1), []); // stable, so effects that use it don't re-run every render
-  return { get, refresh };
+  return { get, refresh, lost };
 }
 
 function useVoiceAvailable(classId: string) {
@@ -128,7 +131,7 @@ function useCallScreen(get: () => VoiceLink, inCall: boolean, members: Member[],
 export function useHostVoice({ classId, me, people }: { classId: string; me: { id: string; name: string }; people: Person[] }) {
   const available = useVoiceAvailable(classId);
   const [err, setErr] = useState("");
-  const { get, refresh } = useVoiceLink(classId, setErr);
+  const { get, refresh, lost } = useVoiceLink(classId, setErr);
   const [mine, setMine] = useState<Speaker | null>(null);
   const [student, setStudent] = useState<Speaker | null>(null);
   const [allow, setAllow] = useState<Allow | null>(null);
@@ -185,7 +188,26 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
     if (!live) return;
     const remote = call ? Object.values(parts) : student ? [student] : [];
     get().listen(remote, call ? csWanted.current : true).catch(() => {});
-  }, [student, parts, call, live, get, cs.wantedKey]);
+  }, [student, parts, call, live, get, cs.wantedKey, lost]);
+  // The connection dropped: reconnect my microphone (and camera) by myself.
+  const mineRef = useRef(mine); mineRef.current = mine;
+  useEffect(() => {
+    if (!lost) return;
+    const was = mineRef.current;
+    setStudent(null);
+    if (!was) return;
+    setMine(null);
+    (async () => {
+      try {
+        const r = await get().speak();
+        let next: Speaker = { id: me.id, name: me.name, ...r };
+        if (was.v) { const c = await get().camera().catch(() => null); if (c) next = { ...next, v: c.v }; }
+        if (was.muted) get().mute(true);
+        setMine({ ...next, muted: !!was.muted }); setErr("");
+      } catch (e) { setErr(mediaError(e, "microphone")); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lost]);
 
   async function start() {
     setBusy(true); setErr("");
@@ -302,7 +324,7 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
 // ── Learner ──
 export function useLearnerVoice({ classId, me }: { classId: string; me: { id: string; name?: string } }) {
   const [err, setErr] = useState("");
-  const { get, refresh } = useVoiceLink(classId, setErr);
+  const { get, refresh, lost } = useVoiceLink(classId, setErr);
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [allow, setAllow] = useState<Allow | null>(null);
   const [call, setCall] = useState<Call | null>(null);
@@ -313,6 +335,9 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
   const [busy, setBusy] = useState(false);
   const lastHeard = useRef(0);
   const talkingRef = useRef(talking); talkingRef.current = talking;
+  const callRef = useRef(call); callRef.current = call;
+  const joinedRef = useRef(joined); joinedRef.current = joined;
+  const allowRef = useRef(allow); allowRef.current = allow;
   const myName = me.name ?? "";
 
   const tell = useRef<(t: typeof talking) => void>(() => {});
@@ -367,7 +392,27 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
   useEffect(() => {
     if (!listening) return;
     get().listen(speakers, call && joined ? csWanted.current : watch).then(refresh).catch((e) => { console.warn("listen failed", e); setErr("The class sound or video didn't come through — it will try again."); });
-  }, [speakers, listening, watch, call, joined, get, refresh, cs.wantedKey]);
+  }, [speakers, listening, watch, call, joined, get, refresh, cs.wantedKey, lost]);
+  // The connection dropped: hearing comes back by itself (above); in a call,
+  // switch my microphone (and camera) back on as they were.
+  useEffect(() => {
+    if (!lost) return;
+    const was = talkingRef.current;
+    if (!was) return;
+    setTalking(null);
+    const pass = callRef.current && joinedRef.current ? callRef.current : allowRef.current;
+    if (!pass) { tell.current(null); return; }
+    (async () => {
+      try {
+        const r = await get().speak({ pass: pass.pass, exp: pass.exp });
+        let next: { s: string; t: string; v?: string; muted?: boolean } = { ...r, muted: !!was.muted };
+        if (was.muted) get().mute(true);
+        if (was.v) { const c = await get().camera({ pass: pass.pass, exp: pass.exp }).catch(() => null); if (c) next = { ...next, v: c.v }; }
+        setTalking(next); tell.current(next); setErr("");
+      } catch (e) { setErr(mediaError(e, "microphone")); tell.current(null); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lost]);
 
   function listen() { setErr(""); setListening(true); get().resume(); }
   async function talk() {
