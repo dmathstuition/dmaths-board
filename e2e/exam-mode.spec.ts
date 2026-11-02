@@ -108,7 +108,7 @@ test("exam mode: a timed test on a learner's phone, leaving the page flagged, ma
   await expect(exam.getByText("3 / 3")).toBeVisible({ timeout: 15_000 });
 
   // The teacher sees it marked, with the warning.
-  await expect(panel.getByText("Handed in", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(panel.getByRole("table").getByText("Handed in", { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(panel.getByRole("cell", { name: "3 / 3" })).toBeVisible();
   await expect(panel.getByText("⚠ 1×")).toBeVisible();
   await panel.screenshot({ path: "test-results/exam-teacher.png" });

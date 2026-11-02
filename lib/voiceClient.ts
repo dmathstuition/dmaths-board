@@ -63,20 +63,34 @@ export class VoiceLink {
     return pc;
   }
 
-  // Send one of my tracks to Cloudflare (offer → answer).
+  // Send one of my tracks to Cloudflare (offer → answer). Video: some phones
+  // can't send the H.264 settings agreed for them, or refuse limits set before
+  // the connection is agreed ("Failed to set remote answer… send parameters"),
+  // so prefer VP8, set the limits afterwards, and if a phone still says no,
+  // try once more letting the browser choose.
   private async push(kind: "mic" | "cam" | "scr", stream: MediaStream, pass?: Pass): Promise<Sent> {
+    try { return await this.pushOnce(kind, stream, pass, true); }
+    catch (e) {
+      if (kind === "mic" || (e as any)?.denied) { stream.getTracks().forEach((t) => t.stop()); throw e; }
+      try { return await this.pushOnce(kind, stream, pass, false); }
+      catch (e2) { stream.getTracks().forEach((t) => t.stop()); throw e2; }
+    }
+  }
+  private async pushOnce(kind: "mic" | "cam" | "scr", stream: MediaStream, pass: Pass | undefined, preferVp8: boolean): Promise<Sent> {
     const pc = await this.open();
     const track = kind === "mic" ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
-    const tx = pc.addTransceiver(track, { direction: "sendonly", ...(kind === "cam" ? { sendEncodings: [CAMERA_SEND] } : kind === "scr" ? { sendEncodings: [SCREEN_SEND] } : {}) });
+    const tx = pc.addTransceiver(track, { direction: "sendonly" });
+    if (kind !== "mic" && preferVp8) preferCodec(tx, "video/VP8");
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     try {
-      const r = await this.api("push", { session: this.session, ticket: this.ticket, sdp: offer.sdp, mid: tx.mid, kind, ...(pass ?? {}) });
+      const r = await this.api("push", { session: this.session, ticket: this.ticket, sdp: offer.sdp, mid: tx.mid, kind, ...(pass ?? {}) })
+        .catch((e) => { throw Object.assign(e, { denied: true }); }); // the server said no: don't retry
       await pc.setRemoteDescription({ type: "answer", sdp: r.sdp });
+      if (kind !== "mic") await limit(tx.sender, kind === "cam" ? CAMERA_SEND : SCREEN_SEND);
       return { stream, tx, track: r.track };
     } catch (e) {
-      stream.getTracks().forEach((t) => t.stop());
-      tx.stop();
+      try { tx.stop(); } catch { /* already stopped */ }
       await pc.setLocalDescription({ type: "rollback" }).catch(() => {}); // back to before this offer
       throw e;
     }
@@ -209,7 +223,10 @@ export class VoiceLink {
       await pc.setLocalDescription(offer);
       const r = await this.api("close", { session: this.session, ticket: this.ticket, sdp: offer.sdp, mids });
       if (r.sdp) await pc.setRemoteDescription({ type: "answer", sdp: r.sdp });
-    } catch { /* the next change starts clean */ }
+    } catch {
+      // Don't leave the connection waiting for an answer: the next change starts clean.
+      if (pc.signalingState === "have-local-offer") await pc.setLocalDescription({ type: "rollback" }).catch(() => {});
+    }
   }
 
   close() {
@@ -221,4 +238,34 @@ export class VoiceLink {
     this.pc = null; this.session = ""; this.ticket = "";
     this.onChange();
   }
+}
+
+// Put one video codec first (where the browser lets us choose).
+function preferCodec(tx: RTCRtpTransceiver, mime: string) {
+  try {
+    const caps = (RTCRtpSender as any).getCapabilities?.("video")?.codecs as RTCRtpCodec[] | undefined;
+    if (!caps?.length || !tx.setCodecPreferences) return;
+    const first = caps.filter((c) => c.mimeType.toLowerCase() === mime.toLowerCase());
+    if (first.length) tx.setCodecPreferences([...first, ...caps.filter((c) => !first.includes(c))]);
+  } catch { /* the browser's own order */ }
+}
+// Keep video light once it's flowing (bitrate and frame rate).
+async function limit(sender: RTCRtpSender, cap: RTCRtpEncodingParameters) {
+  try {
+    const p = sender.getParameters();
+    if (!p.encodings?.length) p.encodings = [{}];
+    p.encodings[0].maxBitrate = cap.maxBitrate;
+    if (cap.maxFramerate) p.encodings[0].maxFramerate = cap.maxFramerate;
+    await sender.setParameters(p);
+  } catch { /* fine without the limit */ }
+}
+
+// A sentence a person can act on, instead of the browser's WebRTC wording.
+export function friendlyMediaError(e: unknown, what: "microphone" | "camera" | "screen"): string {
+  const m = e instanceof Error ? `${e.name} ${e.message}` : String(e);
+  if (/NotAllowed|Permission|denied/i.test(m)) return `Allow the ${what} in your browser's settings for this site, then try again.`;
+  if (/NotFound|DevicesNotFound/i.test(m)) return `No ${what} was found on this device.`;
+  if (/NotReadable|TrackStart|in use/i.test(m)) return `The ${what} is being used by another app — close it and try again.`;
+  if (/SessionDescription|setRemoteDescription|setLocalDescription|sdp|m-section|RTCPeerConnection/i.test(m)) return `Your ${what} couldn't connect to the call from this device — try again, or switch browser (Chrome works best).`;
+  return e instanceof Error && e.message.length < 120 ? e.message : `The ${what} couldn't start — try again.`;
 }

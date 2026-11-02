@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLive } from "@/components/live/LiveChannel";
-import { VoiceLink, voiceApi, type Speaker } from "@/lib/voiceClient";
+import { VoiceLink, friendlyMediaError, voiceApi, type Speaker } from "@/lib/voiceClient";
 import SpeakerVideo from "@/components/live/SpeakerVideo";
 import CallView, { type Tile } from "@/components/live/CallView";
 import { nextActive, onScreen, pageCount, perPage, type CallView as View } from "@/lib/callLayout";
@@ -56,8 +56,7 @@ const cleanSpeaker = (s: any): Speaker | null => {
   if (s?.v) sp.v = String(s.v); if (s?.sc) sp.sc = String(s.sc);
   return sp.s && sp.t ? sp : null;
 };
-const mediaError = (e: unknown, what: string) => e instanceof Error && /Permission|NotAllowed|NotFound/i.test(e.name + e.message)
-  ? `Allow the ${what} in your browser${what === "camera" ? " (or check one is connected)" : ""}.` : e instanceof Error ? e.message : `The ${what} couldn't start.`;
+const mediaError = (e: unknown, what: "microphone" | "camera") => { console.warn(`${what} failed`, e); return friendlyMediaError(e, what); };
 
 const btnBase = "inline-flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 text-sm font-bold transition disabled:opacity-60";
 const barBtn = (on: boolean, danger = false) => `${btnBase} ${danger ? "bg-red-600 text-white" : on ? "bg-white text-[#0B1220]" : "bg-white/10 text-white ring-1 ring-white/20 hover:bg-white/20"}`;
@@ -367,7 +366,7 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
   const csWanted = useRef(cs.wanted); csWanted.current = cs.wanted;
   useEffect(() => {
     if (!listening) return;
-    get().listen(speakers, call && joined ? csWanted.current : watch).then(refresh).catch((e) => setErr(e?.message ?? "Couldn't play the class sound."));
+    get().listen(speakers, call && joined ? csWanted.current : watch).then(refresh).catch((e) => { console.warn("listen failed", e); setErr("The class sound or video didn't come through — it will try again."); });
   }, [speakers, listening, watch, call, joined, get, refresh, cs.wantedKey]);
 
   function listen() { setErr(""); setListening(true); get().resume(); }

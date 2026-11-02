@@ -15,7 +15,7 @@ export default function CallView({ view, onView, big, screen, tiles, page, pages
     <button type="button" onClick={() => onView(v)} aria-pressed={view === v} className={`min-h-[34px] rounded-lg px-3 text-xs font-black ${view === v ? "bg-white text-[#0B1220]" : "text-white/75 hover:bg-white/10"}`}>{label}</button>
   );
   return (
-    <section aria-label="Video call" className="absolute inset-0 z-30 flex flex-col bg-[#0B1220] text-white">
+    <section aria-label="Video call" className="fixed inset-0 z-[90] flex flex-col bg-[#0B1220] pb-[env(safe-area-inset-bottom)] text-white sm:absolute sm:z-30 sm:pb-0">
       <div className="flex flex-wrap items-center gap-2 p-2">
         <p className="mr-auto flex items-center gap-2 text-sm font-black"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden />Video call · {count} {count === 1 ? "person" : "people"}</p>
         <div className="flex gap-1 rounded-xl bg-white/10 p-1" role="group" aria-label="Call layout">
