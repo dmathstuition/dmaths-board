@@ -3,17 +3,20 @@
 // microphone and camera, and receive other people's. Every change to the
 // connection goes through one queue, so offers and answers never cross.
 
-// A speaker: their Cloudflare session `s`, microphone track `t`, and camera track `v` when it's on.
-export type Speaker = { id: string; name: string; s: string; t: string; v?: string };
+// A speaker: their Cloudflare session `s`, microphone track `t`, camera track `v`
+// when it's on, shared screen `sc` (the teacher), and whether they're muted.
+export type Speaker = { id: string; name: string; s: string; t: string; v?: string; sc?: string; muted?: boolean };
 type Api = (op: string, extra?: Record<string, unknown>) => Promise<any>;
 type Pass = { pass: string; exp: number };
 type Sent = { stream: MediaStream; tx: RTCRtpTransceiver; track: string };
-type Got = { mid: string; kind: "audio" | "video"; audio?: HTMLAudioElement; stream?: MediaStream };
+type Got = { mid: string; kind: "audio" | "video"; audio?: HTMLAudioElement; stream?: MediaStream; rx?: RTCRtpReceiver };
 
 // Small, light video: the board is the lesson; the face is a corner picture.
 // About 250 kbit/s at most ≈ 110 MB an hour for each person watching.
 const CAMERA: MediaTrackConstraints = { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15, max: 15 }, facingMode: "user" };
 const CAMERA_SEND: RTCRtpEncodingParameters = { maxBitrate: 250_000, maxFramerate: 15 };
+// A shared screen: sharp but slow-moving (slides, documents).
+const SCREEN_SEND: RTCRtpEncodingParameters = { maxBitrate: 900_000, maxFramerate: 8 };
 
 export function voiceApi(classId: string): Api {
   return async (op, extra = {}) => {
@@ -33,6 +36,8 @@ export class VoiceLink {
   private queue: Promise<unknown> = Promise.resolve();
   private mic: Sent | null = null;
   private cam: Sent | null = null;
+  private scr: Sent | null = null;
+  onShareEnded: () => void = () => {}; // the browser's own "Stop sharing" was pressed
   private pulled = new Map<string, Got>(); // by track name
   onState: (s: RTCPeerConnectionState) => void = () => {};
   onChange: () => void = () => {};
@@ -59,10 +64,10 @@ export class VoiceLink {
   }
 
   // Send one of my tracks to Cloudflare (offer → answer).
-  private async push(kind: "mic" | "cam", stream: MediaStream, pass?: Pass): Promise<Sent> {
+  private async push(kind: "mic" | "cam" | "scr", stream: MediaStream, pass?: Pass): Promise<Sent> {
     const pc = await this.open();
     const track = kind === "mic" ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
-    const tx = pc.addTransceiver(track, { direction: "sendonly", ...(kind === "cam" ? { sendEncodings: [CAMERA_SEND] } : {}) });
+    const tx = pc.addTransceiver(track, { direction: "sendonly", ...(kind === "cam" ? { sendEncodings: [CAMERA_SEND] } : kind === "scr" ? { sendEncodings: [SCREEN_SEND] } : {}) });
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     try {
@@ -101,11 +106,26 @@ export class VoiceLink {
   }
   get cameraStream() { return this.cam?.stream ?? null; }
 
+  // Share my screen (the teacher). The browser asks which screen or window.
+  share(): Promise<{ sc: string }> {
+    return this.run(async () => {
+      if (!this.scr) {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 8, max: 10 } }, audio: false });
+        this.scr = await this.push("scr", stream);
+        stream.getVideoTracks()[0]?.addEventListener("ended", () => { this.stopShare().then(() => this.onShareEnded()).catch(() => {}); });
+        this.onChange();
+      }
+      return { sc: this.scr.track };
+    });
+  }
+  stopShare(): Promise<void> { return this.run(() => this.unsend("scr")); }
+  get screenStream() { return this.scr?.stream ?? null; }
+
   mute(on: boolean) { this.mic?.stream.getAudioTracks().forEach((t) => { t.enabled = !on; }); }
   get muted() { return !!this.mic && !this.mic.stream.getAudioTracks()[0]?.enabled; }
   get speaking() { return !!this.mic; }
 
-  private async unsend(which: "mic" | "cam") {
+  private async unsend(which: "mic" | "cam" | "scr") {
     const m = this[which];
     if (!m) return;
     this[which] = null;
@@ -115,17 +135,20 @@ export class VoiceLink {
   }
   stopCamera(): Promise<void> { return this.run(() => this.unsend("cam")); }
   // Stop talking: the camera goes off with the microphone.
-  stopSpeaking(): Promise<void> { return this.run(async () => { await this.unsend("cam"); await this.unsend("mic"); }); }
+  stopSpeaking(): Promise<void> { return this.run(async () => { await this.unsend("scr"); await this.unsend("cam"); await this.unsend("mic"); }); }
 
-  // Receive exactly these speakers' microphones, and their cameras when `video`
-  // is on (my own tracks are never played back).
-  listen(speakers: Speaker[], video = false): Promise<void> {
+  // Receive exactly these speakers' microphones, and their cameras (and shared
+  // screens) when `video` is on — or only the video tracks named in `video`, to
+  // save data in a big call. My own tracks are never played back.
+  listen(speakers: Speaker[], video: boolean | Set<string> = false): Promise<void> {
     return this.run(async () => {
       const want = new Map<string, { s: string; kind: "audio" | "video" }>();
+      const wantVideo = (t: string | undefined) => !!t && (video === true || (video instanceof Set && video.has(t)));
       for (const sp of speakers) {
         if (sp.s === this.session) continue;
         want.set(sp.t, { s: sp.s, kind: "audio" });
-        if (video && sp.v) want.set(sp.v, { s: sp.s, kind: "video" });
+        if (wantVideo(sp.v)) want.set(sp.v!, { s: sp.s, kind: "video" });
+        if (wantVideo(sp.sc)) want.set(sp.sc!, { s: sp.s, kind: "video" });
       }
       const gone = [...this.pulled.entries()].filter(([t]) => !want.has(t));
       if (gone.length) {
@@ -156,7 +179,7 @@ export class VoiceLink {
           audio.autoplay = true;
           audio.srcObject = stream;
           audio.play().catch(() => {});
-          this.pulled.set(t.t, { mid: t.mid, kind, audio });
+          this.pulled.set(t.t, { mid: t.mid, kind, audio, rx: tx.receiver });
         } else {
           this.pulled.set(t.t, { mid: t.mid, kind, stream });
         }
@@ -171,6 +194,11 @@ export class VoiceLink {
   // Phones only play sound after a tap: call this from the tap.
   resume() { for (const p of this.pulled.values()) p.audio?.play().catch(() => {}); }
   get listening() { return [...this.pulled.values()].filter((p) => p.kind === "audio").length; }
+  // How loud someone is right now (0–1), from their microphone track: who's talking.
+  level(track: string | undefined): number {
+    const rx = track ? this.pulled.get(track)?.rx : undefined;
+    try { return rx?.getSynchronizationSources?.()[0]?.audioLevel ?? 0; } catch { return 0; }
+  }
 
   private async closeMids(mids: string[], txs: RTCRtpTransceiver[]) {
     const pc = this.pc;
@@ -185,8 +213,8 @@ export class VoiceLink {
   }
 
   close() {
-    for (const m of [this.mic, this.cam]) m?.stream.getTracks().forEach((t) => t.stop());
-    this.mic = null; this.cam = null;
+    for (const m of [this.mic, this.cam, this.scr]) m?.stream.getTracks().forEach((t) => t.stop());
+    this.mic = null; this.cam = null; this.scr = null;
     for (const p of this.pulled.values()) { p.audio?.pause(); if (p.audio) p.audio.srcObject = null; }
     this.pulled.clear();
     this.pc?.close();

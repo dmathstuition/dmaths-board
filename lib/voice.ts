@@ -31,6 +31,9 @@ export const passOk = (classId: string, learner: string, pass: unknown, exp: unk
 // Each person's microphone and camera have fixed track names, so nobody can speak or appear as someone else.
 export const micTrack = (who: string) => `mic-${who}`.slice(0, 64);
 export const camTrack = (who: string) => `cam-${who}`.slice(0, 64);
+export const screenTrack = (who: string) => `scr-${who}`.slice(0, 64);
+// A video call: one pass for the whole class (anyone may switch their microphone and camera on).
+export const EVERYONE = "*";
 
 export const cleanId = (v: unknown) => (typeof v === "string" && /^[A-Za-z0-9_-]{8,80}$/.test(v) ? v : "");
 export const cleanSdp = (v: unknown) => (typeof v === "string" && v.startsWith("v=0") && v.length < 60_000 ? v : "");

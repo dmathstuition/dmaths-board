@@ -77,13 +77,23 @@ async function openClass(browser: Browser) {
       if (b.op === "config") json = { on: true };
       else if (b.op === "start") { const id = await run("start"); sessions[who] = id as string; json = { session: id, ticket: "t", iceServers: [] }; }
       else if (b.op === "allow") json = { pass: "pass", exp: Date.now() + 3_600_000 };
-      else if (b.op === "push") { const name = `${b.kind === "cam" ? "cam" : "mic"}-${who}`; const res: any = await run("push", b.session, b.sdp, b.mid, name); json = { sdp: res.sessionDescription.sdp, track: name }; }
+      else if (b.op === "push") { const name = `${b.kind === "cam" ? "cam" : b.kind === "scr" ? "scr" : "mic"}-${who}`; const res: any = await run("push", b.session, b.sdp, b.mid, name); json = { sdp: res.sessionDescription.sdp, track: name }; }
       else if (b.op === "pull") {
         const res: any = await run("pull", b.session, b.tracks.map((t: any) => ({ sessionId: t.s, trackName: t.t })));
         json = { sdp: res.sessionDescription.sdp, tracks: res.tracks.map((t: any) => ({ mid: t.mid, s: t.sessionId, t: t.trackName, error: null })) };
       } else if (b.op === "answer") { await run("answer", b.session, b.sdp); json = { ok: true }; }
       else if (b.op === "close") { const res: any = await run("close", b.session, b.sdp); json = { sdp: res.sessionDescription.sdp }; }
       await r.fulfill({ json });
+    });
+    // Screen sharing: a moving test picture instead of the browser's "choose a screen" box.
+    if (who === "teacher") await ctx.addInitScript(() => {
+      if (!navigator.mediaDevices) return;
+      navigator.mediaDevices.getDisplayMedia = async () => {
+        const c = document.createElement("canvas"); c.width = 640; c.height = 360;
+        const g = c.getContext("2d")!; let n = 0;
+        setInterval(() => { g.fillStyle = n++ % 2 ? "#FEF3C7" : "#DBEAFE"; g.fillRect(0, 0, 640, 360); g.fillStyle = "#000"; g.font = "40px sans-serif"; g.fillText(`Slide ${n}`, 40, 80); }, 100);
+        return c.captureStream(10);
+      };
     });
     const page = await ctx.newPage();
     await page.goto(who === "teacher" ? `/e2e-host?id=${SID}` : `/class/${SID}`, { waitUntil: "networkidle" });
@@ -197,4 +207,53 @@ test("the teacher's camera reaches a learner who turns video on; a learner speak
   await expect(learner.getByRole("button", { name: "Stop speaking" })).toBeHidden({ timeout: 10_000 });
   await teacher.getByRole("button", { name: "Turn my camera off" }).click();
   await expect(learner.locator("video")).toHaveCount(0, { timeout: 15_000 });
+});
+
+test("video call: optional, gallery of everyone, mute all, screen share", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const { teacher, learner } = await openClass(browser);
+
+  // The teacher starts a video call; the learner chooses to join.
+  await teacher.getByRole("button", { name: /Video call/ }).first().click();
+  const tCall = teacher.getByRole("region", { name: "Video call" });
+  await expect(tCall).toBeVisible({ timeout: 20_000 });
+  await expect(learner.getByRole("region", { name: "Video call" })).toHaveCount(0); // nobody is pulled in
+  await learner.getByRole("button", { name: "Join the video call" }).click();
+  const lCall = learner.getByRole("region", { name: "Video call" });
+  await expect(lCall).toBeVisible();
+  await expect(lCall.getByLabel(/^Mr B/)).toBeVisible({ timeout: 20_000 });
+  // They join muted; the teacher sees them.
+  await expect(tCall.getByLabel("Emmanuel, muted")).toBeVisible({ timeout: 20_000 });
+
+  // The learner unmutes and starts their video; the teacher sees and hears them.
+  await lCall.getByRole("button", { name: "Unmute my microphone" }).click();
+  await expect(tCall.getByLabel(/^Emmanuel(, talking)?$/)).toBeVisible({ timeout: 20_000 });
+  await lCall.getByRole("button", { name: "Turn my camera on" }).click();
+  await flowing(() => showing(teacher, "Emmanuel"));
+  await flowing(() => showing(learner, "Emmanuel")); // their own picture
+  await teacher.getByRole("button", { name: "Turn my camera on" }).first().click();
+  await flowing(() => showing(learner, "Mr B"));
+  await tCall.screenshot({ path: "test-results/call-gallery.png" });
+
+  // Mute everyone, and stop learners unmuting themselves.
+  await tCall.getByRole("button", { name: /Mute everyone/ }).click();
+  await expect(lCall.getByRole("button", { name: "Unmute my microphone" })).toBeVisible({ timeout: 20_000 });
+  await tCall.getByText("Learners can unmute").click();
+  await expect(lCall.getByText("Your teacher controls unmuting")).toBeVisible({ timeout: 20_000 });
+  await lCall.getByRole("button", { name: "Unmute my microphone" }).click();
+  await expect(lCall.getByText(/turned off unmuting/)).toBeVisible();
+
+  // The teacher shares their screen: the learner sees it big.
+  await tCall.getByRole("button", { name: "Share my screen" }).click();
+  await flowing(() => showing(learner, "Mr B's screen"));
+  await learner.screenshot({ path: "test-results/call-screen-share.png" });
+
+  // Back to the board and into the call again; then the teacher ends it.
+  await lCall.getByRole("button", { name: "Back to the board" }).click();
+  await expect(lCall).toBeHidden();
+  await learner.getByRole("button", { name: /Open the video call/ }).first().click();
+  await expect(lCall).toBeVisible();
+  await tCall.getByRole("button", { name: "End call" }).click();
+  await expect(lCall).toBeHidden({ timeout: 20_000 });
+  await expect(learner.getByRole("button", { name: "Join the video call" })).toHaveCount(0);
 });

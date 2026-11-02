@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sessionViewer } from "@/lib/sessionAccess";
 import { rateLimit } from "@/lib/ratelimit";
 import {
-  voiceConfigured, cf, iceServers, sessionTicket, ticketOk, speakPass, passOk, micTrack, camTrack, cleanId, cleanSdp, VoiceError, SPEAK_MS,
+  voiceConfigured, cf, iceServers, sessionTicket, ticketOk, speakPass, passOk, micTrack, camTrack, screenTrack, cleanId, cleanSdp, VoiceError, SPEAK_MS, EVERYONE,
 } from "@/lib/voice";
 
 // Class voice and camera (lib/voice.ts). Everyone in the class may listen and
@@ -14,7 +14,8 @@ import {
 //   POST { id, op: "pull", session, ticket, tracks: [{ s, t }] }    → { tracks, sdp? }     (listen; sdp = an offer to answer)
 //   POST { id, op: "answer", session, ticket, sdp }             → { ok }
 //   POST { id, op: "close", session, ticket, sdp, mids }        → { sdp }
-//   POST { id, op: "allow", learner }                           → { pass, exp }  (host only)
+//   POST { id, op: "allow", learner }                           → { pass, exp }  (host only; learner "*" = everyone: a video call)
+//   push kind "scr": the host sharing their screen
 export const dynamic = "force-dynamic";
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
 
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
     }
     if (op === "allow") {
       if (!v.host) return bad("Only the teacher can let someone speak.", 403);
-      const learner = String(body?.learner ?? "").slice(0, 80);
+      const learner = body?.learner === EVERYONE ? EVERYONE : String(body?.learner ?? "").slice(0, 80);
       if (!learner) return bad("Who should speak?");
       const exp = Date.now() + SPEAK_MS;
       return NextResponse.json({ pass: speakPass(classId, learner, exp), exp });
@@ -49,17 +50,18 @@ export async function POST(req: Request) {
     const path = `/sessions/${session}`;
 
     if (op === "push") {
-      if (!v.host && !passOk(classId, v.id, body?.pass, body?.exp)) return bad("Your teacher hasn't let you speak.", 403);
+      if (!v.host && !passOk(classId, v.id, body?.pass, body?.exp) && !passOk(classId, EVERYONE, body?.pass, body?.exp)) return bad("Your teacher hasn't let you speak.", 403);
+      if (body?.kind === "scr" && !v.host) return bad("Only the teacher can share their screen.", 403);
       const sdp = cleanSdp(body?.sdp), mid = String(body?.mid ?? "").slice(0, 16);
       if (!sdp || !mid) return bad("Microphone details are missing.");
-      const track = body?.kind === "cam" ? camTrack(v.id) : micTrack(v.id);
+      const track = body?.kind === "cam" ? camTrack(v.id) : body?.kind === "scr" ? screenTrack(v.id) : micTrack(v.id);
       const r = await cf(`${path}/tracks/new`, { method: "POST", body: { sessionDescription: { type: "offer", sdp }, tracks: [{ location: "local", mid, trackName: track }] } });
       return NextResponse.json({ sdp: r?.sessionDescription?.sdp ?? "", track });
     }
     if (op === "pull") {
-      const tracks = (Array.isArray(body?.tracks) ? body.tracks : []).slice(0, 12)
+      const tracks = (Array.isArray(body?.tracks) ? body.tracks : []).slice(0, 40)
         .map((t: any) => ({ location: "remote", sessionId: cleanId(t?.s), trackName: String(t?.t ?? "").slice(0, 64) }))
-        .filter((t: any) => t.sessionId && /^(mic|cam)-[A-Za-z0-9_-]+$/.test(t.trackName));
+        .filter((t: any) => t.sessionId && /^(mic|cam|scr)-[A-Za-z0-9_-]+$/.test(t.trackName));
       if (!tracks.length) return bad("Nothing to listen to.");
       const r = await cf<any>(`${path}/tracks/new`, { method: "POST", body: { tracks } });
       return NextResponse.json({
@@ -75,7 +77,7 @@ export async function POST(req: Request) {
     }
     if (op === "close") {
       const sdp = cleanSdp(body?.sdp);
-      const mids = (Array.isArray(body?.mids) ? body.mids : []).map((m: unknown) => String(m).slice(0, 16)).slice(0, 12);
+      const mids = (Array.isArray(body?.mids) ? body.mids : []).map((m: unknown) => String(m).slice(0, 16)).slice(0, 40);
       if (!sdp || !mids.length) return bad("Nothing to close.");
       const r = await cf(`${path}/tracks/close`, { method: "PUT", body: { tracks: mids.map((mid: string) => ({ mid })), sessionDescription: { type: "offer", sdp }, force: false } });
       return NextResponse.json({ sdp: r?.sessionDescription?.sdp ?? null });

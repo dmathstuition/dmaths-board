@@ -46,7 +46,7 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
     load();
   }
   const onState = useCallback((s: { id: string; status: string } | null) => setQuiz(s), []);
-  const voice = useLearnerVoice({ classId: id, me: { id: room?.me.id ?? "" } });
+  const voice = useLearnerVoice({ classId: id, me: { id: room?.me.id ?? "", name: room?.me.name ?? "" } });
 
   if (err) {
     return (
