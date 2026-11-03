@@ -4,6 +4,7 @@ import { useLive } from "@/components/live/LiveChannel";
 import { VoiceLink, friendlyMediaError, voiceApi, type Speaker } from "@/lib/voiceClient";
 import SpeakerVideo from "@/components/live/SpeakerVideo";
 import { VOLUMES, wakeAudio } from "@/lib/loudAudio";
+import { canHear, cleanRooms, roomOf, setBreakout, useBreakout, type Rooms } from "@/lib/breakout";
 
 // Video (cameras, screen sharing, video tiles) is switched off for now: the
 // class has sound only. Set this to true to bring video back.
@@ -21,6 +22,9 @@ import { nextActive, onScreen, pageCount, perPage, type CallView as View } from 
 //                (call: { pass, exp, open } — open: learners may unmute themselves)
 //   "voice-me"   learner → teacher: { by, name, s, t, v?, muted } when their microphone (and camera) is live, { by, off: true } when it stops
 //   "voice-mute" teacher → all (signed): mute everyone
+//   Breakout groups (lib/breakout.ts): the "voice" message also carries
+//   `rooms` — then each learner hears only their own group (and the teacher
+//   when they visit it or talk to everyone).
 //
 // Video only comes to a device for the people on its screen (and only after
 // a tap outside a call), to save data.
@@ -147,12 +151,15 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
   const allowRef = useRef(allow); allowRef.current = allow;
   const callRef = useRef(call); callRef.current = call;
   const names = useRef(new Map<string, string>()); names.current = new Map(people.map((p) => [p.id, p.name]));
+  const bo = useBreakout();
+  const rooms: Rooms | null = call ? bo.rooms : null;
+  useEffect(() => { setBreakout({ voiceOn: available }); }, [available]);
 
   const speakers = useMemo(() => {
     const list = [mine, student, ...Object.values(parts)].filter((s): s is Speaker => !!s);
     return list.filter((s, i) => list.findIndex((x) => x.id === s.id) === i).slice(0, MAX_IN_CALL);
   }, [mine, student, parts]);
-  const state = useRef({ speakers, allow, call }); state.current = { speakers, allow, call };
+  const state = useRef({ speakers, allow, call, rooms }); state.current = { speakers, allow, call, rooms };
   const send = useLive({
     "voice-me": (p: any) => {
       const by = String(p?.by ?? "");
@@ -173,7 +180,7 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
   });
   const announce = useCallback(() => send("voice", { host: true, ...state.current }), [send]);
   const live = !!mine || !!allow || !!call;
-  useEffect(() => { announce(); }, [mine, student, allow, call, parts, announce]);
+  useEffect(() => { announce(); }, [mine, student, allow, call, parts, rooms, announce]);
   useEffect(() => {
     if (!live) return;
     const t = setInterval(announce, REPEAT_MS);
@@ -184,7 +191,8 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
   // The call screen.
   const members: Member[] = call ? [
     ...(mine ? [{ id: me.id, name: me.name, sp: mine, me: true, host: true, muted: get().muted, localCam: mine.v ? get().cameraStream : null }] : []),
-    ...Object.values(parts).map((sp) => ({ id: sp.id, name: sp.name, sp, muted: !!sp.muted, hand: !!people.find((p) => p.id === sp.id)?.handAt })),
+    ...Object.values(parts).filter((sp) => !rooms?.visit || canHear(rooms, me.id, sp.id))
+      .map((sp) => ({ id: sp.id, name: sp.name, sp, muted: !!sp.muted, hand: !!people.find((p) => p.id === sp.id)?.handAt })),
   ] : [];
   const screen = call && mine?.sc ? { name: me.name, local: get().screenStream } : null;
   const cs = useCallScreen(get, !!call, members, screen);
@@ -192,9 +200,9 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
   const csWanted = useRef(cs.wanted); csWanted.current = cs.wanted;
   useEffect(() => {
     if (!live) return;
-    const remote = call ? Object.values(parts) : student ? [student] : [];
+    const remote = call ? Object.values(parts).filter((sp) => canHear(rooms, me.id, sp.id)) : student ? [student] : [];
     get().listen(remote, call ? csWanted.current : true).catch(() => {});
-  }, [student, parts, call, live, get, cs.wantedKey, lost]);
+  }, [student, parts, call, live, get, cs.wantedKey, lost, rooms, me.id]);
   // The connection dropped: reconnect my microphone (and camera) by myself.
   const mineRef = useRef(mine); mineRef.current = mine;
   useEffect(() => {
@@ -247,15 +255,24 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
     catch (e) { setErr(e instanceof Error ? e.message : "Couldn't let them speak."); }
   }
   function stopStudent() { setAllow(null); setStudent(null); }
-  async function startCall() {
+  async function startCall(view: View = "gallery") {
     setErr("");
     if (!mine && !(await start())) return;
     try {
       const r = await voiceApi(classId)("allow", { learner: "*" });
       setAllow(null); setStudent(null);
-      setCall({ pass: r.pass, exp: r.exp, open: true }); cs.setView("gallery");
+      setCall({ pass: r.pass, exp: r.exp, open: true }); cs.setView(view);
     } catch (e) { setErr(e instanceof Error ? e.message : "Couldn't start the video call."); }
   }
+  // Groups with sound: start the class call by itself (once per set of groups).
+  const autoFor = useRef<string | null>(null);
+  useEffect(() => {
+    const r = bo.rooms;
+    if (!r || !bo.sound || !available || call || busy || autoFor.current === r.id) return;
+    autoFor.current = r.id;
+    startCall("board"); // the group boards stay in front
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bo.rooms?.id, bo.sound, available, call, busy]);
   function endCall() { setCall(null); setParts({}); if (mine?.sc) share(); }
   function muteAll() { send("voice-mute", { host: true, at: Date.now() }); }
   function setOpen(open: boolean) { setCall((c) => (c ? { ...c, open } : c)); if (!open) muteAll(); }
@@ -268,7 +285,7 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
           <button type="button" onClick={start} disabled={busy} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line hover:ring-[#0E6E72]"}`} title="Talk to the class from the board">
             <span aria-hidden>🎙</span>{busy ? "Starting…" : full ? "" : "Start voice"}
           </button>
-          <button type="button" onClick={startCall} disabled={busy} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line hover:ring-[#0E6E72]"}`} title={VIDEO ? "A video call with the class — everyone can switch on their camera and microphone" : "A call with the class — everyone can switch on their microphone and talk"}>
+          <button type="button" onClick={() => startCall()} disabled={busy} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line hover:ring-[#0E6E72]"}`} title={VIDEO ? "A video call with the class — everyone can switch on their camera and microphone" : "A call with the class — everyone can switch on their microphone and talk"}>
             <span aria-hidden>{VIDEO ? "📹" : "📞"}</span>{full ? "" : VIDEO ? "Video call" : "Class call"}
           </button>
         </>
@@ -285,7 +302,7 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
               <span aria-hidden>{VIDEO ? "📹" : "📞"}</span>{full ? "" : cs.view === "board" ? `Call (${members.length})` : "Board"}
             </button>
           ) : (
-            <button type="button" onClick={startCall} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line"}`} aria-label={VIDEO ? "Start a video call" : "Start a class call"}>
+            <button type="button" onClick={() => startCall()} className={`${btnBase} ${full ? "bg-white/10 text-white ring-1 ring-white/30" : "bg-white text-ink ring-1 ring-line"}`} aria-label={VIDEO ? "Start a video call" : "Start a class call"}>
               <span aria-hidden>{VIDEO ? "📹" : "📞"}</span>{full ? "" : VIDEO ? "Video call" : "Class call"}
             </button>
           )}
@@ -342,6 +359,7 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
   const [talking, setTalking] = useState<{ s: string; t: string; v?: string; muted?: boolean } | null>(null);
   const [watch, setWatch] = useState(false); // receive video outside a call (off until asked, to save data)
   const [busy, setBusy] = useState(false);
+  const [rooms, setRooms] = useState<Rooms | null>(null); // breakout groups (lib/breakout.ts)
   const lastHeard = useRef(0);
   const talkingRef = useRef(talking); talkingRef.current = talking;
   const callRef = useRef(call); callRef.current = call;
@@ -359,6 +377,8 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
       setAllow((old) => (old?.pass === a?.pass ? old : a));
       const c = p?.call && p.call.pass ? { pass: String(p.call.pass), exp: Number(p.call.exp), open: !!p.call.open } : null;
       setCall((old) => (JSON.stringify(old) === JSON.stringify(c) ? old : c));
+      const r = c ? cleanRooms(p?.rooms) : null;
+      setRooms((old) => (JSON.stringify(old) === JSON.stringify(r) ? old : r));
     },
     "voice-mute": (p: any) => {
       if (!p?.host || !talkingRef.current) return;
@@ -370,7 +390,7 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
   tell.current = (t) => send("voice-me", t ? { by: me.id, name: myName, ...t } : { by: me.id, off: true });
   // The teacher stopped sending: voice is over.
   useEffect(() => {
-    const t = setInterval(() => { if (lastHeard.current && Date.now() - lastHeard.current > REPEAT_MS * 4) { lastHeard.current = 0; setSpeakers([]); setAllow(null); setCall(null); } }, REPEAT_MS);
+    const t = setInterval(() => { if (lastHeard.current && Date.now() - lastHeard.current > REPEAT_MS * 4) { lastHeard.current = 0; setSpeakers([]); setAllow(null); setCall(null); setRooms(null); } }, REPEAT_MS);
     return () => clearInterval(t);
   }, []);
   // The call ended: leave it.
@@ -391,7 +411,8 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
   // The call screen.
   const mySession = get().sessionId;
   const members: Member[] = call && joined ? [
-    ...speakers.filter((sp) => sp.s !== mySession).map((sp, i) => ({ id: sp.id, name: sp.name || "Teacher", sp, host: i === 0, muted: !!sp.muted })),
+    ...speakers.map((sp, i) => ({ sp, i })).filter(({ sp }) => sp.s !== mySession && canHear(rooms, me.id, sp.id))
+      .map(({ sp, i }) => ({ id: sp.id, name: sp.name || "Teacher", sp, host: i === 0, muted: !!sp.muted })),
     { id: me.id, name: myName || "You", sp: null, me: true, muted: !talking || !!talking.muted, localCam: talking?.v ? get().cameraStream : null },
   ] : [];
   const teacherSp = speakers[0];
@@ -400,8 +421,8 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
   const csWanted = useRef(cs.wanted); csWanted.current = cs.wanted;
   useEffect(() => {
     if (!listening) return;
-    get().listen(speakers, call && joined ? csWanted.current : watch).then(refresh).catch((e) => { console.warn("listen failed", e); setErr("The class sound or video didn't come through — it will try again."); });
-  }, [speakers, listening, watch, call, joined, get, refresh, cs.wantedKey, lost]);
+    get().listen(speakers.filter((sp) => canHear(rooms, me.id, sp.id)), call && joined ? csWanted.current : watch).then(refresh).catch((e) => { console.warn("listen failed", e); setErr("The class sound or video didn't come through — it will try again."); });
+  }, [speakers, listening, watch, call, joined, get, refresh, cs.wantedKey, lost, rooms, me.id]);
   // The connection dropped: hearing comes back by itself (above); in a call,
   // switch my microphone (and camera) back on as they were.
   useEffect(() => {
@@ -431,10 +452,10 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
     catch (e) { setErr(mediaError(e, "microphone")); }
     finally { setBusy(false); }
   }
-  async function join() {
+  async function join(view: View = "gallery") {
     if (!call) return;
     setBusy(true); setErr("");
-    wakeAudio(); setListening(true); get().resume(); setJoined(true); cs.setView("gallery");
+    wakeAudio(); setListening(true); get().resume(); setJoined(true); cs.setView(view);
     // Join with the microphone on but muted (like a meeting); without one, just watch and listen.
     try { const r = await get().speak({ pass: call.pass, exp: call.exp }); get().mute(true); const next = { ...r, muted: true }; setTalking(next); tell.current(next); }
     catch (e) { setErr(`${mediaError(e, "microphone")} You can still listen.`); }
@@ -472,14 +493,21 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
     tell.current(null);
   }
 
+  // The group board shows "Talk with your group" and joins the call from there.
+  const joinRef = useRef(join); joinRef.current = join;
+  const muteRef = useRef(toggleMute); muteRef.current = toggleMute;
+  useEffect(() => {
+    setBreakout({ rooms, call: !!call, inCall: !!call && joined, muted: !talking || !!talking.muted, join: () => joinRef.current("board"), toggleMute: () => muteRef.current() });
+  }, [rooms, call, joined, talking]);
+  const myRoom = roomOf(rooms, me.id);
   const teacherOn = speakers.length > 0;
   const hasVideo = speakers.some((s) => s.v);
   const inCall = !!call && joined;
   const controls = (full: boolean) => (!teacherOn && !allow) ? null : (
     <span className="inline-flex flex-wrap items-center gap-1">
       {call && !joined && (
-        <button type="button" onClick={join} disabled={busy} className={`${btnBase} animate-pulse bg-emerald-600 text-white`} aria-label={VIDEO ? "Join the video call" : "Join the call"}>
-          <span aria-hidden>{VIDEO ? "📹" : "📞"}</span>{busy ? "Joining…" : VIDEO ? "Join video call" : "Join the call"}
+        <button type="button" onClick={() => join()} disabled={busy} className={`${btnBase} animate-pulse bg-emerald-600 text-white`} aria-label={VIDEO ? "Join the video call" : "Join the call"}>
+          <span aria-hidden>{VIDEO ? "📹" : "📞"}</span>{busy ? "Joining…" : VIDEO ? "Join video call" : myRoom ? `Talk with ${myRoom.name}` : "Join the call"}
         </button>
       )}
       {inCall && (
@@ -534,6 +562,7 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
       <VolumeButton link={get} dark />
       <button type="button" onClick={leave} className={barBtn(false, true)}>Leave call</button>
       {call && !call.open && <span className="text-xs font-bold text-white/60">Your teacher controls unmuting</span>}
+      {myRoom && <span className="w-full text-center text-xs font-bold text-emerald-300">You hear {myRoom.name}{rooms && (rooms.all || rooms.visit === myRoom.id) ? " and your teacher" : ""}</span>}
       {err && <span role="alert" className="w-full text-center text-xs font-bold text-red-300">{err}</span>}
     </>
   ) : null;

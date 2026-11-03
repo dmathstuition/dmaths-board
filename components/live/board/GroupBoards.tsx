@@ -6,6 +6,7 @@ import { Thumb } from "@/components/live/board/AnswerBoards";
 import { localPoint } from "@/components/live/board/rotation";
 import { BOARD_H, BOARD_W, drawStrokes, roundPt, type Stroke } from "@/lib/whiteboard";
 import { useKeptRef, useKeptState, type KeepStore } from "@/lib/keptState";
+import { setBreakout, useBreakout } from "@/lib/breakout";
 import {
   MAX_GROUPS, addLateJoiners, cleanInk, cleanPlan, groupOf, inkForBoard, inkId, makeGroups, mergeInk, moveMember, suggestedGroups,
   type GroupPlan,
@@ -42,6 +43,19 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
   const [seed, setSeed] = useKeptState(keep, k("seed"), 1); // the preview stays put until "Shuffle"
   const [focus, setFocus] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // Breakout sound (lib/breakout.ts): groups talk among themselves on the class call.
+  const bo = useBreakout();
+  const [sound, setSound] = useKeptState(keep, k("sound"), true);
+  const [visit, setVisit] = useKeptState<string | null>(keep, k("visit"), null);
+  const [all, setAll] = useKeptState(keep, k("all"), false);
+  const withSound = host && !!plan && sound && bo.voiceOn;
+  useEffect(() => {
+    if (!host) return;
+    setBreakout(withSound && plan
+      ? { sound: true, rooms: { id: plan.id, host: myId, groups: plan.groups.map((g) => ({ id: g.id, name: g.name, members: g.members })), visit, all } }
+      : { sound: false, rooms: null });
+  }, [host, withSound, plan, visit, all, myId]);
+  useEffect(() => () => { if (host) setBreakout({ sound: false, rooms: null }); }, [host]);
 
   const online = people.filter((p) => p.online !== false);
   const nGroups = count ?? suggestedGroups(online.length);
@@ -124,12 +138,12 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
       const gs = groups;
       const names: Record<string, string> = {};
       for (const p of online) names[p.id] = p.name;
-      setInk(new Map()); setFocus(null); setNote(null);
+      setInk(new Map()); setFocus(null); setNote(null); setVisit(null); setAll(false);
       setPlan({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, task: task.trim().slice(0, 200), open: true, groups: gs, names });
     }
     function end() {
       if (plan) send("grp-plan", { host: true, plan: { ...plan, open: false } });
-      setPlan(null); setFocus(null); onClose();
+      setPlan(null); setFocus(null); setVisit(null); setAll(false); onClose();
     }
     const late = plan ? online.filter((p) => !plan.groups.some((g) => g.members.includes(p.id))) : [];
     const bring = (gid: string) => {
@@ -148,13 +162,17 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#E2F3F2] text-[#0E6E72]"><BoardIcon name="groups" /></span>
             <div className="min-w-0 flex-1">
               <p className="text-base font-black">Group boards</p>
-              {plan && <p className="truncate text-xs font-bold text-ink/55">{plan.task || "Groups work together on their own board"} · {plan.groups.length} groups</p>}
+              {plan && <p className="truncate text-xs font-bold text-ink/55">{plan.task || "Groups work together on their own board"} · {plan.groups.length} groups{withSound ? ` · 🔊 ${all ? "everyone hears you" : visit ? `you're with ${plan.groups.find((g) => g.id === visit)?.name ?? "a group"}` : "groups talk among themselves"}` : ""}</p>}
             </div>
             {plan && late.length > 0 && (
               <button type="button" onClick={() => { const names = Object.fromEntries(late.map((p) => [p.id, p.name])); setPlan(addLateJoiners({ ...plan, names: { ...plan.names, ...names } }, late)); }}
                 className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-black text-amber-800">Add {late.length} new learner{late.length === 1 ? "" : "s"}</button>
             )}
-            {plan && <button type="button" onClick={end} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white">End groups</button>}
+            {withSound && (
+              <button type="button" onClick={() => { setAll(!all); if (!all) setVisit(null); }} aria-pressed={all}
+                className={`rounded-xl px-3 py-2 text-xs font-black ${all ? "bg-amber-400 text-ink" : "bg-ink/5 text-ink/75"}`}>📢 {all ? "Talking to every group" : "Talk to all groups"}</button>
+            )}
+            {plan && <button type="button" onClick={end} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white">{withSound ? "Bring everyone back" : "End groups"}</button>}
             <button type="button" onClick={onClose} aria-label={plan ? "Hide — groups keep working" : "Close"} className="flex h-9 w-9 items-center justify-center rounded-lg text-ink/60 hover:bg-ink/5"><BoardIcon name="close" /></button>
           </div>
           {!plan ? (
@@ -173,6 +191,12 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
                   ))}
                 </div>
               </fieldset>
+              {bo.voiceOn && (
+                <label className="flex items-center gap-2 rounded-xl bg-[#E2F3F2] p-3 text-sm font-bold text-ink">
+                  <input type="checkbox" checked={sound} onChange={(e) => setSound(e.target.checked)} className="h-5 w-5 accent-[#0E6E72]" />
+                  <span>Groups talk to each other <span className="block text-xs font-semibold text-ink/60">Starts the class call; each learner hears only their group. You can join any group, or talk to all.</span></span>
+                </label>
+              )}
               {!online.length ? <p className="rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-900">No learners have joined yet — groups are made from the learners in the class.</p> : groups && (
                 <>
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -195,13 +219,17 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
               {note && <p role="status" className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">{note}</p>}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {plan.groups.map((g) => (
-                  <div key={g.id} className="overflow-hidden rounded-xl ring-2 ring-line">
+                  <div key={g.id} className={`overflow-hidden rounded-xl ring-2 ${visit === g.id && withSound ? "ring-emerald-500" : "ring-line"}`}>
                     <button type="button" onClick={() => setFocus(g.id)} aria-label={`Open ${g.name}'s board`} className="block w-full"><Thumb strokes={groupInk(g.id)} /></button>
                     <div className="flex items-center gap-2 bg-slate-50 px-2 py-1.5">
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-black">{g.name}</p>
                         <p className="truncate text-[11px] font-semibold text-ink/55">{g.members.map(nameOf).join(", ") || "Empty"}</p>
                       </div>
+                      {withSound && (
+                        <button type="button" onClick={() => { setVisit(visit === g.id ? null : g.id); setAll(false); }} aria-pressed={visit === g.id} aria-label={visit === g.id ? `Leave ${g.name}` : `Join ${g.name} to talk`}
+                          className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-black ${visit === g.id ? "bg-emerald-600 text-white" : "bg-white text-ink ring-1 ring-slate-200"}`}>{visit === g.id ? "🎧 With them · Leave" : "🎧 Join"}</button>
+                      )}
                       <button type="button" onClick={() => bring(g.id)} className="shrink-0 rounded-lg bg-[#0E6E72] px-2.5 py-1.5 text-[11px] font-black text-white">To main board</button>
                     </div>
                   </div>
@@ -262,6 +290,15 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
           </div>
           <button type="button" onClick={() => setHidden(true)} className="rounded-lg bg-ink/5 px-3 py-2 text-xs font-black text-ink/70 hover:bg-ink/10">See the class board</button>
         </div>
+        {bo.rooms && bo.call && (bo.inCall ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2">
+            <p role="status" className="min-w-0 flex-1 text-sm font-bold text-emerald-800">🔊 You&apos;re in {g.name}&apos;s talk{bo.rooms.all ? " — your teacher is talking to everyone" : bo.rooms.visit === g.id ? " — your teacher is with your group" : ""}.</p>
+            <button type="button" onClick={() => bo.toggleMute?.()} aria-label={bo.muted ? "Unmute my microphone" : "Mute my microphone"}
+              className={`min-h-[40px] rounded-xl px-3 text-sm font-black ${bo.muted ? "bg-amber-400 text-ink" : "bg-red-500 text-white"}`}>{bo.muted ? "🔇 Unmute to talk" : "🎙 Mute"}</button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => bo.join?.()} className="min-h-[44px] animate-pulse rounded-xl bg-emerald-600 px-4 text-sm font-black text-white">🎧 Talk with your group</button>
+        ))}
         <GroupPad others={groupInk(g.id)} mine={mine} me={myId} name={myName} onChange={change} onDone={() => sendMine(planRef.current, true)} />
       </div>
     </div>

@@ -264,3 +264,48 @@ test("class call (sound only): optional, everyone can talk, mute all, loud volum
   await expect(lCall).toBeHidden({ timeout: 20_000 });
   await expect(learner.getByRole("button", { name: /Join the call/ })).toHaveCount(0);
 });
+
+test("breakout groups: each group talks on its own, the teacher drops in, then everyone comes back", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const { teacher, learner, packets } = await openClass(browser);
+
+  // The teacher makes groups with sound on: the class call starts by itself.
+  await teacher.getByRole("button", { name: "Group boards" }).click();
+  const dlg = teacher.getByRole("dialog", { name: "Group boards" });
+  await expect(dlg.getByText("Groups talk to each other")).toBeVisible();
+  await dlg.getByRole("button", { name: "Start groups" }).click();
+  await expect(dlg.getByText(/groups talk among themselves/)).toBeVisible({ timeout: 20_000 });
+  await expect(teacher.getByRole("button", { name: /Open the class call/ }).first()).toBeVisible({ timeout: 20_000 });
+
+  // The learner joins their group's talk from the group board.
+  const board = learner.getByRole("dialog", { name: /Group \d board/ });
+  await expect(board).toBeVisible({ timeout: 20_000 });
+  await board.getByRole("button", { name: "🎧 Talk with your group" }).click();
+  await expect(board.getByText(/You're in Group \d's talk\./)).toBeVisible({ timeout: 20_000 });
+  await expect(learner.getByRole("region", { name: "Class call" })).toHaveCount(0); // the group board stays in front
+
+  // The teacher isn't with the group: the learner doesn't hear the teacher.
+  await learner.waitForTimeout(4000);
+  expect((await packets("learner")).out).toBe(0);
+
+  // The teacher joins the learner's group: they hear each other.
+  const group = (await board.getByText(/You're in Group \d/).textContent())!.match(/Group \d/)![0];
+  await dlg.getByRole("button", { name: `Join ${group} to talk` }).click();
+  await expect(dlg.getByText(`you're with ${group}`)).toBeVisible();
+  await expect(board.getByText("your teacher is with your group")).toBeVisible({ timeout: 20_000 });
+  await flowing(async () => (await packets("learner")).out > 20);
+  await board.getByRole("button", { name: "Unmute my microphone" }).click();
+  await expect(board.getByRole("button", { name: "Mute my microphone" })).toBeVisible();
+  await flowing(async () => (await packets("teacher")).out > 20);
+  await dlg.screenshot({ path: "test-results/breakout-teacher.png" });
+  await board.screenshot({ path: "test-results/breakout-learner.png" });
+
+  // Talk to all groups, then bring everyone back to one class call.
+  await dlg.getByRole("button", { name: /Talk to all groups/ }).click();
+  await expect(board.getByText("your teacher is talking to everyone")).toBeVisible({ timeout: 20_000 });
+  await dlg.getByRole("button", { name: "Bring everyone back" }).click();
+  await expect(board).toBeHidden({ timeout: 20_000 });
+  await expect(learner.getByRole("button", { name: /Open the class call/ }).first()).toBeVisible();
+  await learner.getByRole("button", { name: /Open the class call/ }).first().click();
+  await expect(learner.getByRole("region", { name: "Class call" }).getByLabel(/^Mr B/)).toBeVisible({ timeout: 20_000 });
+});
