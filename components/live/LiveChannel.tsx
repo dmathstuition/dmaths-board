@@ -28,11 +28,21 @@ export const RECONNECTED = "_reconnected";
 // Per-screen sending budget (see `bucket` below).
 const SEND_PER_SECOND = 12, SEND_BURST = 24;
 const SKIPPABLE = new Set(["board-live", "board-laser"]);
+// Learner → teacher only: these go to the teacher's own channel ("…:up",
+// which only the teacher listens to) instead of reaching every screen. In a
+// class of 100 that's 1 delivery instead of 100. Learners use it once the
+// teacher's messages say the teacher is listening there (`_up`); if a send
+// there fails, it goes the old way.
+const UPLINK = new Set(["ab-answer", "pulse", "poll-vote", "blocks-move"]);
+const UP_FRESH_MS = 120_000;
 
-export function LiveChannelProvider({ sessionId, children }: { sessionId: string; children: ReactNode }) {
+export function LiveChannelProvider({ sessionId, host = false, children }: { sessionId: string; host?: boolean; children: ReactNode }) {
   const supabase = useMemo(() => supabaseBrowser(), []);
   const listeners = useRef(new Map<string, Set<Handler>>());
   const chRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const upRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const upLive = useRef(false);   // teacher: listening on the up channel
+  const upSeen = useRef(0);       // learner: when the teacher last said they're listening there
   const [status, setStatus] = useState<LiveStatus>("connecting");
   const wasLive = useRef(false);
   const wentOffline = useRef(false);
@@ -67,7 +77,7 @@ export function LiveChannelProvider({ sessionId, children }: { sessionId: string
     // (the keys still arrive in the background and are used from then on).
     keysReady.current = Promise.race([loading, new Promise<void>((ok) => setTimeout(ok, 4000))]);
     const ch = supabase.channel(`live-class:${sessionId}`, { config: { broadcast: { self: false } } });
-    ch.on("broadcast", { event: "*" }, (msg: any) => {
+    const deliver = (msg: any) => {
       const event = String(msg?.event ?? ""), payload = msg?.payload ?? {};
       recvQ.current = recvQ.current.then(async () => {
         await keysReady.current;
@@ -77,9 +87,31 @@ export function LiveChannelProvider({ sessionId, children }: { sessionId: string
           if (payload._ts < newestSigned.current - 30_000) return;
           newestSigned.current = Math.max(newestSigned.current, payload._ts);
         }
+        if (payload?.host === true && payload._up) upSeen.current = Date.now();
         listeners.current.get(event)?.forEach((fn) => fn(payload));
       }).catch(() => {});
-    });
+    };
+    ch.on("broadcast", { event: "*" }, deliver);
+    // The up channel: the teacher listens; learners only send to it (over plain HTTPS).
+    const up = supabase.channel(`live-class:${sessionId}:up`, { config: { broadcast: { self: false } } });
+    upLive.current = false; upSeen.current = 0;
+    if (host) {
+      // Check the whole route works (HTTPS in → this screen) before telling
+      // learners to use it; until then, and if it never does, nothing changes.
+      const nonce = Math.random().toString(36).slice(2);
+      let checks: ReturnType<typeof setTimeout>[] = [];
+      up.on("broadcast", { event: "*" }, (msg: any) => {
+        const ev = String(msg?.event ?? "");
+        if (ev === "up-check") { if (msg?.payload?.n === nonce) upLive.current = true; return; }
+        if (UPLINK.has(ev)) deliver(msg);
+      });
+      up.subscribe((st) => {
+        if (st !== "SUBSCRIBED") { upLive.current = false; return; }
+        checks.forEach(clearTimeout);
+        checks = [0, 8000, 30000].map((ms) => setTimeout(() => { if (!upLive.current && !stop) up.httpSend("up-check", { n: nonce }).catch(() => {}); }, ms));
+      });
+    }
+    upRef.current = up;
     ch.subscribe((st) => {
       if (st === "SUBSCRIBED") {
         setStatus("live");
@@ -98,9 +130,10 @@ export function LiveChannelProvider({ sessionId, children }: { sessionId: string
     return () => {
       stop = true;
       chRef.current = null; supabase.removeChannel(ch);
+      upRef.current = null; upLive.current = false; supabase.removeChannel(up);
       document.removeEventListener("visibilitychange", back); window.removeEventListener("online", back);
     };
-  }, [sessionId, supabase]);
+  }, [sessionId, supabase, host]);
 
   // A message budget for this screen. The live service limits messages per
   // second for the whole class, and every message is delivered to every
@@ -122,11 +155,18 @@ export function LiveChannelProvider({ sessionId, children }: { sessionId: string
         }
         b.tokens -= 1;
         let body: any = payload;
-        if (needsSignature(event, payload)) {
+        if (host && upLive.current && (payload as any)?.host === true) body = { ...body, _up: 1 }; // "send me your answers on the up channel"
+        if (needsSignature(event, body)) {
           await keysReady.current;
-          if (keys.current.sign) body = await signPayload(keys.current.sign, sessionId, event, payload);
+          if (keys.current.sign) body = await signPayload(keys.current.sign, sessionId, event, body);
         }
-        chRef.current?.send({ type: "broadcast", event, payload: body }).catch(() => {});
+        const main = () => chRef.current?.send({ type: "broadcast", event, payload: body }).catch(() => {});
+        if (!host && UPLINK.has(event) && upRef.current && Date.now() - upSeen.current < UP_FRESH_MS) {
+          const up = upRef.current;
+          void up.httpSend(event, body, { timeout: 8000 }).catch(() => { upSeen.current = 0; main(); }); // fall back to the old way
+          return;
+        }
+        main();
       }).catch(() => {});
     },
     on: (event, fn) => {
@@ -134,7 +174,7 @@ export function LiveChannelProvider({ sessionId, children }: { sessionId: string
       set.add(fn); listeners.current.set(event, set);
       return () => { set.delete(fn); };
     },
-  }), [sessionId]);
+  }), [sessionId, host]);
 
   return <LiveBusProvider bus={bus} status={status}>{children}</LiveBusProvider>;
 }

@@ -10,12 +10,25 @@ type Who = "teacher" | "learner";
 // A tiny stand-in for Supabase Realtime: joins, heartbeats and broadcasts are
 // relayed between the browsers of one test. `drop` loses 60% of what the
 // learner sends; `*-dead` refuses that browser's live connection outright.
-export function realtimeHub(net: Net = "normal") {
+// `upBroken`: HTTPS broadcasts are accepted but never delivered (the worst case).
+export function realtimeHub(net: Net = "normal", opts: { upBroken?: boolean } = {}) {
   const topics = new Map<string, Set<any>>();
-  const stats = { relayed: 0, dropped: 0, events: new Map<string, number>() };
+  const stats = { relayed: 0, dropped: 0, uplink: 0, events: new Map<string, number>(), upEvents: new Map<string, number>() };
   const count = (ev: string) => stats.events.set(ev, (stats.events.get(ev) ?? 0) + 1);
-  const attach = (ctx: BrowserContext, who: Who) =>
-    ctx.routeWebSocket(/realtime\/v1\/websocket/, (ws) => {
+  const attach = async (ctx: BrowserContext, who: Who) => {
+    // Broadcasts sent over HTTPS (channel.httpSend): to everyone on that topic.
+    await ctx.route(/realtime\/v1\/api\/broadcast\//, async (r) => {
+      if (r.request().method() === "OPTIONS") return r.fulfill({ status: 204, headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "POST" } });
+      if ((net === "learner-dead" && who === "learner") || (net === "drop" && who === "learner" && Math.random() < 0.6)) { stats.dropped++; return r.fulfill({ status: 503, body: "down" }); }
+      const m = new URL(r.request().url()).pathname.match(/\/api\/broadcast\/([^/]+)\/events\/([^/]+)$/);
+      if (!m) return r.fulfill({ status: 404, body: "" });
+      const topic = `realtime:${decodeURIComponent(m[1])}`, event = decodeURIComponent(m[2]);
+      const payload = JSON.parse(r.request().postData() ?? "{}");
+      stats.uplink++; stats.upEvents.set(event, (stats.upEvents.get(event) ?? 0) + 1);
+      if (!opts.upBroken) for (const other of topics.get(topic) ?? []) other.send(JSON.stringify([null, null, topic, "broadcast", { type: "broadcast", event, payload }]));
+      return r.fulfill({ status: 202, headers: { "access-control-allow-origin": "*" }, body: "" });
+    });
+    await ctx.routeWebSocket(/realtime\/v1\/websocket/, (ws) => {
       if ((net === "learner-dead" && who === "learner") || (net === "teacher-dead" && who === "teacher")) { ws.close({ code: 1011, reason: "blocked" }); return; }
       const lose = () => net === "drop" && who === "learner" && Math.random() < 0.6;
       ws.onMessage((raw) => {
@@ -51,6 +64,7 @@ export function realtimeHub(net: Net = "normal") {
         }
       });
     });
+  };
   const selfTopics = new Set<string>();
   return { attach, stats };
 }

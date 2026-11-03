@@ -319,7 +319,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                   ))}
                 </div>
               </fieldset>
-              {scale >= 3 && <p role="note" className="rounded-xl bg-amber-50 p-3 text-xs font-bold text-amber-900 ring-1 ring-amber-200">Big class: class work sends every learner&apos;s writing live to everyone, which can overload the connection with this many learners. For the whole class at once, use the Live quiz or Exam instead.</p>}
+              {scale >= 3 && <p role="note" className="rounded-xl bg-[#E2F3F2] p-3 text-xs font-bold text-[#0A4F52]">Big class: each learner&apos;s work reaches you every few seconds rather than instantly, to keep the class connection steady. Hand-ins always arrive.</p>}
               <button type="button" onClick={start} disabled={!!busy && !busy.startsWith("That")} className="justify-self-start rounded-xl bg-[#0E6E72] px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">Send to learners</button>
             </div>
           ) : (

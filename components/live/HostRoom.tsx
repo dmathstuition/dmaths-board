@@ -47,7 +47,7 @@ export function useRoom(id: string, every = 5000) {
 
 
 export default function HostRoom({ id, base }: { id: string; base: HostBase }) {
-  return <LiveChannelProvider sessionId={id}><Host id={id} base={base} /></LiveChannelProvider>;
+  return <LiveChannelProvider sessionId={id} host><Host id={id} base={base} /></LiveChannelProvider>;
 }
 
 function Host({ id, base }: { id: string; base: HostBase }) {
