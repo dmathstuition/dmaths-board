@@ -12,12 +12,13 @@ import { localDelta, localPoint } from "@/components/live/board/rotation";
 import { ClockPanel, FractionPanel, GroupsPanel, HundredPanel, PlaceValuePanel, SentencePanel, SpellPanel, WordCardPanel } from "@/components/live/board/MorePanels";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
 import { Compass, SolidPanel, type GeoDraw } from "@/components/live/board/GeometryTools";
+import { BlocksLayer, BlocksTray } from "@/components/live/board/MathBlocks";
 
 // The class tools that sit on top of the board: timer, dice, name picker,
 // screen shade, ruler and protractor. Only the host can change them; every
 // learner sees the same thing. `boxW` is the board's width in CSS pixels.
-export default function BoardWidgets({ w, host, onChange, boxW, names, onDraw }: {
-  w: Widgets; host: boolean; onChange: (next: Widgets, final?: boolean) => void; boxW: number; names: string[];
+export default function BoardWidgets({ w, host, onChange, boxW, names, onDraw, myId = "" }: {
+  w: Widgets; host: boolean; onChange: (next: Widgets, final?: boolean) => void; boxW: number; names: string[]; myId?: string;
   onDraw?: (g: GeoDraw) => void; // the compasses draw a circle or an arc onto the board
 }) {
   const scale = boxW / BOARD_W;
@@ -37,6 +38,8 @@ export default function BoardWidgets({ w, host, onChange, boxW, names, onDraw }:
       {w.spell.on && <SpellPanel s={w.spell} host={host} boxW={boxW} onChange={(spell, final) => onChange({ ...w, spell }, final)} />}
       {w.groups.on && <GroupsPanel s={w.groups} host={host} boxW={boxW} names={names} onChange={(groups, final) => onChange({ ...w, groups }, final)} />}
       {w.spotlight.on && <Spotlight s={w.spotlight} host={host} boxW={boxW} onChange={(spotlight, final) => onChange({ ...w, spotlight }, final)} />}
+      {w.blocks.on && w.blocks.items.length > 0 && <BlocksLayer s={w.blocks} host={host} myId={myId} boxW={boxW} onChange={(blocks, final) => onChange({ ...w, blocks }, final)} />}
+      {w.blocks.on && <BlocksTray s={w.blocks} host={host} onChange={(blocks, final) => onChange({ ...w, blocks }, final)} />}
       {w.solid.on && <SolidPanel s={w.solid} host={host} boxW={boxW} onChange={(solid, final) => onChange({ ...w, solid }, final)} />}
       {w.compass.on && <Compass c={w.compass} host={host} onChange={(compass, final) => onChange({ ...w, compass }, final)} onDraw={(g) => onDraw?.(g)} />}
       {w.protractor.on && <Protractor p={w.protractor} scale={scale} host={host} onChange={(protractor, final) => onChange({ ...w, protractor }, final)} />}

@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import ProgressLink from "@/components/live/board/ProgressLink";
 import ResultsBreakdown from "@/components/live/ResultsBreakdown";
 import type { LearnerDetail } from "@/lib/learnerResults";
 
@@ -47,6 +48,7 @@ export default function MyResults({ sessionId, ended }: { sessionId: string; end
           <a href={`https://wa.me/?text=${encodeURIComponent(`My class results: ${full}`)}`} target="_blank" rel="noreferrer" className="min-h-[40px] rounded-xl bg-[#25D366] px-3 py-2.5 text-xs font-black text-white">WhatsApp</a>
         </div>
       )}
+      {d && <div className="mt-3 flex flex-wrap items-center gap-2"><ProgressLink sessionId={sessionId} label="My term progress" /></div>}
     </section>
   );
 }

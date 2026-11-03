@@ -3,6 +3,7 @@
 // shade, ruler and protractor.
 
 import { isSolid, type SolidKind } from "@/lib/solids";
+import { DEFAULT_BLOCKS, cleanBlocks, type BlocksState } from "@/lib/mathBlocks";
 
 export type Timer = { seconds: number; endsAt: number | null; left: number | null; mode: "down" | "up"; startedAt: number | null };
 export type Placed = { on: boolean; x: number; y: number; rot: number }; // x,y = centre as a fraction of the board
@@ -51,6 +52,7 @@ export type Widgets = {
   groups: GroupsState;
   compass: CompassState;
   solid: SolidState;
+  blocks: BlocksState;
 };
 
 export const DEFAULT_WIDGETS: Widgets = {
@@ -72,6 +74,7 @@ export const DEFAULT_WIDGETS: Widgets = {
   groups: { on: false, x: 0.3, y: 0.08, size: 3, groups: [] },
   compass: { on: false, x: 0.5, y: 0.55, r: 5, rot: 0 },
   solid: { on: false, x: 0.55, y: 0.04, shape: "cuboid", a: 6, b: 4, c: 3, yaw: 35, pitch: 20, net: false, facts: true },
+  blocks: DEFAULT_BLOCKS,
 };
 
 export const WORD_KINDS = ["noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection"] as const;
@@ -122,6 +125,7 @@ export function cleanWidgets(v: unknown): Widgets {
       yaw: ((Math.round(clamp(w?.solid?.yaw, -720, 720, 35)) % 360) + 360) % 360, pitch: Math.round(clamp(w?.solid?.pitch, -89, 89, 20)),
       net: !!w?.solid?.net, facts: w?.solid?.facts !== false,
     },
+    blocks: cleanBlocks(w?.blocks),
   };
 }
 

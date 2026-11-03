@@ -16,6 +16,7 @@ const P: Record<string, string> = {
   exam: "M9 3h6v3H9zM7 4.5H5v17h14v-17h-2M8.5 11h7M8.5 14.5h7M8.5 18h4",
   compass: "M12 3v3M12 6l-5 15M12 6l5 15M8.5 16h7",
   solid: "M12 3 4 7v10l8 4 8-4V7ZM4 7l8 4 8-4M12 11v10",
+  blocks: "M3 13h8v8H3zM13 13h8v8h-8zM7 3h10v8H7z",
   note: "M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3ZM15 3v6h6",
   laser: "M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2",
   undo: "M3 7v6h6M21 17a9 9 0 0 0-15-6.7L3 13",

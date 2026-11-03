@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
+import ProgressLink from "@/components/live/board/ProgressLink";
 import { BADGES, cleanShown, shownBoard, type Shown, type Standing } from "@/lib/stars";
 
 // The class leaderboard: stars and badges from quizzes, class work, exams and
@@ -74,7 +75,7 @@ export default function Leaderboard({ sessionId, host, myName, open, onClose }: 
           {list && list.length > 0 && (
             <ol className="grid gap-1.5">
               {(scope === "class" ? [...list].filter((p) => p.classStars > 0).sort((a, b) => b.classStars - a.classStars) : list).map((p, i) => (
-                <li key={p.key} className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2">
+                <li key={p.key} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl bg-white/5 px-3 py-2">
                   <span className="w-7 text-center text-lg font-black">{MEDAL[i] ?? i + 1}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-black">{p.name}</span>
@@ -85,6 +86,7 @@ export default function Leaderboard({ sessionId, host, myName, open, onClose }: 
                   </span>
                   <span className="flex gap-0.5" aria-label={p.badges.map((b) => b.label).join(", ") || "No badges yet"}>{p.badges.map((b) => <span key={b.id} title={b.label}>{b.icon}</span>)}</span>
                   <span className="min-w-[4rem] text-right text-lg font-black text-amber-300">⭐ {scope === "class" ? p.classStars : p.stars}</span>
+                  <ProgressLink sessionId={sessionId} name={p.name} dark label="Progress" />
                 </li>
               ))}
             </ol>
