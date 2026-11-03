@@ -21,8 +21,9 @@ export function cleanPulse(p: unknown, now = Date.now()): PulseEntry | null {
 }
 
 // Who is following and who is lost right now (newest signals only).
-export function pulseNow(entries: Iterable<PulseEntry>, now = Date.now()) {
-  const fresh = [...entries].filter((e) => now - e.at < PULSE_TTL_MS);
+// `scale`: big classes resend less often (lib/classScale), so signals last longer.
+export function pulseNow(entries: Iterable<PulseEntry>, now = Date.now(), scale = 1) {
+  const fresh = [...entries].filter((e) => now - e.at < PULSE_TTL_MS * Math.max(1, scale));
   const byName = (a: PulseEntry, b: PulseEntry) => a.name.localeCompare(b.name);
   return {
     up: fresh.filter((e) => e.v === "up").sort(byName),

@@ -1,4 +1,5 @@
 "use client";
+import { setClassSize } from "@/lib/classScale";
 import type { HostBase } from "@/lib/liveSession";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -31,6 +32,7 @@ export function useRoom(id: string, every = 5000) {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { setErr(j.error ?? "Couldn't open this class."); return; }
     setErr(null); setRoom(j);
+    setClassSize(j.here ?? (Array.isArray(j.people) ? j.people.filter((p: any) => p.online).length : 0)); // big classes repeat less (lib/classScale)
   }, [id]);
   useEffect(() => {
     load();

@@ -1,4 +1,5 @@
 "use client";
+import { useClassScale } from "@/lib/classScale";
 import { useEffect, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
@@ -106,13 +107,15 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     },
   });
 
+  const scale = useClassScale(); // big classes: repeat less (lib/classScale)
+  const scaleRef = useRef(scale); scaleRef.current = scale;
   // Tutor: keep the round in everyone's view (late joiners, lost messages).
   useEffect(() => {
     if (!host || !round) return;
     send("ab-round", { host: true, round });
-    const t = setInterval(() => send("ab-round", { host: true, round: roundRef.current }), 4000);
+    const t = setInterval(() => send("ab-round", { host: true, round: roundRef.current }), 4000 * scale);
     return () => clearInterval(t);
-  }, [host, round, send]);
+  }, [host, round, send, scale]);
 
   // Learner: send the answer as it changes (throttled) and again every few seconds.
   const lastSent = useRef(0);
@@ -121,9 +124,9 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     const r = roundRef.current;
     if (host || !r) return;
     const now = Date.now();
-    if (!force && now - lastSent.current < 350) {
+    if (!force && now - lastSent.current < 350 * scaleRef.current) {
       // Still send the last change once the pause is over, so nothing typed is left behind.
-      if (!pendingSend.current) pendingSend.current = setTimeout(() => { pendingSend.current = null; sendMine(true); }, 400);
+      if (!pendingSend.current) pendingSend.current = setTimeout(() => { pendingSend.current = null; sendMine(true); }, 400 * scaleRef.current);
       return;
     }
     lastSent.current = now;
@@ -131,10 +134,10 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
   };
   useEffect(() => {
     if (host || !round) return;
-    const t = setInterval(() => sendMine(true), 8000); // changes go at once; this is only a safety net
+    const t = setInterval(() => sendMine(true), 8000 * scale); // changes go at once; this is only a safety net
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [host, round?.id]);
+  }, [host, round?.id, scale]);
 
   function start() {
     order.current = []; setAnswers(new Map()); setFocus(null); setShowBy(null);
@@ -316,6 +319,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                   ))}
                 </div>
               </fieldset>
+              {scale >= 3 && <p role="note" className="rounded-xl bg-amber-50 p-3 text-xs font-bold text-amber-900 ring-1 ring-amber-200">Big class: class work sends every learner&apos;s writing live to everyone, which can overload the connection with this many learners. For the whole class at once, use the Live quiz or Exam instead.</p>}
               <button type="button" onClick={start} disabled={!!busy && !busy.startsWith("That")} className="justify-self-start rounded-xl bg-[#0E6E72] px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">Send to learners</button>
             </div>
           ) : (

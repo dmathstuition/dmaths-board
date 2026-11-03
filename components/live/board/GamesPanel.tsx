@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useClassScale } from "@/lib/classScale";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
 import GamePlayer from "@/components/games/GamePlayer";
@@ -84,14 +85,16 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
       setTheirs(g);
     },
   });
+  const scale = useClassScale(); // big classes: repeat less (lib/classScale)
+  const scaleRef = useRef(scale); scaleRef.current = scale;
   useEffect(() => {
     if (!host || !live) return;
     const tell = () => send("game-open", { host: true, game: shared ? playing : null });
     tell();
     if (!shared) return;
-    const t = setInterval(tell, 4000);
+    const t = setInterval(tell, 4000 * scale);
     return () => clearInterval(t);
-  }, [host, live, shared, playing, send]);
+  }, [host, live, shared, playing, send, scale]);
 
   // Esc hides the panel (and never reaches the board behind it).
   const showing = host ? open : !!theirs && !hidden;

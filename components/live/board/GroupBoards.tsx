@@ -1,4 +1,5 @@
 "use client";
+import { useClassScale } from "@/lib/classScale";
 import { useEffect, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
@@ -86,13 +87,15 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
     },
   });
 
+  const scale = useClassScale(); // big classes: repeat less (lib/classScale)
+  const scaleRef = useRef(scale); scaleRef.current = scale;
   // Teacher: keep the plan on every screen.
   useEffect(() => {
     if (!host || !plan) return;
     send("grp-plan", { host: true, plan });
-    const t = setInterval(() => send("grp-plan", { host: true, plan: planRef.current }), 4000);
+    const t = setInterval(() => send("grp-plan", { host: true, plan: planRef.current }), 4000 * scale);
     return () => clearInterval(t);
-  }, [host, plan, send]);
+  }, [host, plan, send, scale]);
 
   // Learner: send my ink as it changes (throttled) and every few seconds.
   const last = useRef(0);
@@ -101,8 +104,8 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
     const g = groupOf(r, myId);
     if (host || !r || !g) return;
     const now = Date.now();
-    if (!force && now - last.current < 300) {
-      if (!pending.current) pending.current = setTimeout(() => { pending.current = null; sendMine(planRef.current, true); }, 350);
+    if (!force && now - last.current < 300 * scaleRef.current) {
+      if (!pending.current) pending.current = setTimeout(() => { pending.current = null; sendMine(planRef.current, true); }, 350 * scaleRef.current);
       return;
     }
     last.current = now;
@@ -110,10 +113,10 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
   }
   useEffect(() => {
     if (host || !plan) return;
-    const t = setInterval(() => sendMine(planRef.current, true), 8000); // changes go at once; this is only a safety net
+    const t = setInterval(() => sendMine(planRef.current, true), 8000 * scale); // changes go at once; this is only a safety net
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [host, plan?.id]);
+  }, [host, plan?.id, scale]);
 
   const groupInk = (gid: string, withMine = false): Stroke[] => {
     const per = ink.get(gid) ?? new Map<string, Stroke[]>();
@@ -197,6 +200,7 @@ export default function GroupBoards({ host, myId, myName, people, open, onOpen, 
                   <span>Groups talk to each other <span className="block text-xs font-semibold text-ink/60">Starts the class call; each learner hears only their group. You can join any group, or talk to all.</span></span>
                 </label>
               )}
+              {scale >= 3 && <p role="note" className="rounded-xl bg-amber-50 p-3 text-xs font-bold text-amber-900 ring-1 ring-amber-200">Big class: group work sends every learner&apos;s writing live to everyone, which can overload the connection with this many learners. For the whole class at once, use the Live quiz or Exam instead.</p>}
               {!online.length ? <p className="rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-900">No learners have joined yet — groups are made from the learners in the class.</p> : groups && (
                 <>
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">

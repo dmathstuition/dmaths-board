@@ -1,4 +1,5 @@
 "use client";
+import { useClassScale } from "@/lib/classScale";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
@@ -106,14 +107,15 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
     },
   });
   // Teacher: keep learners in step while they're trying it.
+  const repeat = useClassScale(); // big classes: repeat less (lib/classScale)
   useEffect(() => {
     if (!host || !live) return;
     const tell = () => send("lab-open", { host: true, slug: sharedRef.current.shared ? sharedRef.current.slug : null });
     tell();
     if (!shared) return;
-    const t = setInterval(tell, 4000);
+    const t = setInterval(tell, 4000 * repeat);
     return () => clearInterval(t);
-  }, [host, live, shared, slug, send]);
+  }, [host, live, shared, slug, send, repeat]);
 
   const list = useMemo(() => BOARD_LAB.filter((e) =>
     (subject === "all" || e.subject === subject) &&

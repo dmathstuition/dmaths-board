@@ -1,4 +1,5 @@
 "use client";
+import { useClassScale } from "@/lib/classScale";
 import { recognizeShape } from "@/lib/shapeNeat";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
@@ -150,6 +151,8 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const redoStack = useRef<Stroke[]>([]);
   const lasers = useRef(new Map<string, { pts: number[]; at: number; color: string }>());
   const lastSent = useRef(0); // board moves and widgets
+  const scale = useClassScale(); // big classes: repeat less (lib/classScale)
+  const scaleRef = useRef(scale); scaleRef.current = scale;
   const lastLive = useRef(0), lastLaser = useRef(0);
   // How often an in-progress stroke, laser or drag goes out. Every message is
   // delivered to every screen, so a bigger class gets fewer, larger updates —
@@ -523,15 +526,15 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
       const n = rest.shift();
       if (n == null) { trickle.current = null; return; }
       servePage(n, true);
-      trickle.current = setTimeout(next, 800);
+      trickle.current = setTimeout(next, 800 * scaleRef.current);
     };
-    trickle.current = setTimeout(next, 800);
+    trickle.current = setTimeout(next, 800 * scaleRef.current);
   }
   // Learners asking for the board (joining, reconnecting): answer them all with
   // one send, at most every 3 seconds.
   function pushAllSoon() {
     if (pushAllTimer.current) return;
-    const wait = Math.max(0, 3000 - (Date.now() - lastPushAll.current));
+    const wait = Math.max(0, 3000 * scaleRef.current - (Date.now() - lastPushAll.current));
     pushAllTimer.current = setTimeout(() => { pushAllTimer.current = null; pushAll(); }, wait);
   }
   // Open a lesson from the library on this board (in class: everyone gets it).
@@ -574,10 +577,10 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   }
   useEffect(() => {
     if (readOnly) return;
-    const t = setInterval(() => { if (host) sendDigest(); else resendPending(); }, host ? 2000 : 1500);
+    const t = setInterval(() => { if (host) sendDigest(); else resendPending(); }, host ? 2000 * scale : 1500);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [host, readOnly]);
+  }, [host, readOnly, scale]);
   const liveStatus = useLiveStatus();
   const liveRef = useRef(liveStatus); liveRef.current = liveStatus;
   const lastHostAt = useRef(Date.now()); // when the teacher's board was last heard from
@@ -619,7 +622,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
     if (host || readOnly || !sessionId || lessonId) return;
     const wentDown = liveStatus === "live" ? null : setTimeout(() => reportProblem("live-offline", { sessionId, role: "learner", message: String(liveStatus) }), 8000);
     const t = setInterval(async () => {
-      if (liveRef.current === "live" && Date.now() - lastHostAt.current < 9000) return;
+      if (liveRef.current === "live" && Date.now() - lastHostAt.current < (scaleRef.current > 1 ? 9000 * scaleRef.current * 1.5 : 9000)) return;
       const j = await fetch(`/api/live-sessions?id=${sessionId}&board=1`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
       if (!j?.board) return;
       const b = cleanBoard(j.board);

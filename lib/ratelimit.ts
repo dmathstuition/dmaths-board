@@ -59,3 +59,19 @@ export async function limit(key: string, max = 20, windowMs = 60_000): Promise<b
     return rateLimit(key, max, windowMs); // never fail closed because Redis hiccuped
   }
 }
+
+// How many times `key` has been counted in this window, without counting
+// again (shared through Upstash when it's set up, else this instance only).
+export async function used(key: string, windowMs = 60_000): Promise<number> {
+  const url = REDIS_URL(), token = REDIS_TOKEN();
+  const local = () => { const e = hits.get(key); return e && Date.now() <= e.resetAt ? e.count : 0; };
+  if (!url || !token) return local();
+  try {
+    const r = await fetch(`${url}/get/${encodeURIComponent(`rl:${key}:${Math.floor(Date.now() / windowMs)}`)}`, {
+      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(800), cache: "no-store",
+    });
+    if (!r.ok) throw new Error(`upstash ${r.status}`);
+    const j = (await r.json()) as { result?: unknown };
+    return Number(j?.result) || 0;
+  } catch { return local(); }
+}

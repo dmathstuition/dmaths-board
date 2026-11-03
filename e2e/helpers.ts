@@ -66,7 +66,8 @@ export function signingKeys() {
 }
 
 // One class's server: the room, the saved board and the backup inbox.
-export function classServer() {
+// `crowd`: pretend this many extra learners are in the class (big-class tests).
+export function classServer(crowd = 0) {
   let savedBoard: unknown = null;
   const inbox: { item_id: string; kind: string; sender: string; page: number; item: any; at: string }[] = [];
   const stats = { backupPosts: 0, saves: 0 };
@@ -75,8 +76,9 @@ export function classServer() {
     session: { id: SID, code: "482913", title: "Division", status: "live", allCanWrite: false, classId: null, subject: null, hostName: "Mr B", link: "/join?pin=482913", kind: "board", createdAt: new Date().toISOString() },
     me: host ? { id: "h", name: "Mr B", host: true, canWrite: true } : { id: GID, name: "Emmanuel", canWrite: true, handUp: !!handAt },
     writers: [GID],
-    people: host ? [{ id: GID, name: "Emmanuel", canWrite: true, online: true, joinedAt: "", handAt }] : [],
-    here: 1,
+    people: host ? [{ id: GID, name: "Emmanuel", canWrite: true, online: true, joinedAt: "", handAt },
+      ...Array.from({ length: crowd }, (_, i) => ({ id: `crowd-${i}`, name: `Learner ${i + 1}`, canWrite: false, online: true, joinedAt: "", handAt: null }))] : [],
+    here: 1 + crowd,
   });
   async function attach(ctx: BrowserContext, who: Who) {
     const host = who === "teacher";

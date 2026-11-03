@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { clientKey, limit } from "@/lib/ratelimit";
+import { clientKey, limit, used } from "@/lib/ratelimit";
 import { BOARD_MIGRATION_MSG, BOARD_MISSING, GUEST_COOKIE, GUEST_COOKIE_OPTIONS, guestCookieValue, hashSecret, randomToken, readGuestPass, sameSecret } from "@/lib/boardAccess";
 import { cleanGuestName } from "@/lib/boardPlan";
 import { cleanCode, isOpen } from "@/lib/liveSession";
@@ -14,9 +14,15 @@ import { cleanContact } from "@/lib/classReport";
 export const dynamic = "force-dynamic";
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
 const MAX_GUESTS = 300;
+const BAD_PINS = 15;
 
 export async function POST(req: Request) {
-  if (!(await limit(clientKey(req, "board-join"), 15, 60_000))) return bad("Too many tries — wait a minute.", 429);
+  // A whole class often shares one internet address (school Wi-Fi, a mobile
+  // network), so joining itself is only loosely limited. Wrong PINs are what
+  // guessing looks like: 15 a minute from one address, then wait a minute.
+  const badKey = clientKey(req, "board-join-bad");
+  if ((await used(badKey)) >= BAD_PINS) return bad("Too many wrong PINs — wait a minute and check the number with your teacher.", 429);
+  if (!(await limit(clientKey(req, "board-join"), 600, 60_000))) return bad("Too many people joining at once — wait a moment and try again.", 429);
   const body = await req.json().catch(() => null);
   const code = cleanCode(body?.code);
   const name = cleanGuestName(body?.name);
@@ -28,7 +34,10 @@ export async function POST(req: Request) {
   const admin = supabaseAdmin();
   const { data: s, error } = await admin.from("live_sessions").select("id, status, created_at, kind").eq("code", code).eq("status", "live").maybeSingle();
   if (error) return BOARD_MISSING.test(error.message) ? bad(BOARD_MIGRATION_MSG, 500) : bad("Something went wrong — try again.", 500);
-  if (!s || s.kind !== "board" || !isOpen(s)) return bad("No live class with that PIN. Check the number with your teacher.", 404);
+  if (!s || s.kind !== "board" || !isOpen(s)) {
+    await limit(badKey, BAD_PINS, 60_000); // counts the wrong PIN
+    return bad("No live class with that PIN. Check the number with your teacher.", 404);
+  }
 
   // Coming back on the same device: keep the same seat (and name change, if any).
   const pass = readGuestPass();

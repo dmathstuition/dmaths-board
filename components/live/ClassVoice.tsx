@@ -4,6 +4,7 @@ import { useLive } from "@/components/live/LiveChannel";
 import { VoiceLink, friendlyMediaError, voiceApi, type Speaker } from "@/lib/voiceClient";
 import SpeakerVideo from "@/components/live/SpeakerVideo";
 import { VOLUMES, wakeAudio } from "@/lib/loudAudio";
+import { useClassScale } from "@/lib/classScale";
 import { canHear, cleanRooms, roomOf, setBreakout, useBreakout, type Rooms } from "@/lib/breakout";
 
 // Video (cameras, screen sharing, video tiles) is switched off for now: the
@@ -180,12 +181,13 @@ export function useHostVoice({ classId, me, people }: { classId: string; me: { i
   });
   const announce = useCallback(() => send("voice", { host: true, ...state.current }), [send]);
   const live = !!mine || !!allow || !!call;
+  const scale = useClassScale(); // big classes: repeat less (lib/classScale)
   useEffect(() => { announce(); }, [mine, student, allow, call, parts, rooms, announce]);
   useEffect(() => {
     if (!live) return;
-    const t = setInterval(announce, REPEAT_MS);
+    const t = setInterval(announce, REPEAT_MS * scale);
     return () => clearInterval(t);
-  }, [live, announce]);
+  }, [live, announce, scale]);
   useEffect(() => { get().onShareEnded = () => setMine((m) => (m ? { ...m, sc: undefined } : m)); }, [get]);
 
   // The call screen.
@@ -389,8 +391,10 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
   });
   tell.current = (t) => send("voice-me", t ? { by: me.id, name: myName, ...t } : { by: me.id, off: true });
   // The teacher stopped sending: voice is over.
+  const scale = useClassScale(); // big classes: the teacher repeats less (lib/classScale)
+  const scaleRef = useRef(scale); scaleRef.current = scale;
   useEffect(() => {
-    const t = setInterval(() => { if (lastHeard.current && Date.now() - lastHeard.current > REPEAT_MS * 4) { lastHeard.current = 0; setSpeakers([]); setAllow(null); setCall(null); setRooms(null); } }, REPEAT_MS);
+    const t = setInterval(() => { if (lastHeard.current && Date.now() - lastHeard.current > REPEAT_MS * 4 * (scaleRef.current > 1 ? scaleRef.current * 1.5 : 1)) { lastHeard.current = 0; setSpeakers([]); setAllow(null); setCall(null); setRooms(null); } }, REPEAT_MS);
     return () => clearInterval(t);
   }, []);
   // The call ended: leave it.
@@ -404,9 +408,9 @@ export function useLearnerVoice({ classId, me }: { classId: string; me: { id: st
   }, [allow, call, joined, talking, get]);
   useEffect(() => {
     if (!talking) return;
-    const t = setInterval(() => tell.current(talkingRef.current), REPEAT_MS);
+    const t = setInterval(() => tell.current(talkingRef.current), REPEAT_MS * scale);
     return () => clearInterval(t);
-  }, [talking]);
+  }, [talking, scale]);
 
   // The call screen.
   const mySession = get().sessionId;

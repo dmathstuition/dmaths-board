@@ -1,4 +1,5 @@
 "use client";
+import { useClassScale } from "@/lib/classScale";
 import { useEffect, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
@@ -73,15 +74,17 @@ export default function PulsePoll({ host, myId, myName, people, pollOpen, onPoll
   });
 
   // Learner: keep the signal and the vote coming (the teacher drops quiet ones).
+  const scale = useClassScale(); // big classes: repeat less (lib/classScale)
+  const scaleRef = useRef(scale); scaleRef.current = scale;
   useEffect(() => {
     if (host) return;
     const t = setInterval(() => {
       if (myPulseRef.current) send("pulse", { by: myId, name: myName, v: myPulseRef.current });
       const r = pollRef.current;
       if (r && myVoteRef.current != null) send("poll-vote", { poll: r.id, by: myId, name: myName, choice: myVoteRef.current, v: voteV.current });
-    }, PULSE_EVERY_MS);
+    }, PULSE_EVERY_MS * scale);
     return () => clearInterval(t);
-  }, [host, myId, myName, send, voteV]);
+  }, [host, myId, myName, send, voteV, scale]);
   // Teacher: re-count every few seconds (signals expire); keep the poll on every screen.
   useEffect(() => {
     if (!host) return;
@@ -91,9 +94,9 @@ export default function PulsePoll({ host, myId, myName, people, pollOpen, onPoll
   useEffect(() => {
     if (!host || !poll) return;
     send("poll-round", { host: true, round: poll });
-    const t = setInterval(() => send("poll-round", { host: true, round: pollRef.current }), 4000);
+    const t = setInterval(() => send("poll-round", { host: true, round: pollRef.current }), 4000 * scale);
     return () => clearInterval(t);
-  }, [host, poll, send]);
+  }, [host, poll, send, scale]);
 
   function setPulse(v: Pulse) {
     const next = myPulse === v ? null : v;
@@ -120,7 +123,7 @@ export default function PulsePoll({ host, myId, myName, people, pollOpen, onPoll
 
   // ── Teacher ──
   if (host) {
-    const { up, lost } = pulseNow(pulses.values());
+    const { up, lost } = pulseNow(pulses.values(), Date.now(), scale);
     const online = people.filter((p) => p.online !== false).length;
     const t = poll ? tally(poll, votes.values()) : null;
     return (

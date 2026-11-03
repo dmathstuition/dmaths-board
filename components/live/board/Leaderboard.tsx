@@ -1,5 +1,6 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useClassScale } from "@/lib/classScale";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
 import ProgressLink from "@/components/live/board/ProgressLink";
@@ -28,12 +29,14 @@ export default function Leaderboard({ sessionId, host, myName, open, onClose }: 
     if (r?.ok) { setList(j.list); setClasses(j.classes ?? 0); } else setErr(j.error ?? "Couldn't load the leaderboard — check the internet.");
   }, [sessionId, scope]);
   useEffect(() => { if (host && open) load(); }, [host, open, load]);
+  const scale = useClassScale(); // big classes: repeat less (lib/classScale)
+  const scaleRef = useRef(scale); scaleRef.current = scale;
   useEffect(() => {
     if (!host || !shown) return;
     send("lb-show", { host: true, shown });
-    const t = setInterval(() => send("lb-show", { host: true, shown }), 5000);
+    const t = setInterval(() => send("lb-show", { host: true, shown }), 5000 * scale);
     return () => clearInterval(t);
-  }, [host, shown, send]);
+  }, [host, shown, send, scale]);
   const stop = () => { setShown(null); send("lb-show", { host: true, shown: null }); };
 
   if (!host) {

@@ -182,7 +182,23 @@ describe("students joining with a PIN", () => {
   });
   it("slows down PIN guessing", async () => {
     const same = fresh();
-    for (let i = 0; i < 15; i++) await join(req("/api/board/join", { code: "12", name: "Ada" }, same));
+    mockAdmin._qb.maybeSingle.mockResolvedValue({ data: null, error: null }); // no class with these PINs
+    for (let i = 0; i < 15; i++) expect((await join(req("/api/board/join", { code: String(100000 + i), name: "Ada" }, same))).status).toBe(404);
+    mockAdmin._qb.maybeSingle.mockResolvedValue({ data: live, error: null }); // even the right PIN waits now
     expect((await join(req("/api/board/join", { code: "123456", name: "Ada" }, same))).status).toBe(429);
+  });
+  it("lets a whole big class join from one school Wi-Fi", async () => {
+    const school = fresh();
+    mockAdmin._qb.maybeSingle.mockResolvedValue({ data: live, error: null });
+    mockAdmin._qb._setDirectResolve({ data: null, error: null, count: 0 });
+    mockAdmin._qb.single.mockResolvedValue({ data: { id: "22222222-2222-4222-8222-222222222222" }, error: null });
+    const codes: number[] = [];
+    for (let i = 0; i < 120; i++) { jar.clear(); codes.push((await join(req("/api/board/join", { code: "123456", name: `Learner ${i}` }, school))).status); }
+    expect(codes.every((c) => c === 200)).toBe(true);
+    // A couple of mistyped PINs on the way don't lock the class out.
+    mockAdmin._qb.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+    expect((await join(req("/api/board/join", { code: "654321", name: "Late" }, school))).status).toBe(404);
+    jar.clear();
+    expect((await join(req("/api/board/join", { code: "123456", name: "Late" }, school))).status).toBe(200);
   });
 });
