@@ -19,6 +19,7 @@ export default function BoardAdmin() {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | BoardAccess["state"]>("all");
   const [busy, setBusy] = useState("");
+  const [note, setNote] = useState("");
 
   const load = useCallback(async () => {
     const r = await fetch("/api/board/admin").catch(() => null);
@@ -40,6 +41,20 @@ export default function BoardAdmin() {
     const r = await fetch("/api/board/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: a.userId, action, days }) }).catch(() => null);
     setBusy("");
     if (!r?.ok) { const j = r ? await r.json().catch(() => ({})) : {}; setErr(j.error ?? "That didn't work."); return; }
+    load();
+  }
+
+  // Permanent: their sign-in, classes, lessons and learners' results go.
+  async function remove(a: Account) {
+    const typed = prompt(`Delete ${a.name || a.email} for good?\n\nThis removes their sign-in, subscription, saved lessons and every class they ran, with their learners' results. It can't be undone. (What they paid stays in the audit log.)\n\nType their email to confirm:\n${a.email}`);
+    if (typed == null) return;
+    if (typed.trim().toLowerCase() !== a.email.trim().toLowerCase()) { setErr("The email didn't match — nothing was deleted."); return; }
+    setBusy(a.userId); setErr(""); setNote("");
+    const r = await fetch("/api/board/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: a.userId, action: "delete", confirm: typed }) }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : {};
+    setBusy("");
+    if (!r?.ok) { setErr(j.error ?? "Couldn't delete the account — check the internet."); return; }
+    setNote(`${a.name || a.email}'s account was deleted (${j.classes ?? 0} class${j.classes === 1 ? "" : "es"}, ${j.lessons ?? 0} saved lesson${j.lessons === 1 ? "" : "s"}).`);
     load();
   }
 
@@ -74,6 +89,7 @@ export default function BoardAdmin() {
         </div>
       </div>
       {err && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{err}</p>}
+      {note && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-800">{note}</p>}
       {data && (
         <div className="grid gap-3 sm:grid-cols-4">
           {[["Revenue", naira(data.revenue)], ["Paying", String(counts.active)], ["On trial", String(counts.trial)], ["Lapsed", String(counts.expired)]].map(([k, v]) => (
@@ -106,6 +122,7 @@ export default function BoardAdmin() {
                   <td className="whitespace-nowrap p-3 text-right">
                     <button type="button" disabled={busy === a.userId} onClick={() => act(a, "extend")} className="rounded-lg px-2 py-1 text-xs font-black text-ink hover:bg-mist/50">+ Days</button>
                     <button type="button" disabled={busy === a.userId} onClick={() => act(a, a.suspended ? "unsuspend" : "suspend")} className={`rounded-lg px-2 py-1 text-xs font-black ${a.suspended ? "text-emerald-700 hover:bg-emerald-50" : "text-red-600 hover:bg-red-50"}`}>{a.suspended ? "Restore" : "Hold"}</button>
+                    <button type="button" disabled={busy === a.userId} onClick={() => remove(a)} aria-label={`Delete ${a.name || a.email}'s account`} className="rounded-lg px-2 py-1 text-xs font-black text-white bg-red-600 hover:bg-red-700 disabled:opacity-50">Delete</button>
                   </td>
                 </tr>
               ))}

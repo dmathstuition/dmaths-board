@@ -3,10 +3,12 @@ import { requireBoardAdmin } from "@/lib/boardAdmin";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { BOARD_MIGRATION_MSG, BOARD_MISSING } from "@/lib/boardAccess";
 import { boardAccess } from "@/lib/boardPlan";
+import { deleteBoardTeacher } from "@/lib/boardDelete";
 
 // Admin oversight of D-Maths Board: every subscriber, their state and payments.
 //   GET → { accounts, revenue }
 //   POST { userId, action: "extend" (days) | "suspend" | "unsuspend" }
+//   POST { userId, action: "delete", confirm: their email }  — permanent (lib/boardDelete.ts)
 export const dynamic = "force-dynamic";
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
 
@@ -43,6 +45,15 @@ export async function POST(req: Request) {
   const admin = supabaseAdmin();
   const { data: a } = await admin.from("board_accounts").select("*").eq("user_id", userId).maybeSingle();
   if (!a) return bad("No D-Maths Board account with that id.", 404);
+  if (body?.action === "delete") {
+    // Typing their email is the confirmation: a stray click can't delete anyone.
+    const { data: p } = await admin.from("profiles").select("email").eq("id", userId).maybeSingle();
+    const typed = String(body?.confirm ?? "").trim().toLowerCase();
+    if (!p?.email || typed !== String(p.email).trim().toLowerCase()) return bad("Type the teacher's email exactly to confirm.", 400);
+    const r = await deleteBoardTeacher(userId, me);
+    if ("error" in r) return bad(r.error, r.status);
+    return NextResponse.json(r);
+  }
   const now = Date.now();
   let patch: Record<string, unknown>;
   if (body?.action === "extend") {
