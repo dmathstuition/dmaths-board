@@ -24,7 +24,7 @@ const SUBJECT_COLORS: Record<UKSubject, [string, string]> = {
 export function ukGame(s: UKSet): ClassGame {
   return {
     id: `uk-${s.id}`, title: s.title, emoji: s.emoji, kind: "choice", skill: "mixed", seconds: 90,
-    colors: SUBJECT_COLORS[s.subject], band: `${s.year} · ${s.subject}`, stage: "primary",
+    colors: SUBJECT_COLORS[s.subject], band: `${s.year} · ${s.subject}`, stage: s.stage === "sss" ? "senior" : "primary",
     subject: s.subject.toLowerCase() as GameSubject,
     tagline: `${s.year} ${s.subject.toLowerCase()} — ${s.topic}.`,
     howTo: "Tap the right answer (or press 1–4). Questions come round again, so learn from any you miss.",
@@ -34,7 +34,7 @@ export function ukGame(s: UKSet): ClassGame {
 // Ages on the filter: the curriculum stages, plus secondary (JSS / KS3, SSS / KS4+).
 type Age = UKStage | "all" | "junior" | "senior";
 const AGE_LABEL: Record<"junior" | "senior", string> = { junior: "Secondary · JSS / KS3", senior: "Upper secondary · SSS / KS4 / A-Level" };
-const ARCADE_STAGES: Record<Age, Stage[]> = { all: ["primary", "junior", "senior"], eyfs: [], ks1: ["primary"], ks2: ["primary"], junior: ["junior"], senior: ["senior"] };
+const ARCADE_STAGES: Record<Age, Stage[]> = { all: ["primary", "junior", "senior"], eyfs: [], ks1: ["primary"], ks2: ["primary"], sss: ["senior"], junior: ["junior"], senior: ["senior"] };
 const GROUP_LABEL: Record<Stage, string> = { primary: "Primary", junior: STAGE_LABEL.junior, senior: `${STAGE_LABEL.senior} & A-Level` };
 
 // What's being played: a curriculum set, or an arcade game at a difficulty.
@@ -109,7 +109,7 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
     return () => window.removeEventListener("keydown", onKey, true);
   }, [showing, host, onClose, setHidden]);
 
-  const sets = useMemo(() => UK_SETS.filter((s) => (stage === "all" || s.stage === stage) && (subject === "all" || s.subject === subject)), [stage, subject]);
+  const sets = useMemo(() => UK_SETS.filter((s) => (stage === "all" || s.stage === stage || (stage === "senior" && s.stage === "sss")) && (subject === "all" || s.subject === subject)), [stage, subject]);
   const arcade = useMemo(() => ARCADE_STAGES[stage].map((st) => ({
     stage: st, games: CLASS_GAMES.filter((g) => g.stage === st && (subject === "all" || subjectOf(g) === subject.toLowerCase())),
   })).filter((grp) => grp.games.length), [stage, subject]);
@@ -187,7 +187,7 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
                   className={`min-h-[40px] flex-1 rounded-xl px-4 text-sm font-black ${tab === k ? "bg-white text-[#0A3B3E]" : "text-white/75"}`}>{label}</button>
               ))}
             </div>
-            <p className="mt-3 text-xs text-white/55">Following the England curriculum: the EYFS for Reception, and the National Curriculum for Key Stages 1 and 2.</p>
+            <p className="mt-3 text-xs text-white/55">Primary sets follow the England curriculum (EYFS, Key Stages 1 and 2). SSS sets follow the WAEC syllabus.</p>
             <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Filter">
               {(["all", "eyfs", "ks1", "ks2", "junior", "senior"] as const).map((s) => (
                 <button key={s} type="button" aria-pressed={stage === s} onClick={() => setStage(s)} className={chip(stage === s)}>{s === "all" ? "All ages" : s === "junior" || s === "senior" ? AGE_LABEL[s] : UK_STAGE_LABEL[s]}</button>

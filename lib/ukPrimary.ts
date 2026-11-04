@@ -8,10 +8,10 @@
 // Answers are written as the text of the right option (checked by
 // tests/unit/ukPrimary.test.ts), so an answer can never point at the wrong one.
 
-export type UKStage = "eyfs" | "ks1" | "ks2";
+export type UKStage = "eyfs" | "ks1" | "ks2" | "sss";
 export type UKSubject = "Maths" | "English" | "Science";
-export const UK_STAGE_LABEL: Record<UKStage, string> = { eyfs: "Early years (EYFS)", ks1: "Key Stage 1", ks2: "Key Stage 2" };
-export const UK_YEARS = ["Reception", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5", "Year 6"] as const;
+export const UK_STAGE_LABEL: Record<UKStage, string> = { eyfs: "Early years (EYFS)", ks1: "Key Stage 1", ks2: "Key Stage 2", sss: "SSS · WAEC" };
+export const UK_YEARS = ["Reception", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5", "Year 6", "SSS 1", "SSS 2", "SSS 3"] as const;
 export type UKYear = (typeof UK_YEARS)[number];
 
 type RawQ = { q: string; options: string[]; answer: string };
@@ -23,9 +23,10 @@ export type UKSet = {
 };
 
 // Seconds per question for a live quiz: longer for younger children.
-export const secondsFor = (s: Pick<UKSet, "stage">) => (s.stage === "ks2" ? 20 : 30);
+// SSS (WAEC) questions need working out with a calculator: a minute each.
+export const secondsFor = (s: Pick<UKSet, "stage">) => (s.stage === "sss" ? 60 : s.stage === "ks2" ? 20 : 30);
 
-const stageOf = (year: UKYear): UKStage => (year === "Reception" ? "eyfs" : year === "Year 1" || year === "Year 2" ? "ks1" : "ks2");
+const stageOf = (year: UKYear): UKStage => (year === "Reception" ? "eyfs" : year === "Year 1" || year === "Year 2" ? "ks1" : year.startsWith("SSS") ? "sss" : "ks2");
 const set = (id: string, year: UKYear, subject: UKSubject, title: string, topic: string, emoji: string, questions: RawQ[]): UKSet =>
   ({ id, title, stage: stageOf(year), year, subject, topic, emoji, questions });
 const Q = (q: string, answer: string, ...others: string[]): RawQ => {
@@ -355,6 +356,56 @@ export const UK_SETS: UKSet[] = [
     Q("Which scientist is known for the theory of evolution?", "Charles Darwin", "Isaac Newton", "Marie Curie", "Albert Einstein"),
     Q("Light travels in…", "straight lines", "circles", "zig-zags", "curves only"),
     Q("Which group are fungi in?", "Living things", "Rocks", "Gases", "Metals"),
+  ]),
+
+  // ── SSS · WAEC: Trigonometry, bearings & distance ─────────────────────────
+  set("waec-bearings", "SSS 2", "Maths", "Bearings & back bearings", "Bearings: north, clockwise, three figures", "🧭", [
+    Q("Bearings are measured…", "from North, clockwise", "from North, anticlockwise", "from East, clockwise", "from South, clockwise"),
+    Q("The bearing of due East is…", "090°", "045°", "180°", "270°"),
+    Q("The bearing of South-West is…", "225°", "135°", "315°", "045°"),
+    Q("How is a bearing of 45 degrees written?", "045°", "45°", "0.45°", "450°"),
+    Q("“The bearing of B from A” — where do you draw the North line?", "At A", "At B", "Halfway between A and B", "At either point"),
+    Q("The bearing of B from A is 065°. Find the bearing of A from B.", "245°", "115°", "295°", "065°"),
+    Q("The bearing of Y from X is 115°. Find the bearing of X from Y.", "295°", "065°", "245°", "335°"),
+    Q("The bearing of D from C is 308°. Find the bearing of C from D.", "128°", "052°", "232°", "148°"),
+    Q("The bearing of N from M is 090°. Find the bearing of M from N.", "270°", "090°", "180°", "000°"),
+    Q("Q is on a bearing of 250° from P. Find the bearing of P from Q.", "070°", "110°", "160°", "430°"),
+    Q("The bearing of P from Q is 305°. What is the bearing of Q from P?", "125°", "055°", "235°", "145°"),
+    Q("A ship on a bearing of 070° turns 90° clockwise. Its new bearing is…", "160°", "340°", "020°", "250°"),
+  ]),
+  set("waec-bearing-distance", "SSS 2", "Maths", "Bearing & distance problems", "Bearings with Pythagoras, sine and cosine rule", "🚢", [
+    Q("A ship sails at 20 km/h for 2½ hours. How far does it sail?", "50 km", "22.5 km", "40 km", "8 km"),
+    Q("A ship sails 50 km on a bearing of 040°. How far north of its start is it?", "38.3 km", "32.1 km", "41.9 km", "59.6 km"),
+    Q("A ship sails 50 km on a bearing of 040°. How far east of its start is it?", "32.1 km", "38.3 km", "41.9 km", "42.0 km"),
+    Q("A ship sails 20 km on a bearing of 130°. How far east of its start is it?", "15.3 km", "12.9 km", "16.8 km", "10.8 km"),
+    Q("A ship sails 20 km on a bearing of 130°. How far south of its start is it?", "12.9 km", "15.3 km", "6.8 km", "18.8 km"),
+    Q("Q is 12 km from P on 050°. R is 15 km from Q on 140°. Find ∠PQR.", "90°", "100°", "50°", "140°"),
+    Q("Q is 12 km from P on 050°. R is 15 km from Q on 140°. Find PR.", "19.2 km", "27 km", "3 km", "13.4 km"),
+    Q("Q is 12 km from P on 050°. R is 15 km from Q on 140°. Find the bearing of R from P.", "101°", "051°", "140°", "129°"),
+    Q("A boat sails 8 km on 040° to A, then 6 km on 120° to B. Find ∠HAB.", "100°", "80°", "160°", "120°"),
+    Q("A boat sails 8 km on 040° to A, then 6 km on 120° to B. Find HB.", "10.8 km", "14 km", "10 km", "6.7 km"),
+    Q("A boat sails 8 km on 040° to A, then 6 km on 120° to B. Find the bearing of B from H.", "073°", "040°", "107°", "080°"),
+    Q("No right angle, two sides and the angle between them are known. To find the third side use…", "the cosine rule", "Pythagoras' theorem", "the sine rule", "SOH-CAH-TOA"),
+    Q("B is 9 km from A on 030°. C is 12 km from A on 120°. Find BC.", "15 km", "21 km", "7.9 km", "3 km"),
+    Q("X to Y is 15 km on 070°, then Y to Z is 9 km on 200°. Find ∠XYZ.", "50°", "130°", "70°", "20°"),
+    Q("X to Y is 15 km on 070°, then Y to Z is 9 km on 200°. Find XZ.", "11.5 km", "24 km", "17.5 km", "6 km"),
+  ]),
+  set("waec-trig-elevation", "SSS 2", "Maths", "Trig ratios, elevation & depression", "SOH-CAH-TOA, exact values, elevation and depression", "📐", [
+    Q("sin θ = …", "Opposite ÷ Hypotenuse", "Adjacent ÷ Hypotenuse", "Opposite ÷ Adjacent", "Hypotenuse ÷ Opposite"),
+    Q("The side opposite the right angle is the…", "hypotenuse", "adjacent", "opposite", "base"),
+    Q("A 6 m ladder makes 60° with level ground. How high up the wall does it reach?", "5.20 m", "3.00 m", "6.93 m", "10.39 m"),
+    Q("Opposite = 7 cm, adjacent = 9 cm. Find θ.", "37.9°", "52.1°", "38.9°", "51.1°"),
+    Q("The exact value of tan 60° is…", "√3", "1/√3", "√3/2", "1/2"),
+    Q("The exact value of sin 30° is…", "1/2", "√3/2", "1/√2", "√3"),
+    Q("The exact value of cos 45° is…", "1/√2", "1/2", "√3/2", "1"),
+    Q("A boy 1.5 m tall is 40 m from a tower; the elevation of the top is 52°. Height of the tower?", "52.7 m", "51.2 m", "31.5 m", "53.2 m"),
+    Q("From the top of an 80 m cliff the angle of depression of a boat is 25°. How far is the boat from the cliff?", "171.6 m", "37.3 m", "88.3 m", "189.3 m"),
+    Q("Hypotenuse 15 cm, angle 28°. Find the side adjacent to the angle.", "13.2 cm", "7.0 cm", "17.0 cm", "8.0 cm"),
+    Q("Opposite = 5 cm, hypotenuse = 13 cm. Find θ.", "22.6°", "67.4°", "21.0°", "23.6°"),
+    Q("30 m from a building, the angle of elevation of the top is 38°. Find the height.", "23.4 m", "18.5 m", "38.4 m", "24.4 m"),
+    Q("From the top of a 45 m lighthouse the angle of depression of a ship is 20°. How far is the ship?", "123.6 m", "16.4 m", "47.9 m", "131.6 m"),
+    Q("Angles of elevation and depression are measured from the…", "horizontal", "vertical", "North line", "ground"),
+    Q("For trigonometry in degrees, the calculator must show…", "D (DEG)", "R (RAD)", "G (GRAD)", "FIX"),
   ]),
 ];
 

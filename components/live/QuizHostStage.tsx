@@ -266,8 +266,8 @@ function ReadyMade({ busy, onLaunch }: { busy: boolean; onLaunch: (title: string
     <div className="mt-6 rounded-2xl bg-violet-50/70 p-4 ring-1 ring-violet-100">
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex w-full items-center justify-between gap-3 text-left">
         <span>
-          <span className="block font-black text-ink">Ready-made quizzes — early years &amp; primary</span>
-          <span className="block text-xs text-ink/60">{UK_SETS.length} quizzes following the England curriculum, Reception to Year 6. Launch one with no preparation.</span>
+          <span className="block font-black text-ink">Ready-made quizzes</span>
+          <span className="block text-xs text-ink/60">{UK_SETS.length} quizzes: Reception to Year 6 (England curriculum) and SSS · WAEC. Launch one with no preparation.</span>
         </span>
         <span className="text-xl text-violet-700" aria-hidden>{open ? "−" : "+"}</span>
       </button>

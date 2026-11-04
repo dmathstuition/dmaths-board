@@ -66,7 +66,7 @@ const STAMP_LOOK: Record<StampId, { label: string; bg: string; icon: BoardIconNa
   star: { label: "Star", bg: "#EAB308", icon: "stamp" }, heart: { label: "Heart", bg: "#EC4899", icon: "heart" },
   smiley: { label: "Smiley", bg: "#F59E0B", icon: "smiley" }, question: { label: "Question", bg: "#0E6E72", icon: "question" },
 };
-type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "graph" | "calc" | "numberLine"
+type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "bearing" | "graph" | "calc" | "numberLine"
   | "clock" | "fractions" | "hundred" | "placeValue" | "wordCard" | "sentence" | "spell" | "groups" | "spotlight";
 // The class-tools panel, grouped so the host finds things fast.
 const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: string; icon: BoardIconName }[] }[] = [
@@ -77,6 +77,7 @@ const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: 
     { k: "ruler", label: "Ruler", hint: "Measure in cm", icon: "ruler" },
     { k: "protractor", label: "Protractor", hint: "Measure angles", icon: "protractor" },
     { k: "compass", label: "Compasses", hint: "Draw circles and arcs", icon: "compass" },
+    { k: "bearing", label: "Bearings & distance", hint: "Back bearings, journeys, worked steps", icon: "compass" },
     { k: "solid", label: "3D shapes", hint: "Turn, volume, nets", icon: "solid" },
     { k: "blocks", label: "Maths blocks", hint: "Fraction bars, algebra tiles, counters", icon: "blocks" },
     { k: "fractions", label: "Fraction wall", hint: "Shade and compare", icon: "fractions" },

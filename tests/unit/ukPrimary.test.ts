@@ -4,7 +4,7 @@ import { cleanQuestions } from "@/lib/liveQuiz";
 
 describe("UK primary ready-made sets", () => {
   it("cover every year from Reception to Year 6, in Maths and English", () => {
-    for (const y of UK_YEARS) {
+    for (const y of UK_YEARS.filter((y) => !y.startsWith("SSS"))) {
       const subjects = new Set(UK_SETS.filter((s) => s.year === y).map((s) => s.subject));
       expect(subjects.has("Maths"), `${y} maths`).toBe(true);
       expect(subjects.has("English"), `${y} english`).toBe(true);

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
 import { useServerClock } from "@/lib/serverClock";
+import { UK_SETS } from "@/lib/ukPrimary";
 import { EXAM_MINUTES, EXAM_TOPICS, clockLeft, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
 import type { Difficulty } from "@/lib/games/generators";
 
@@ -186,6 +187,15 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                   <input type="number" min={1} max={30} value={count} onChange={(e) => setCount(Math.max(1, Math.min(30, Number(e.target.value) || 1)))} className={`${field} mt-1 w-20`} />
                 </label>
                 <button type="button" onClick={() => setQs((cur) => [...cur, ...topicQuestions(topic, level, count)].slice(0, 60))} className="min-h-[40px] rounded-xl bg-[#C2451C] px-4 text-xs font-black text-white">Add {count} questions</button>
+              </div>
+            </div>
+            <div className="mt-3 rounded-xl bg-[#E2F3F2] p-3">
+              <p className="text-xs font-black text-[#0A4F52]">Or use a ready-made quiz as the paper</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {UK_SETS.filter((x) => x.stage === "sss").map((x) => (
+                  <button key={x.id} type="button" onClick={() => setQs((cur) => [...cur, ...x.questions.map((r) => ({ q: r.q, kind: "choice" as const, options: r.options, answer: r.options.indexOf(r.answer), marks: 1 }))].slice(0, 60))}
+                    className="min-h-[40px] rounded-xl bg-white px-3 text-xs font-black text-[#0A4F52] ring-1 ring-[#A9D6D3]">{x.emoji} {x.title} ({x.questions.length})</button>
+                ))}
               </div>
             </div>
             <ol className="mt-4 grid gap-2">

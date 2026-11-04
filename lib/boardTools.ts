@@ -31,6 +31,12 @@ export type GroupsState = Panel & { size: number; groups: string[][] };
 export type CompassState = { on: boolean; x: number; y: number; r: number; rot: number };
 // A 3D shape the class can turn: its kind and measurements (cm), how it's turned, and whether its net shows.
 export type SolidState = Panel & { shape: SolidKind; a: number; b: number; c: number; yaw: number; pitch: number; net: boolean; facts: boolean };
+// Bearings & distance (components/live/board/BearingsPanel): one bearing on a
+// compass, a two-leg journey, or two places from one point, with the working.
+export type BearingState = Panel & {
+  mode: "bearing" | "journey" | "fan"; b: number; d: number; back: boolean; parts: boolean;
+  d1: number; b1: number; d2: number; b2: number; names: [string, string, string]; step: number; unit: string;
+};
 export type Widgets = {
   timer: Timer | null;
   dice: { values: number[]; at: number } | null;
@@ -53,6 +59,7 @@ export type Widgets = {
   compass: CompassState;
   solid: SolidState;
   blocks: BlocksState;
+  bearing: BearingState;
 };
 
 export const DEFAULT_WIDGETS: Widgets = {
@@ -75,6 +82,7 @@ export const DEFAULT_WIDGETS: Widgets = {
   compass: { on: false, x: 0.5, y: 0.55, r: 5, rot: 0 },
   solid: { on: false, x: 0.55, y: 0.04, shape: "cuboid", a: 6, b: 4, c: 3, yaw: 35, pitch: 20, net: false, facts: true },
   blocks: DEFAULT_BLOCKS,
+  bearing: { on: false, x: 0.5, y: 0.03, mode: "bearing", b: 50, d: 50, back: false, parts: false, d1: 8, b1: 40, d2: 6, b2: 120, names: ["H", "A", "B"], step: 0, unit: "km" },
 };
 
 export const WORD_KINDS = ["noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection"] as const;
@@ -126,6 +134,7 @@ export function cleanWidgets(v: unknown): Widgets {
       net: !!w?.solid?.net, facts: w?.solid?.facts !== false,
     },
     blocks: cleanBlocks(w?.blocks),
+    bearing: cleanBearing(w?.bearing),
   };
 }
 
@@ -214,4 +223,18 @@ export function pickName(names: string[], last: string | null, rng: () => number
 export function protractorAngle(cx: number, cy: number, px: number, py: number, rotDeg: number): number {
   const a = (Math.atan2(cy - py, px - cx) * 180) / Math.PI + rotDeg;
   return Math.round(((a % 360) + 360) % 360);
+}
+
+function cleanBearing(v: any): BearingState {
+  const D = DEFAULT_WIDGETS.bearing;
+  const deg = (n: unknown, d: number) => ((Math.round(clamp(n, -720, 720, d)) % 360) + 360) % 360;
+  const len = (n: unknown, d: number) => Math.round(clamp(n, 0.1, 9999, d) * 100) / 100;
+  const names = Array.isArray(v?.names) && v.names.length === 3 ? v.names.map((x: unknown, i: number) => String(x ?? "").replace(/[^A-Za-z]/g, "").slice(0, 2) || D.names[i]) : D.names;
+  return {
+    ...panel(v, D), mode: v?.mode === "journey" || v?.mode === "fan" ? v.mode : "bearing",
+    b: deg(v?.b, D.b), d: len(v?.d, D.d), back: !!v?.back, parts: !!v?.parts,
+    d1: len(v?.d1, D.d1), b1: deg(v?.b1, D.b1), d2: len(v?.d2, D.d2), b2: deg(v?.b2, D.b2),
+    names: names as [string, string, string], step: Math.round(clamp(v?.step, 0, 12, 0)),
+    unit: ["km", "m", "cm", "miles"].includes(v?.unit) ? v.unit : "km",
+  };
 }
