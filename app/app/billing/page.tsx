@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import BoardBilling from "@/components/board/BoardBilling";
+import BoardBilling, { DeleteAccount } from "@/components/board/BoardBilling";
 import { boardPage } from "@/lib/boardPages";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { BOARD_PRICE_NGN } from "@/lib/boardPlan";
@@ -23,6 +23,7 @@ export default async function BoardBillingPage() {
   return (
     <Suspense fallback={<div className="card mx-auto h-64 max-w-3xl animate-pulse" />}>
       <BoardBilling access={t.access} price={BOARD_PRICE_NGN} payments={payments ?? []} />
+      <div className="mx-auto mt-5 max-w-3xl"><DeleteAccount /></div>
     </Suspense>
   );
 }

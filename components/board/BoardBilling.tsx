@@ -99,3 +99,44 @@ export default function BoardBilling({ access, price, payments }: { access: Boar
     </div>
   );
 }
+
+// Delete my account: password + typing DELETE, then it's gone for good.
+export function DeleteAccount() {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  async function go(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setErr("");
+    const r = await fetch("/api/board/account", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password, confirm: typed }) }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : {};
+    if (!r?.ok) { setBusy(false); setErr(j.error ?? "Couldn't delete the account — check the internet."); return; }
+    window.location.assign("/?deleted=1");
+  }
+  const ready = !!password && typed.trim().toUpperCase() === "DELETE";
+  return (
+    <section className="card p-5 ring-1 ring-red-100" aria-labelledby="delete-account">
+      <h2 id="delete-account" className="font-display text-lg font-black text-ink">Delete my account</h2>
+      <p className="mt-1 text-sm text-ink/65">Removes your sign-in, subscription, saved lessons and quizzes, and every class you ran with your learners&apos; results. This can&apos;t be undone, and any days left on your subscription are lost.</p>
+      {!open ? (
+        <button type="button" onClick={() => setOpen(true)} className="mt-3 min-h-[44px] rounded-xl bg-white px-4 text-sm font-black text-red-700 ring-1 ring-red-200 hover:bg-red-50">Delete my account…</button>
+      ) : (
+        <form onSubmit={go} className="mt-3 grid gap-3 sm:max-w-sm">
+          <label className="text-sm font-bold text-ink/75">Your password
+            <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="field mt-1" required />
+          </label>
+          <label className="text-sm font-bold text-ink/75">Type <b>DELETE</b> to confirm
+            <input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" className="field mt-1" required />
+          </label>
+          {err && <p role="alert" className="text-sm font-bold text-red-700">{err}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" disabled={!ready || busy} className="min-h-[44px] rounded-xl bg-red-600 px-4 text-sm font-black text-white disabled:opacity-40">{busy ? "Deleting…" : "Delete my account for good"}</button>
+            <button type="button" onClick={() => { setOpen(false); setPassword(""); setTyped(""); setErr(""); }} className="min-h-[44px] rounded-xl bg-ink/5 px-4 text-sm font-black text-ink/70">Cancel</button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}

@@ -35,7 +35,7 @@ export default function BoardPrivacyPage() {
       </ul>
 
       <H2>Your choices</H2>
-      <p>You can ask to see, correct, download or delete your information, or object to how we use it, by emailing <b>support@dmaths.academy</b>. For a student, a parent or the teacher can ask. You can also complain to the Nigeria Data Protection Commission.</p>
+      <p>You can ask to see, correct, download or delete your information, or object to how we use it, by emailing <b>support@dmaths.academy</b>. Teachers can also delete their own account at any time from the Billing page. For a student, a parent or the teacher can ask. You can also complain to the Nigeria Data Protection Commission.</p>
     </BoardLegal>
   );
 }

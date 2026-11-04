@@ -29,9 +29,10 @@ async function clearFolder(folder: string): Promise<number> {
   return gone;
 }
 
-export async function deleteBoardTeacher(userId: string, actorId: string): Promise<DeleteResult> {
+// `self`: the teacher is deleting their own account (they confirmed with their password).
+export async function deleteBoardTeacher(userId: string, actorId: string, opts: { self?: boolean } = {}): Promise<DeleteResult> {
   const admin = supabaseAdmin();
-  if (!userId || userId === actorId) return { ok: false, error: "You can't delete your own account here.", status: 400 };
+  if (!userId || (userId === actorId && !opts.self)) return { ok: false, error: "You can't delete your own account here.", status: 400 };
   const { data: p } = await admin.from("profiles").select("id, role, first_name, last_name, email").eq("id", userId).maybeSingle();
   if (!p) return { ok: false, error: "No account with that id.", status: 404 };
   if (p.role === "admin") return { ok: false, error: "Admin accounts can't be deleted here.", status: 403 };
@@ -66,7 +67,7 @@ export async function deleteBoardTeacher(userId: string, actorId: string): Promi
   if (authErr) await admin.from("profiles").delete().eq("id", userId); // no sign-in left: remove the profile directly
 
   await admin.from("audit_log").insert({
-    actor_id: actorId, action: "board_teacher_deleted",
+    actor_id: opts.self ? null : actorId, action: opts.self ? "board_teacher_deleted_self" : "board_teacher_deleted",
     detail: {
       userId, email: p.email ?? "", name: `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim(), school: acc?.school ?? null, joined: acc?.created_at ?? null,
       classes: sessions.length, lessons: lessons.length, files,

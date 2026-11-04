@@ -69,4 +69,13 @@ describe("deleting a D-Maths Board teacher", () => {
     expect(await deleteBoardTeacher("t-1", "admin-1")).toMatchObject({ ok: false, status: 500 });
     expect(mockAdmin.auth.admin.deleteUser).not.toHaveBeenCalled();
   });
+
+  it("lets a teacher delete their own account (self), logged without them as the actor", async () => {
+    mockAdmin._qb.maybeSingle.mockResolvedValueOnce({ data: teacher, error: null }).mockResolvedValueOnce({ data: null, error: null });
+    mockAdmin._qb._setDirectResolve({ data: [] });
+    expect(await deleteBoardTeacher("t-1", "t-1", { self: true })).toMatchObject({ ok: true });
+    expect(mockAdmin.auth.admin.deleteUser).toHaveBeenCalledWith("t-1");
+    const log = calls("insert").map((c: any[]) => c[0]).find((x: any) => x.action === "board_teacher_deleted_self");
+    expect(log).toMatchObject({ actor_id: null, detail: { userId: "t-1" } });
+  });
 });

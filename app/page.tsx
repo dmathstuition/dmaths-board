@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BoardFooter, BoardTopBar } from "@/components/board/BoardBrand";
 import { BOARD_PRICE_NGN, BOARD_TRIAL_DAYS } from "@/lib/boardPlan";
+import DeletedNotice from "@/components/board/DeletedNotice";
 
 export const metadata = {
   title: { absolute: "D-Maths Board — your board on every student's phone" },
@@ -140,6 +141,7 @@ export default function BoardLandingPage() {
       {/* Hero */}
       <section className="dmb-hero pb-32 text-white sm:pb-36">
         <BoardTopBar onTeal />
+        <DeletedNotice />
         <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 pt-8 sm:pt-14 lg:grid-cols-[1.05fr_1fr]">
           <div>
             <p className="text-[15px] text-white/80">Your live classroom, on every phone</p>
