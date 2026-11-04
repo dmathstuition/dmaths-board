@@ -1,3 +1,4 @@
+import { readFile } from "fs/promises";
 import { test, expect, type Browser, type BrowserContext } from "@playwright/test";
 import { SID, agree, classServer, realtimeHub } from "./helpers";
 import { cleanExamQuestions, learnerPaper, markPaper, type ExamQ } from "../lib/exams";
@@ -13,7 +14,7 @@ function examServer() {
     await ctx.route("**/api/board/exams**", async (r) => {
       if (r.request().method() === "GET") {
         if (!exam) return r.fulfill({ json: { exam: null } });
-        if (who === "teacher") return r.fulfill({ json: { exam: { ...meta(), questions: exam.questions }, entries: [...entries].map(([id, e]) => ({ id, name: e.name, answered: Object.keys(e.answers).length, flags: e.flags, flagLog: [], submitted: e.submitted, score: e.score, total: e.total, live: null })) } });
+        if (who === "teacher") return r.fulfill({ json: { exam: { ...meta(), questions: exam.questions }, entries: [...entries].map(([id, e]) => ({ id, name: e.name, answered: Object.keys(e.answers).length, flags: e.flags, flagLog: [], submitted: e.submitted, score: e.score, total: e.total, live: null, answers: e.answers, startedAt: new Date(Date.now() - 300_000).toISOString(), submittedAt: e.submitted ? new Date().toISOString() : null })) } });
         const e = entries.get(me.id);
         const out: any = { exam: meta(), entry: e ? { started: true, submitted: e.submitted, answers: e.answers, flags: e.flags, score: e.score, total: e.total } : null };
         if (e && !e.submitted && exam.status === "open") out.paper = learnerPaper(exam.id, me.id, exam.questions);
@@ -128,6 +129,15 @@ test("exam mode: a timed test on a learner's phone, leaving the page flagged, ma
   await expect(exam.getByRole("list", { name: "Your answers" })).toBeVisible({ timeout: 20_000 });
   await expect(exam.getByText(/✓ \d\. What is 7 × 8\?/)).toBeVisible();
   await learner.screenshot({ path: "test-results/exam-learner.png", fullPage: true });
+  // The teacher downloads the learner's report, and everyone's, as PDFs.
+  const one = teacher.waitForEvent("download");
+  await panel.getByRole("button", { name: /Download Emmanuel's report \(PDF\)/ }).click();
+  const d1 = await one;
+  expect(d1.suggestedFilename()).toMatch(/^Emmanuel - .+ report\.pdf$/);
+  expect((await readFile((await d1.path())!)).subarray(0, 5).toString()).toBe("%PDF-");
+  const all = teacher.waitForEvent("download");
+  await panel.getByRole("button", { name: /Download all reports \(PDF\)/ }).click();
+  expect((await all).suggestedFilename()).toMatch(/class reports\.pdf$/);
   // Done: the exam and its button are gone.
   await exam.getByRole("button", { name: /Done — back to the class/ }).click();
   await expect(exam).toBeHidden();

@@ -13,8 +13,9 @@ import type { Difficulty } from "@/lib/games/generators";
 // Message: "exam" (teacher → all, signed): { examId } when one starts or ends,
 // so phones check at once (they also check every few seconds).
 
-type Meta = { id: string; title: string; minutes: number; review: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number };
-type Entry = { id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null };
+type Meta = { id: string; title: string; minutes: number; review: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number ; questions?: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
+type Entry = { id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null;
+  answers?: Record<string, unknown>; startedAt?: string | null; submittedAt?: string | null };
 type Analysis = { score: number; total: number; right: number; wrong: number; blank: number; average: number | null; best: number | null; takers: number; position: number | null; flags: number };
 type Review = { q: string; kind: ExamQ["kind"]; options: string[]; answer: number | string; given: unknown; right: boolean; marks: number };
 
@@ -47,6 +48,7 @@ export default function ExamMode({ sessionId, host, open, onOpen, onClose }: { s
 // ── Teacher ──
 function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { open: boolean; onOpen: () => void; onClose: () => void; data: any; reload: () => Promise<void>; sessionId: string; tell: (id: string | null) => void }) {
   const now = useServerClock()();
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null); // PDF reports being made
   const [, tick] = useState(0);
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, []);
   const exam: Meta | null = data?.exam ?? null;
@@ -102,6 +104,24 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
     const { ok, j } = await api({ action, examId: exam.id, ...extra });
     if (!ok) setNote(j.error ?? "That didn't work — try again.");
     tell(exam.id); await reload();
+  }
+  // PDF reports: one learner's, or the whole class (summary + a page each). Made on this device.
+  async function reports(only?: Entry) {
+    if (!exam?.questions) return;
+    setPdfBusy(only?.id ?? "all"); setNote(null);
+    try {
+      const [{ examReports }, { learnerPdf, classPdf, savePdf }] = await Promise.all([import("@/lib/examReport"), import("@/lib/examPdf")]);
+      const cr = examReports(exam.questions, entries.map((e) => ({ id: e.id, name: e.name, answers: e.answers ?? {}, flags: e.flags, flagLog: e.flagLog, startedAt: e.startedAt ?? null, submittedAt: e.submittedAt ?? null })));
+      const meta = { className: exam.className || "Class", examTitle: exam.title, teacher: exam.teacher, date: new Date(exam.createdAt ?? Date.now()).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) };
+      if (only) {
+        const r = cr.learners.find((l) => l.id === only.id);
+        if (!r) throw new Error("no report");
+        savePdf(await learnerPdf(meta, r), `${only.name} - ${exam.title} report.pdf`);
+      } else savePdf(await classPdf(meta, cr), `${exam.title} - class reports.pdf`);
+    } catch (err) {
+      console.warn("exam report failed", err);
+      setNote("Couldn't make the report — try again.");
+    } finally { setPdfBusy(null); }
   }
   function csv() {
     if (!exam) return;
@@ -246,7 +266,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
             {!entries.length && <p className="p-6 text-center text-sm font-bold text-ink/50">{running ? "Waiting for learners to start…" : "Nobody took this exam."}</p>}
             {entries.length > 0 && (
               <table className="w-full text-left text-sm">
-                <thead><tr className="text-[11px] uppercase tracking-wider text-ink/50"><th className="p-2">Learner</th><th className="p-2">Answered</th><th className="p-2">Left the page</th><th className="p-2">Status</th><th className="p-2 text-right">Score</th></tr></thead>
+                <thead><tr className="text-[11px] uppercase tracking-wider text-ink/50"><th className="p-2">Learner</th><th className="p-2">Answered</th><th className="p-2">Left the page</th><th className="p-2">Status</th><th className="p-2 text-right">Score</th><th className="p-2 text-right"><span className="sr-only">Report</span></th></tr></thead>
                 <tbody>
                   {[...entries].sort((a, b) => (b.score ?? b.live ?? 0) - (a.score ?? a.live ?? 0)).map((e) => (
                     <tr key={e.id} className="border-t border-line">
@@ -255,12 +275,22 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                       <td className="p-2">{e.flags ? <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-black text-red-700" title={e.flagLog.map((f) => `${new Date(f.at).toLocaleTimeString()} — ${f.reason}`).join("\n")}>⚠ {e.flags}×</span> : <span className="text-xs font-bold text-emerald-700">No</span>}</td>
                       <td className="p-2 text-xs font-black">{e.submitted ? <span className="text-emerald-700">Handed in</span> : <span className="text-ink/55">Writing…</span>}</td>
                       <td className="p-2 text-right font-black">{e.submitted ? `${e.score} / ${e.total}` : running ? "—" : ""}</td>
+                      <td className="p-2 text-right">
+                        <button type="button" onClick={() => reports(e)} disabled={!!pdfBusy} aria-label={`Download ${e.name}'s report (PDF)`}
+                          className="whitespace-nowrap rounded-lg bg-[#E2F3F2] px-2.5 py-1.5 text-[11px] font-black text-[#0A4F52] disabled:opacity-50">{pdfBusy === e.id ? "Making…" : "📄 Report"}</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
-            {entries.length > 0 && <button type="button" onClick={csv} className="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-xs font-black">Download results (spreadsheet)</button>}
+            {entries.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => reports()} disabled={!!pdfBusy} className="rounded-xl bg-[#0E6E72] px-3 py-2 text-xs font-black text-white disabled:opacity-50">{pdfBusy === "all" ? "Making the reports…" : "📄 Download all reports (PDF)"}</button>
+                <button type="button" onClick={csv} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black">Download results (spreadsheet)</button>
+                {running && <span className="text-xs font-semibold text-ink/55">Reports made now show the papers so far — download again when the exam ends.</span>}
+              </div>
+            )}
           </div>
         )}
       </div>

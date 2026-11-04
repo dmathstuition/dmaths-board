@@ -64,8 +64,10 @@ export async function GET(req: Request) {
         id: r.student_id, name: r.name, answered: Object.values(r.answers ?? {}).filter((x) => x != null && x !== "").length,
         flags: r.flags, flagLog: (r.flag_log ?? []).slice(-10), submitted: !!r.submitted_at, score: r.score, total: r.total,
         live: r.submitted_at ? null : markPaper(e.questions, r.answers ?? {}).score, // what they'd get now
+        answers: r.answers ?? {}, startedAt: r.started_at ?? null, submittedAt: r.submitted_at ?? null, // for the teacher's reports
       }));
-      return NextResponse.json({ exam: { ...meta, questions: e.questions }, entries }, { headers: { "Cache-Control": "no-store" } });
+      const about = { className: v.session.title ?? "", teacher: v.fullName || v.name, createdAt: e.created_at ?? null };
+      return NextResponse.json({ exam: { ...meta, questions: e.questions, ...about }, entries }, { headers: { "Cache-Control": "no-store" } });
     }
     const { data: mine } = await admin.from("board_exam_entries").select("*").eq("exam_id", e.id).eq("student_id", v.id).maybeSingle();
     const entry = mine as EntryRow | null;
