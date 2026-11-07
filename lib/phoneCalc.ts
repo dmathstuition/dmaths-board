@@ -22,7 +22,7 @@ export function press(s: CalcState, key: string): CalcState {
     if (!s.expr.trim()) return s;
     const r = evaluate(s.expr.replace(/Ans/g, s.ans ? `(${s.ans})` : "0"), s.deg);
     // A sum that can be read but has no answer (÷ 0, √ of a negative…) is a Math error, like a real calculator.
-    const math = !r.ok && /Not a real number|Too big/.test(r.error);
+    const math = !r.ok && /Not a real number|Too big/.test((r as { error: string }).error);
     if (!r.ok || !Number.isFinite(r.value)) return { ...s, result: r.ok || math ? "Math error" : "Syntax error", error: true, shift: false };
     const result = fmtNumber(r.value);
     return { ...s, result, error: false, shift: false, ans: result, history: [{ expr: s.expr, result }, ...s.history].slice(0, MAX_HISTORY) };

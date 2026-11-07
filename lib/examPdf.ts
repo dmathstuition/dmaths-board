@@ -109,7 +109,7 @@ function table(c: Ctx, heading: string, cols: { title: string; w: number; align?
 function learnerPages(c: Ctx, r: LearnerReport) {
   newPage(c, r.name);
   boxes(c, [
-    ["Score", `${r.score} / ${r.total}`], ["Percent", `${r.percent}%`], ["Grade", r.grade],
+    ["Score", `${r.score} / ${r.total}`], ["Percent", `${r.percent}%`], [`Grade · ${r.scale}`, r.grade],
     ["Position", r.position ? `${ordinal(r.position)} of ${r.of}` : "-"],
   ]);
   boxes(c, [
@@ -153,13 +153,14 @@ export async function learnerPdf(meta: ReportMeta, r: LearnerReport): Promise<Ui
 export async function classPdf(meta: ReportMeta, cr: ClassReport): Promise<Uint8Array> {
   const c = await start(meta);
   newPage(c, "Class summary");
-  boxes(c, [["Took the exam", String(cr.takers)], ["Average", cr.average == null ? "-" : `${cr.average}%`], ["Best", cr.best == null ? "-" : `${cr.best}%`], ["Credit pass (C6+)", `${cr.passed} of ${cr.takers}`]]);
+  boxes(c, [["Took the exam", String(cr.takers)], ["Average", cr.average == null ? "-" : `${cr.average}%`], ["Best", cr.best == null ? "-" : `${cr.best}%`], [cr.scheme.passLabel, `${cr.passed} of ${cr.takers}`]]);
+  if (cr.scheme.strong && cr.strong != null) text(c, `${cr.scheme.strong.label}: ${cr.strong} of ${cr.takers}`, { size: 9.5, color: MUTED, gap: 4 });
   // Grades as bars.
-  text(c, "Grades", { bold: true, size: 11, color: DEEP, gap: 4 });
+  text(c, `Grades — ${cr.scheme.name}`, { bold: true, size: 11, color: DEEP, gap: 4 });
   const most = Math.max(1, ...cr.grades.map((g) => g.count)), barW = A4[0] - M * 2 - 70;
   for (const g of cr.grades) {
     c.page.drawText(g.grade, { x: M, y: c.y - 10, size: 9, font: c.b, color: INK });
-    if (g.count) c.page.drawRectangle({ x: M + 28, y: c.y - 11, width: Math.max(2, (g.count / most) * barW), height: 9, color: g.grade.startsWith("F") || g.grade.startsWith("E") || g.grade.startsWith("D") ? RED : TEAL });
+    if (g.count) c.page.drawRectangle({ x: M + 28, y: c.y - 11, width: Math.max(2, (g.count / most) * barW), height: 9, color: g.pass ? TEAL : RED });
     c.page.drawText(String(g.count), { x: M + 34 + (g.count / most) * barW, y: c.y - 10, size: 9, font: c.f, color: MUTED });
     c.y -= 14;
   }
@@ -174,7 +175,7 @@ export async function classPdf(meta: ReportMeta, cr: ClassReport): Promise<Uint8
   table(c, "Class summary", [{ title: "Position", w: 52 }, { title: "Learner", w: 190 }, { title: "Score", w: 70, align: "right" }, { title: "Percent", w: 60, align: "right" }, { title: "Grade", w: 50 }, { title: "Left the page", w: 93, align: "right" }],
     cr.learners.map((l) => ({
       cells: [l.position ? ordinal(l.position) : "-", l.name, `${l.score} / ${l.total}`, `${l.percent}%`, l.grade, l.flags ? `${l.flags}x` : "No"],
-      colors: [MUTED, undefined, undefined, undefined, l.percent >= 50 ? GREEN : RED, l.flags ? RED : MUTED], bold: [false, true, false, false, true, false],
+      colors: [MUTED, undefined, undefined, undefined, l.percent >= cr.scheme.pass ? GREEN : RED, l.flags ? RED : MUTED], bold: [false, true, false, false, true, false],
     })));
   for (const l of cr.learners) learnerPages(c, l);
   return c.doc.save();

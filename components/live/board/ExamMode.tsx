@@ -5,6 +5,7 @@ import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
 import { useServerClock } from "@/lib/serverClock";
 import { UK_SETS } from "@/lib/ukPrimary";
+import { SCHEMES, gradeOf, schemeById, type GradeScheme } from "@/lib/examReport";
 import { CalculatorButton } from "@/components/live/PhoneCalculator";
 import { EXAM_MINUTES, EXAM_TOPICS, clockLeft, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
 import type { Difficulty } from "@/lib/games/generators";
@@ -51,6 +52,10 @@ export default function ExamMode({ sessionId, host, open, onOpen, onClose }: { s
 function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { open: boolean; onOpen: () => void; onClose: () => void; data: any; reload: () => Promise<void>; sessionId: string; tell: (id: string | null) => void }) {
   const now = useServerClock()();
   const [pdfBusy, setPdfBusy] = useState<string | null>(null); // PDF reports being made
+  // Grading: the UK's GCSE 9–1 unless this teacher picks WAEC (kept on this device).
+  const [scale, setScale] = useState<GradeScheme["id"]>(() => { try { return schemeById(localStorage.getItem("exam-grading")).id; } catch { return "gcse"; } });
+  const scheme = schemeById(scale);
+  const pickScale = (id: GradeScheme["id"]) => { setScale(id); try { localStorage.setItem("exam-grading", id); } catch { /* storage blocked */ } };
   const [, tick] = useState(0);
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, []);
   const exam: Meta | null = data?.exam ?? null;
@@ -115,7 +120,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
     setPdfBusy(only?.id ?? "all"); setNote(null);
     try {
       const [{ examReports }, { learnerPdf, classPdf, savePdf }] = await Promise.all([import("@/lib/examReport"), import("@/lib/examPdf")]);
-      const cr = examReports(exam.questions, entries.map((e) => ({ id: e.id, name: e.name, answers: e.answers ?? {}, flags: e.flags, flagLog: e.flagLog, startedAt: e.startedAt ?? null, submittedAt: e.submittedAt ?? null })));
+      const cr = examReports(exam.questions, entries.map((e) => ({ id: e.id, name: e.name, answers: e.answers ?? {}, flags: e.flags, flagLog: e.flagLog, startedAt: e.startedAt ?? null, submittedAt: e.submittedAt ?? null })), scheme);
       const meta = { className: exam.className || "Class", examTitle: exam.title, teacher: exam.teacher, date: new Date(exam.createdAt ?? Date.now()).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) };
       if (only) {
         const r = cr.learners.find((l) => l.id === only.id);
@@ -130,7 +135,8 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   function csv() {
     if (!exam) return;
     const esc = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const rows = [["Learner", "Score", "Out of", "Percent", "Answered", "Left the page", "Handed in"], ...entries.map((e) => [e.name, e.score ?? e.live ?? 0, exam.total, Math.round(((e.score ?? e.live ?? 0) / Math.max(1, exam.total)) * 100), e.answered, e.flags, e.submitted ? "yes" : "no"])];
+    const pct = (e: Entry) => Math.round(((e.score ?? e.live ?? 0) / Math.max(1, exam.total)) * 100);
+    const rows = [["Learner", "Score", "Out of", "Percent", `Grade (${scheme.name})`, "Answered", "Left the page", "Handed in"], ...entries.map((e) => [e.name, e.score ?? e.live ?? 0, exam.total, pct(e), gradeOf(pct(e), scheme), e.answered, e.flags, e.submitted ? "yes" : "no"])];
     const url = URL.createObjectURL(new Blob([rows.map((r) => r.map(esc).join(",")).join("\n")], { type: "text/csv" }));
     const a = document.createElement("a"); a.href = url; a.download = `${exam.title.replace(/[^\w ]+/g, "")}.csv`; a.click(); URL.revokeObjectURL(url);
   }
@@ -271,7 +277,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
             {!entries.length && <p className="p-6 text-center text-sm font-bold text-ink/50">{running ? "Waiting for learners to start…" : "Nobody took this exam."}</p>}
             {entries.length > 0 && (
               <table className="w-full text-left text-sm">
-                <thead><tr className="text-[11px] uppercase tracking-wider text-ink/50"><th className="p-2">Learner</th><th className="p-2">Answered</th><th className="p-2">Left the page</th><th className="p-2">Status</th><th className="p-2 text-right">Score</th><th className="p-2 text-right"><span className="sr-only">Report</span></th></tr></thead>
+                <thead><tr className="text-[11px] uppercase tracking-wider text-ink/50"><th className="p-2">Learner</th><th className="p-2">Answered</th><th className="p-2">Left the page</th><th className="p-2">Status</th><th className="p-2 text-right">Score</th><th className="p-2 text-right" title={scheme.name}>Grade</th><th className="p-2 text-right"><span className="sr-only">Report</span></th></tr></thead>
                 <tbody>
                   {[...entries].sort((a, b) => (b.score ?? b.live ?? 0) - (a.score ?? a.live ?? 0)).map((e) => (
                     <tr key={e.id} className="border-t border-line">
@@ -280,6 +286,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                       <td className="p-2">{e.flags ? <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-black text-red-700" title={e.flagLog.map((f) => `${new Date(f.at).toLocaleTimeString()} — ${f.reason}`).join("\n")}>⚠ {e.flags}×</span> : <span className="text-xs font-bold text-emerald-700">No</span>}</td>
                       <td className="p-2 text-xs font-black">{e.submitted ? <span className="text-emerald-700">Handed in</span> : <span className="text-ink/55">Writing…</span>}</td>
                       <td className="p-2 text-right font-black">{e.submitted ? `${e.score} / ${e.total}` : running ? "—" : ""}</td>
+                      <td className="p-2 text-right">{e.submitted && e.total ? (() => { const p = Math.round(((e.score ?? 0) / e.total) * 100); return <span className={`rounded-md px-2 py-0.5 text-xs font-black ${p >= scheme.pass ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>{gradeOf(p, scheme)}</span>; })() : ""}</td>
                       <td className="p-2 text-right">
                         <button type="button" onClick={() => reports(e)} disabled={!!pdfBusy} aria-label={`Download ${e.name}'s report (PDF)`}
                           className="whitespace-nowrap rounded-lg bg-[#E2F3F2] px-2.5 py-1.5 text-[11px] font-black text-[#0A4F52] disabled:opacity-50">{pdfBusy === e.id ? "Making…" : "📄 Report"}</button>
@@ -293,6 +300,11 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button type="button" onClick={() => reports()} disabled={!!pdfBusy} className="rounded-xl bg-[#0E6E72] px-3 py-2 text-xs font-black text-white disabled:opacity-50">{pdfBusy === "all" ? "Making the reports…" : "📄 Download all reports (PDF)"}</button>
                 <button type="button" onClick={csv} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black">Download results (spreadsheet)</button>
+                <label className="flex items-center gap-1.5 text-xs font-black text-ink/70">Grading
+                  <select value={scale} onChange={(e) => pickScale(e.target.value as GradeScheme["id"])} className="rounded-lg bg-white px-2 py-1.5 text-xs font-black ring-1 ring-slate-200">
+                    {SCHEMES.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                  </select>
+                </label>
                 {running && <span className="text-xs font-semibold text-ink/55">Reports made now show the papers so far — download again when the exam ends.</span>}
               </div>
             )}

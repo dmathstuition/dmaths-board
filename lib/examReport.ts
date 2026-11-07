@@ -8,22 +8,42 @@ export type ReportEntry = {
 };
 export type ReportItem = { n: number; q: string; given: string; correct: string; right: boolean; blank: boolean; marks: number; classRight: number | null };
 export type LearnerReport = {
-  id: string; name: string; score: number; total: number; percent: number; grade: string; position: number | null; of: number;
+  id: string; name: string; scale: string; /* scale: the grading scheme's name */ score: number; total: number; percent: number; grade: string; position: number | null; of: number;
   classAverage: number | null; best: number | null; right: number; wrong: number; blank: number;
   minutes: number | null; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean;
   items: ReportItem[]; remark: string; focus: string[];
 };
 export type ClassReport = {
-  takers: number; average: number | null; best: number | null; lowest: number | null; passed: number;
-  grades: { grade: string; count: number }[];
+  scheme: GradeScheme; takers: number; average: number | null; best: number | null; lowest: number | null; passed: number; strong: number | null;
+  grades: { grade: string; count: number; pass: boolean }[];
   items: { n: number; q: string; correct: string; classRight: number | null }[]; // how the class did on each question
   learners: LearnerReport[]; // best first
 };
 
-// WAEC grades.
-export const GRADES: [number, string][] = [[75, "A1"], [70, "B2"], [65, "B3"], [60, "C4"], [55, "C5"], [50, "C6"], [45, "D7"], [40, "E8"], [0, "F9"]];
-export const gradeOf = (pct: number) => GRADES.find(([min]) => pct >= min)![1];
-const PASS = 50; // C6 or better is a credit pass
+// Grading schemes. The standard is the UK's GCSE 9–1 (9 highest; 4 is a
+// standard pass, 5 a strong pass; U is ungraded). Real GCSE boundaries are set
+// for each paper every year, so a class test uses fixed percentages — the
+// usual school practice. WAEC (A1–F9) is there for Nigerian classes.
+export type GradeScheme = {
+  id: "gcse" | "waec"; name: string;
+  grades: [number, string][];          // [lowest percent, grade], best first
+  pass: number; passLabel: string;      // the pass mark and what it's called
+  strong?: { min: number; label: string };
+};
+export const GCSE: GradeScheme = {
+  id: "gcse", name: "UK GCSE (9–1)",
+  grades: [[90, "9"], [80, "8"], [70, "7"], [60, "6"], [50, "5"], [40, "4"], [30, "3"], [20, "2"], [10, "1"], [0, "U"]],
+  pass: 40, passLabel: "Standard pass (4+)", strong: { min: 50, label: "Strong pass (5+)" },
+};
+export const WAEC: GradeScheme = {
+  id: "waec", name: "WAEC (A1–F9)",
+  grades: [[75, "A1"], [70, "B2"], [65, "B3"], [60, "C4"], [55, "C5"], [50, "C6"], [45, "D7"], [40, "E8"], [0, "F9"]],
+  pass: 50, passLabel: "Credit pass (C6+)",
+};
+export const SCHEMES = [GCSE, WAEC];
+export const schemeById = (id: unknown): GradeScheme => SCHEMES.find((s) => s.id === id) ?? GCSE;
+export const gradeOf = (pct: number, scheme: GradeScheme = GCSE) => scheme.grades.find(([min]) => pct >= min)![1];
+export const GRADES = GCSE.grades;
 
 const answerText = (q: ExamQ, v: unknown): string => {
   if (v == null || v === "") return "";
@@ -32,15 +52,19 @@ const answerText = (q: ExamQ, v: unknown): string => {
 };
 const correctText = (q: ExamQ) => (q.kind === "choice" ? q.options[Number(q.answer)] ?? "" : String(q.answer));
 
-function remarkFor(pct: number, avg: number | null, blank: number, flags: number): string {
-  const lead = pct >= 75 ? "Excellent work." : pct >= 60 ? "Good work." : pct >= 50 ? "A fair result — a credit pass." : pct >= 40 ? "Nearly there — more practice is needed." : "This topic needs more work.";
+function remarkFor(pct: number, avg: number | null, blank: number, flags: number, scheme: GradeScheme): string {
+  const g = gradeOf(pct, scheme), named = scheme.id === "gcse" ? `grade ${g}` : g;
+  const lead = pct >= 80 ? `Excellent work — ${named}.`
+    : scheme.strong && pct >= scheme.strong.min ? `Good work — ${named}, a strong pass.`
+      : pct >= scheme.pass ? `${pct >= 60 ? "Good work" : "A fair result"} — ${named}, a ${scheme.id === "gcse" ? "standard" : "credit"} pass.`
+        : pct >= scheme.pass - 10 ? `Nearly there — ${named}. A little more practice reaches a pass.` : `This topic needs more work — ${named}.`;
   const vsClass = avg == null ? "" : pct > avg + 5 ? " Above the class average." : pct < avg - 5 ? " Below the class average." : " Around the class average.";
   const left = blank > 0 ? ` ${blank} question${blank === 1 ? " was" : "s were"} left unanswered — attempt every question.` : "";
   const away = flags > 0 ? ` Left the exam page ${flags} time${flags === 1 ? "" : "s"}.` : "";
   return `${lead}${vsClass}${left}${away}`.trim();
 }
 
-export function examReports(questions: ExamQ[], entries: ReportEntry[]): ClassReport {
+export function examReports(questions: ExamQ[], entries: ReportEntry[], scheme: GradeScheme = GCSE): ClassReport {
   const marked = entries.map((e) => ({ e, m: markPaper(questions, e.answers ?? {}) }));
   const total = questions.reduce((s, q) => s + q.marks, 0);
   const pct = (score: number) => (total ? Math.round((score / total) * 100) : 0);
@@ -62,9 +86,9 @@ export function examReports(questions: ExamQ[], entries: ReportEntry[]): ClassRe
     // What to work on: the questions they got wrong that most of the class got right first.
     const focus = items.filter((x) => !x.right).sort((a, b) => (b.classRight ?? 0) - (a.classRight ?? 0)).slice(0, 3).map((x) => `Q${x.n}: ${x.q}`);
     return {
-      id: e.id, name: e.name || "Learner", score: m.score, total, percent: p, grade: gradeOf(p), position: null, of: n, classAverage: average, best,
+      id: e.id, name: e.name || "Learner", scale: scheme.name, score: m.score, total, percent: p, grade: gradeOf(p, scheme), position: null, of: n, classAverage: average, best,
       right, wrong: items.length - right - blank, blank, minutes, flags: e.flags || 0, flagLog: (e.flagLog ?? []).slice(-10),
-      submitted: !!e.submittedAt, items, remark: remarkFor(p, average, blank, e.flags || 0), focus,
+      submitted: !!e.submittedAt, items, remark: remarkFor(p, average, blank, e.flags || 0, scheme), focus,
     };
   });
   // Position: equal scores share a place (1, 2, 2, 4).
@@ -72,8 +96,9 @@ export function examReports(questions: ExamQ[], entries: ReportEntry[]): ClassRe
   learners.forEach((l) => { l.position = learners.findIndex((x) => x.score === l.score) + 1; });
 
   return {
-    takers: n, average, best, lowest, passed: learners.filter((l) => l.percent >= PASS).length,
-    grades: GRADES.map(([, g]) => ({ grade: g, count: learners.filter((l) => l.grade === g).length })),
+    scheme, takers: n, average, best, lowest, passed: learners.filter((l) => l.percent >= scheme.pass).length,
+    strong: scheme.strong ? learners.filter((l) => l.percent >= scheme.strong!.min).length : null,
+    grades: scheme.grades.map(([min, g]) => ({ grade: g, count: learners.filter((l) => l.grade === g).length, pass: min >= scheme.pass })),
     items: questions.map((q, i) => ({ n: i + 1, q: q.q, correct: correctText(q), classRight: classRight[i] })),
     learners,
   };
