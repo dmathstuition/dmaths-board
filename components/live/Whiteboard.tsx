@@ -201,6 +201,10 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const [edit, setEdit] = useState<{ kind: "text" | "note" | "math"; x: number; y: number; value: string; replace?: Stroke } | null>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
   const [overview, setOverview] = useState(false);
+  // "All pages": ticking pages to delete several at once (teacher).
+  const [picking, setPicking] = useState(false);
+  const [ticked, setTicked] = useState<Set<number>>(new Set());
+  useEffect(() => { if (!overview) { setPicking(false); setTicked(new Set()); } }, [overview]);
   const [activity, setActivity] = useState<"sorting" | "matching" | null>(null);
   const [replay, setReplay] = useState(false);
   const [answersOpen, setAnswersOpen] = useState(false);
@@ -1022,18 +1026,38 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   function removeAllSlides() {
     const n = bgsRef.current.filter(Boolean).length;
     if (!n || !confirm(`Remove all ${n} slide page${n === 1 ? "" : "s"} for everyone? Anything written on ${n === 1 ? "it" : "them"} goes too — your other pages stay.`)) return;
-    const urls = bgsRef.current.filter((b): b is string => !!b);
-    const keep = bgsRef.current.map((b, i) => (b ? -1 : i)).filter((i) => i >= 0 && i < pages.current.length);
+    removePages(bgsRef.current.map((b, i) => (b ? i : -1)).filter((i) => i >= 0));
+    setNotice(`${n} slide page${n === 1 ? "" : "s"} removed`);
+  }
+  // Remove several pages at once (ticked on "All pages"). If none are left, one empty page stays.
+  function removePages(drop: number[]) {
+    const gone = new Set(drop);
+    const count = pages.current.length;
+    const keep = Array.from({ length: count }, (_, i) => i).filter((i) => !gone.has(i));
+    const urls = [...gone].map((i) => bgsRef.current[i]).filter((b): b is string => !!b)
+      .filter((u) => !keep.some((i) => bgsRef.current[i] === u));
     const next = keep.length ? keep.map((i) => [...(pages.current[i] ?? [])]) : [[]];
     const paperList = keep.length ? keep.map((i) => papersRef.current[i] ?? "plain") : ["plain" as Paper];
-    const bgList: (string | null)[] = next.map(() => null);
+    const bgList: (string | null)[] = keep.length ? keep.map((i) => bgsRef.current[i] ?? null) : [null];
+    // Stay on the same page if it's kept, else the nearest one before it.
+    const was = pageRef.current;
+    const to = Math.max(0, keep.includes(was) ? keep.indexOf(was) : keep.filter((i) => i < was).length - 1);
     pages.current = next; papersRef.current = paperList; bgsRef.current = bgList;
-    setPapers(paperList); setBgs(bgList); setPageCount(next.length); setPage(0); pageRef.current = 0;
+    setPapers(paperList); setBgs(bgList); setPageCount(next.length); setPage(to); pageRef.current = to;
     live.current.clear(); redoStack.current = []; select(null);
-    redraw(); pushAll(0); scheduleSave();
-    setNotice(`${n} slide page${n === 1 ? "" : "s"} removed`);
-    // Clear the pictures from storage too (the server keeps any a saved lesson still uses).
-    fetch("/api/live-sessions/slides", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...uploadTarget, urls }) }).catch(() => {});
+    redraw(); pushAll(to); scheduleSave();
+    // Clear the slide pictures from storage too (the server keeps any a saved lesson still uses).
+    if (urls.length) fetch("/api/live-sessions/slides", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...uploadTarget, urls }) }).catch(() => {});
+  }
+  function deleteTicked() {
+    const list = [...ticked].filter((i) => i < pageCount).sort((a, b) => a - b);
+    if (!list.length) return;
+    const all = list.length >= pageCount;
+    if (!confirm(all ? `Delete all ${pageCount} pages for everyone? The board will be left with one empty page.`
+      : `Delete ${list.length} page${list.length === 1 ? "" : "s"} for everyone? Anything written on ${list.length === 1 ? "it" : "them"} goes too.`)) return;
+    removePages(list);
+    setOverview(false);
+    setNotice(`${list.length} page${list.length === 1 ? "" : "s"} deleted`);
   }
 
   // ── Slides: a PowerPoint saved as PDF (or pictures), one board page per slide ──
@@ -1504,18 +1528,57 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
     <div role="dialog" aria-modal="true" aria-label="All pages" className="fixed inset-0 z-[96] flex items-center justify-center bg-black/60 p-4">
       <button type="button" tabIndex={-1} aria-label="Close all pages" onClick={() => setOverview(false)} className="absolute inset-0 cursor-default" />
       <div className="relative max-h-full w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-base font-black text-ink">All pages <span className="font-bold text-ink/50">({pageCount})</span></p>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <p className="mr-auto text-base font-black text-ink">All pages <span className="font-bold text-ink/50">({pageCount})</span></p>
+          {host && !readOnly && !picking && bgs.some(Boolean) && (
+            <button type="button" onClick={() => { setOverview(false); removeAllSlides(); }} disabled={slideBusy}
+              className="flex h-9 items-center gap-1 rounded-lg bg-rose-50 px-2.5 text-xs font-black text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100 disabled:opacity-60">
+              <BoardIcon name="trash" />Remove all slides ({bgs.filter(Boolean).length})
+            </button>
+          )}
+          {host && !readOnly && pageCount > 1 && (
+            <button type="button" onClick={() => { setPicking((v) => !v); setTicked(new Set()); }} aria-pressed={picking}
+              className={`h-9 rounded-lg px-2.5 text-xs font-black ring-1 ${picking ? "bg-ink text-white ring-ink" : "bg-white text-ink ring-line hover:bg-ink/5"}`}>
+              {picking ? "Cancel" : "Select pages"}
+            </button>
+          )}
           <button type="button" onClick={() => setOverview(false)} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-lg text-ink/60 hover:bg-ink/5"><BoardIcon name="close" /></button>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-          {Array.from({ length: pageCount }, (_, i) => (
-            <button key={i} type="button" onClick={() => { goPage(i); setOverview(false); }} aria-label={`Go to page ${i + 1}`}
-              className={`group relative overflow-hidden rounded-xl text-left ring-2 transition ${i === page ? "ring-[#0E6E72]" : "ring-line hover:ring-[#A9D6D3]"}`}>
-              <PageThumb items={pages.current[i] ?? []} bg={bgs[i] ?? null} paper={papers[i] ?? "plain"} img={getImg} />
-              <span className={`absolute left-1.5 top-1.5 rounded-md px-1.5 text-xs font-black ${i === page ? "bg-[#0E6E72] text-white" : "bg-white/90 text-ink"}`}>{i + 1}</span>
+        {picking && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-[#F4FAF9] p-2 ring-1 ring-[#CDE7E5]">
+            <span className="mr-auto text-xs font-bold text-ink/70">{ticked.size ? `${ticked.size} selected` : "Tap the pages to delete"}</span>
+            {bgs.some(Boolean) && (
+              <button type="button" onClick={() => setTicked(new Set(bgs.map((b, i) => (b ? i : -1)).filter((i) => i >= 0 && i < pageCount)))}
+                className="h-9 rounded-lg bg-white px-2.5 text-xs font-black text-ink ring-1 ring-line hover:bg-ink/5">All slides</button>
+            )}
+            <button type="button" onClick={() => setTicked(ticked.size >= pageCount ? new Set() : new Set(Array.from({ length: pageCount }, (_, i) => i)))}
+              className="h-9 rounded-lg bg-white px-2.5 text-xs font-black text-ink ring-1 ring-line hover:bg-ink/5">{ticked.size >= pageCount ? "Select none" : "All pages"}</button>
+            <button type="button" onClick={deleteTicked} disabled={!ticked.size}
+              className="flex h-9 items-center gap-1 rounded-lg bg-rose-600 px-2.5 text-xs font-black text-white hover:bg-rose-700 disabled:opacity-40">
+              <BoardIcon name="trash" />Delete{ticked.size ? ` ${ticked.size}` : ""}
             </button>
-          ))}
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          {Array.from({ length: pageCount }, (_, i) => {
+            const on = ticked.has(i);
+            return (
+              <button key={i} type="button" aria-pressed={picking ? on : undefined}
+                onClick={() => {
+                  if (!picking) { goPage(i); setOverview(false); return; }
+                  setTicked((t) => { const n = new Set(t); if (n.has(i)) n.delete(i); else n.add(i); return n; });
+                }}
+                aria-label={picking ? `${on ? "Unselect" : "Select"} page ${i + 1}` : `Go to page ${i + 1}`}
+                className={`group relative overflow-hidden rounded-xl text-left ring-2 transition ${picking ? (on ? "ring-rose-500" : "ring-line hover:ring-rose-300") : i === page ? "ring-[#0E6E72]" : "ring-line hover:ring-[#A9D6D3]"}`}>
+                <PageThumb items={pages.current[i] ?? []} bg={bgs[i] ?? null} paper={papers[i] ?? "plain"} img={getImg} />
+                <span className={`absolute left-1.5 top-1.5 rounded-md px-1.5 text-xs font-black ${i === page ? "bg-[#0E6E72] text-white" : "bg-white/90 text-ink"}`}>{i + 1}</span>
+                {picking && (
+                  <span aria-hidden className={`absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full text-sm font-black ring-2 ${on ? "bg-rose-600 text-white ring-white" : "bg-white/90 text-transparent ring-ink/30"}`}>✓</span>
+                )}
+                {picking && on && <span aria-hidden className="absolute inset-0 bg-rose-500/15" />}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

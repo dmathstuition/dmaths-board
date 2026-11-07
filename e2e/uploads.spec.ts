@@ -147,3 +147,28 @@ test("all the uploaded slides can be removed in one go", async ({ browser }) => 
   await expect(page.getByRole("button", { name: "Remove all slides" })).toHaveCount(0);
   await expect(page.getByText(/Page 1\/1/)).toBeVisible();
 });
+
+test("several pages can be ticked on All pages and deleted together", async ({ browser }) => {
+  const { page, notes } = await teacherBoard(browser, "ok");
+  await page.setInputFiles('input[type=file][accept*="pdf"]', [
+    { name: "a.png", mimeType: "image/png", buffer: await photo(browser) },
+    { name: "b.png", mimeType: "image/png", buffer: await photo(browser) },
+    { name: "c.png", mimeType: "image/png", buffer: await photo(browser) },
+  ]);
+  await expect.poll(notes, { timeout: 90_000 }).toMatch(/3 slides added/);
+  const before = Number((await page.getByRole("button", { name: /see all pages/ }).innerText()).match(/\/(\d+)/)![1]);
+  await page.getByRole("button", { name: /see all pages/ }).click();
+  const dialog = page.getByRole("dialog", { name: "All pages" });
+  await expect(dialog.getByRole("button", { name: /Remove all slides \(3\)/ })).toBeVisible();
+  await dialog.getByRole("button", { name: "Select pages" }).click();
+  await dialog.getByRole("button", { name: "All slides" }).click();
+  await expect(dialog.getByText("3 selected")).toBeVisible();
+  await dialog.getByRole("button", { name: /Unselect page/ }).first().click();
+  await expect(dialog.getByText("2 selected")).toBeVisible();
+  const cleared = page.waitForRequest((r) => r.url().endsWith("/api/live-sessions/slides") && r.method() === "DELETE");
+  page.once("dialog", (d) => { expect(d.message()).toContain("Delete 2 pages"); d.accept(); });
+  await dialog.getByRole("button", { name: "Delete 2" }).click();
+  expect(JSON.parse((await cleared).postData() ?? "{}").urls).toHaveLength(2);
+  await expect(page.getByText("2 pages deleted")).toBeVisible();
+  await expect(page.getByText(new RegExp(`Page \\d+/${before - 2}`))).toBeVisible();
+});
