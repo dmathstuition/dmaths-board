@@ -19,6 +19,7 @@ export type Round = {
   id: string; q: string; open: boolean; mode: AnswerMode; show: Shown | null; max: number; marks: Record<string, number>;
   img: string | null; per: Record<string, Task>;
   closed: boolean; endsAt: number | null; notes: Record<string, string>; back: Record<string, number>;
+  calc: boolean; // learners may use the calculator on their phone
 };
 export const MAX_PHOTOS = 3;
 export const MAX_NOTE = 200;
@@ -82,7 +83,7 @@ export function cleanRound(v: unknown): Round | null {
   if (r.back && typeof r.back === "object") for (const [who, n] of Object.entries(r.back).slice(0, 500)) { const k = Math.round(Number(n)); if (who && k > 0 && k < 1000) back[who.slice(0, 60)] = k; }
   const endsAt = Number(r.endsAt) > 0 ? Math.round(Number(r.endsAt)) : null;
   return { id: r.id.slice(0, 40), q: String(r.q ?? "").slice(0, 200), open: !!r.open, mode, show, max, marks, img: cleanImg(r.img), per,
-    closed: !!r.closed, endsAt, notes, back };
+    closed: !!r.closed, endsAt, notes, back, calc: r.calc !== false };
 }
 
 // "Learner A", "Learner B"… — the same learner keeps the same letter in a round.

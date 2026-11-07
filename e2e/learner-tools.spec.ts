@@ -159,3 +159,26 @@ test("fix my mistakes: try again, see the working, earn stars; then flashcards",
   await page.getByRole("button", { name: "✓ Got it" }).click();
   await expect(page.getByText("You know all 2 cards!")).toBeVisible();
 });
+
+test("calculator on the learner's phone in class work, until the teacher switches it off", async ({ browser }) => {
+  const { teacher, learner } = await openClass(browser);
+  await teacher.getByRole("button", { name: "Answer boards" }).first().click();
+  const panel = teacher.getByRole("dialog", { name: "Answer boards" });
+  await panel.getByPlaceholder(/quarter of a circle/).fill("A 6 m ladder makes 60° with the ground. How high does it reach?");
+  await expect(panel.getByText("Learners can use a calculator on their phone")).toBeVisible();
+  await panel.getByRole("button", { name: "Send to learners" }).click();
+
+  // The learner works it out: 6 × sin 60.
+  await learner.getByRole("button", { name: "🧮 Calculator" }).click({ timeout: 20_000 });
+  const calc = learner.getByRole("dialog", { name: "Calculator" });
+  for (const k of ["6", "Times", "sin", "6", "0", ")", "Equals"]) await calc.getByRole("button", { name: k, exact: true }).click();
+  await expect(calc.getByLabel("Answer")).toHaveText("5.1961524227");
+  await calc.getByRole("button", { name: "SHIFT" }).click();
+  await expect(calc.getByRole("button", { name: "sin⁻¹" })).toBeVisible();
+  await calc.screenshot({ path: "test-results/phone-calculator.png" });
+  await calc.getByRole("button", { name: "Close the calculator" }).click();
+
+  // Switched off: the button goes.
+  await panel.getByLabel("🧮 Calculator").uncheck();
+  await expect(learner.getByRole("button", { name: "🧮 Calculator" })).toHaveCount(0, { timeout: 15_000 });
+});

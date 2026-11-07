@@ -5,6 +5,7 @@ import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
 import { useServerClock } from "@/lib/serverClock";
 import { UK_SETS } from "@/lib/ukPrimary";
+import { CalculatorButton } from "@/components/live/PhoneCalculator";
 import { EXAM_MINUTES, EXAM_TOPICS, clockLeft, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
 import type { Difficulty } from "@/lib/games/generators";
 
@@ -14,7 +15,7 @@ import type { Difficulty } from "@/lib/games/generators";
 // Message: "exam" (teacher → all, signed): { examId } when one starts or ends,
 // so phones check at once (they also check every few seconds).
 
-type Meta = { id: string; title: string; minutes: number; review: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number ; questions?: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
+type Meta = { id: string; title: string; minutes: number; review: boolean; calculator?: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number ; questions?: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
 type Entry = { id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null;
   answers?: Record<string, unknown>; startedAt?: string | null; submittedAt?: string | null };
 type Analysis = { score: number; total: number; right: number; wrong: number; blank: number; average: number | null; best: number | null; takers: number; position: number | null; flags: number };
@@ -58,6 +59,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   const [title, setTitle] = useState("Class test");
   const [minutes, setMinutes] = useState(20);
   const [review, setReview] = useState(true);
+  const [calcOk, setCalcOk] = useState(true); // learners' phone calculator in this exam
   const [qs, setQs] = useState<ExamQ[]>([]);
   const [topic, setTopic] = useState(EXAM_TOPICS[0]?.id ?? "");
   const [level, setLevel] = useState<Difficulty>("medium");
@@ -94,10 +96,11 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   const setQ = (i: number, q: Partial<ExamQ>) => setQs((cur) => cur.map((x, k) => (k === i ? { ...x, ...q } : x)));
   async function start() {
     setBusy(true); setNote(null);
-    const { ok, j } = await api({ action: "create", sessionId, title, minutes, review, questions: qs });
+    const { ok, j } = await api({ action: "create", sessionId, title, minutes, review, calculator: calcOk, questions: qs });
     setBusy(false);
     if (!ok) { setNote(j.error ?? "Couldn't start the exam."); return; }
     setBuilding(false); tell(j.id); await reload();
+    if (j.note) setNote(j.note);
   }
   async function act(action: "close" | "extend", extra: object = {}) {
     if (!exam) return;
@@ -160,6 +163,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
             <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
               <label className="text-xs font-black text-ink/60">Title<input value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} className={`${field} mt-1`} /></label>
               <label className="flex items-end gap-2 text-xs font-black text-ink/70"><input type="checkbox" checked={review} onChange={(e) => setReview(e.target.checked)} className="mb-3 h-4 w-4 accent-[#C2451C]" /><span className="mb-2.5">Learners see the right answers when it ends</span></label>
+              <label className="flex items-end gap-2 text-xs font-black text-ink/70"><input type="checkbox" checked={calcOk} onChange={(e) => setCalcOk(e.target.checked)} className="mb-3 h-4 w-4 accent-[#C2451C]" /><span className="mb-2.5">🧮 Calculator allowed</span></label>
             </div>
             <fieldset className="mt-3"><legend className="text-xs font-black text-ink/60">Time</legend>
               <div className="mt-1 flex flex-wrap gap-1.5">{EXAM_MINUTES.map((m) => <button key={m} type="button" aria-pressed={minutes === m} onClick={() => setMinutes(m)} className={chip(minutes === m)}>{m} min</button>)}</div>
@@ -399,6 +403,7 @@ function Learner({ data, reload, sessionId }: { data: any; reload: () => Promise
       <div className="sticky top-0 z-10 -mx-3 flex items-center gap-2 bg-[#FFF7ED]/95 px-3 py-2 backdrop-blur sm:-mx-6 sm:px-6">
         <p className="min-w-0 flex-1 truncate text-sm font-black">{exam.title}</p>
         <span className="text-xs font-bold text-ink/60">{done}/{paper.length} answered</span>
+        {exam.calculator !== false ? <CalculatorButton /> : <span className="rounded-lg bg-white px-2 py-1 text-[11px] font-black text-ink/55 ring-1 ring-orange-200" title="Your teacher switched the calculator off for this exam">🚫🧮 No calculator</span>}
         <span role="timer" className={`rounded-xl px-3 py-1.5 text-sm font-black ${left < 60_000 ? "bg-red-600 text-white" : "bg-white text-[#C2451C] ring-1 ring-orange-200"}`}>⏱ {clockLeft(left)}</span>
       </div>
       {warned > 0 && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-black text-red-700 ring-1 ring-red-200">⚠️ You left the exam page{warned > 1 ? ` ${warned} times` : ""}. Your teacher has been told.</p>}

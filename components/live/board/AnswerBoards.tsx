@@ -4,6 +4,7 @@ import { useClassScale } from "@/lib/classScale";
 import { useEffect, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { confidence } from "@/lib/confidence";
+import { CalculatorButton } from "@/components/live/PhoneCalculator";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
 import { localPoint } from "@/components/live/board/rotation";
 import { MARK_CHOICES, MAX_ANSWER_TEXT, MAX_NOTE, MAX_PHOTOS, TIME_LIMITS, anonLabel, answerSummary, canEdit, cleanAnswerStrokes, cleanAnswerText, cleanImgs, cleanNote, cleanRound, hasAnswered, shareOut, taskFor, timeLeft, type Answer, type AnswerMode, type Round, type Task } from "@/lib/answerBoards";
@@ -51,6 +52,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
   const [busy, setBusy] = useState<string | null>(null); // a picture uploading: what's happening
   const [bigPic, setBigPic] = useState<string | null>(null);
   const [limit, setLimit] = useKeptState<number>(keep, k("limit"), 0); // minutes; 0 = no time limit
+  const [calcOn, setCalcOn] = useKeptState<boolean>(keep, k("calc"), true); // learners' phone calculator
   const [draft, setDraft] = useState(""); // feedback being written for the open answer
   // Learner side
   const [mine, setMine] = useKeptState<Stroke[]>(keep, k("mine"), []);
@@ -148,7 +150,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     const each: Record<string, Task> = {};
     if (setFor === "each") for (const [who, t] of Object.entries(per)) if (t.q.trim() || t.img) each[who] = { q: t.q.trim().slice(0, 300), img: t.img };
     setRound({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, q: question.trim().slice(0, 200), open: true, mode, show: null, max: worth, marks: {}, img: qImg, per: each,
-      closed: false, endsAt: limit ? now + limit * 60_000 : null, notes: {}, back: {} });
+      closed: false, endsAt: limit ? now + limit * 60_000 : null, notes: {}, back: {}, calc: calcOn });
   }
   // Upload a picture (the tutor's question, or a learner's photo of their work).
   async function upload(file: File | undefined, answer: boolean): Promise<string | null> {
@@ -242,6 +244,11 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                 <input type="checkbox" checked={anon} onChange={(e) => setAnon(e.target.checked)} className="h-4 w-4 accent-[#0E6E72]" /> Hide names
               </label>
             )}
+            {round && (
+              <label className="flex items-center gap-2 text-xs font-black text-ink/70" title="Learners' phone calculator">
+                <input type="checkbox" checked={round.calc} onChange={(e) => { setCalcOn(e.target.checked); setRound({ ...round, calc: e.target.checked }); }} className="h-4 w-4 accent-[#0E6E72]" /> 🧮 Calculator
+              </label>
+            )}
             {round?.endsAt && !round.closed && (
               <span role="timer" className={`rounded-xl px-3 py-2 text-xs font-black ${timeUp ? "bg-red-100 text-red-700" : "bg-[#E2F3F2] text-[#0E6E72]"}`}>{timeUp ? "⏱ Time’s up" : `⏱ ${timeLeft(round.endsAt, now)} left`}</span>
             )}
@@ -315,6 +322,10 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                   ))}
                 </div>
               </fieldset>
+              <label className="flex min-h-[44px] items-center gap-2 rounded-xl bg-slate-50 px-3 text-sm font-bold text-ink/80 ring-1 ring-slate-200">
+                <input type="checkbox" checked={calcOn} onChange={(e) => setCalcOn(e.target.checked)} className="h-5 w-5 accent-[#0E6E72]" />
+                🧮 Learners can use a calculator on their phone
+              </label>
               <fieldset className="grid gap-1.5">
                 <legend className="text-xs font-black text-ink/60">Marks for this question</legend>
                 <div className="flex flex-wrap gap-2">
@@ -418,6 +429,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
               <p className="flex-1 text-lg font-black leading-snug">{task.q || "Answer the tutor’s question"}</p>
               {task.q && <Speak text={task.q} />}
             </div>
+            {round.calc && edit && <CalculatorButton className="mt-2" />}
             {round.per[myId] && <p className="text-xs font-bold text-ink/50">This class work is just for you</p>}
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">

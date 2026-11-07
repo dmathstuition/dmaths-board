@@ -6,9 +6,9 @@ import { cleanExamQuestions, learnerPaper, markPaper, type ExamQ } from "../lib/
 // Exam mode with a stand-in for /api/board/exams that keeps the exam in memory
 // and marks with the real marking code.
 function examServer() {
-  let exam: { id: string; title: string; minutes: number; review: boolean; status: "open" | "closed"; endsAt: number; questions: ExamQ[] } | null = null;
+  let exam: { id: string; title: string; minutes: number; review: boolean; calculator: boolean; status: "open" | "closed"; endsAt: number; questions: ExamQ[] } | null = null;
   const entries = new Map<string, { name: string; answers: Record<string, unknown>; flags: number; submitted: boolean; score: number | null; total: number | null }>();
-  const meta = () => exam && { id: exam.id, title: exam.title, minutes: exam.minutes, review: exam.review, status: exam.status, endsAt: exam.endsAt, count: exam.questions.length, total: exam.questions.reduce((s, q) => s + q.marks, 0) };
+  const meta = () => exam && { id: exam.id, title: exam.title, minutes: exam.minutes, review: exam.review, calculator: exam.calculator, status: exam.status, endsAt: exam.endsAt, count: exam.questions.length, total: exam.questions.reduce((s, q) => s + q.marks, 0) };
   const close = () => { if (!exam) return; exam.status = "closed"; for (const e of entries.values()) if (!e.submitted) { const m = markPaper(exam.questions, e.answers); Object.assign(e, { submitted: true, score: m.score, total: m.total }); } };
   return async (ctx: BrowserContext, who: "teacher" | "learner", me = { id: "33333333-3333-4333-8333-333333333333", name: "Emmanuel" }) => {
     await ctx.route("**/api/board/exams**", async (r) => {
@@ -27,7 +27,7 @@ function examServer() {
         { q: `${b.topic}: which gas do plants take in?`, kind: "choice", options: ["Oxygen", "Carbon dioxide", "Nitrogen", "Helium"], answer: 1, marks: 1 },
         { q: `${b.topic}: what colour is chlorophyll?`, kind: "typed", options: [], answer: "green", marks: 1 },
       ].slice(0, b.count) } });
-      if (b.action === "create") { exam = { id: "exam-1", title: b.title, minutes: b.minutes, review: b.review, status: "open", endsAt: Date.now() + b.minutes * 60_000, questions: cleanExamQuestions(b.questions) }; return r.fulfill({ json: { id: exam.id } }); }
+      if (b.action === "create") { exam = { id: "exam-1", title: b.title, minutes: b.minutes, review: b.review, calculator: b.calculator !== false, status: "open", endsAt: Date.now() + b.minutes * 60_000, questions: cleanExamQuestions(b.questions) }; return r.fulfill({ json: { id: exam.id } }); }
       if (b.action === "close") { close(); return r.fulfill({ json: { ok: true } }); }
       if (b.action === "start") { entries.set(me.id, { name: me.name, answers: {}, flags: 0, submitted: false, score: null, total: null }); return r.fulfill({ json: { ok: true } }); }
       const e = entries.get(me.id)!;
@@ -88,6 +88,7 @@ test("exam mode: a timed test on a learner's phone, leaving the page flagged, ma
   await expect(panel.getByLabel("Question 4", { exact: true })).toHaveValue(/Right-angled triangle|ladder|distance/);
   await panel.getByRole("button", { name: /Remove question 4/ }).click();
   await panel.getByRole("button", { name: /Remove question 3/ }).click();
+  await panel.getByText("🧮 Calculator allowed").click(); // no calculator in this test
   await panel.getByRole("button", { name: /Start the exam \(2 questions, 10 min\)/ }).click();
 
   // The learner's phone: the rules, then the paper.
@@ -95,6 +96,8 @@ test("exam mode: a timed test on a learner's phone, leaving the page flagged, ma
   await expect(exam.getByRole("button", { name: "Start the exam" })).toBeVisible({ timeout: 20_000 });
   await expect(exam.getByText(/Leaving this page is reported/)).toBeVisible();
   await exam.getByRole("button", { name: "Start the exam" }).click();
+  await expect(exam.getByText("🚫🧮 No calculator")).toBeVisible();
+  await expect(exam.getByRole("button", { name: "🧮 Calculator" })).toHaveCount(0);
   await expect(exam.getByRole("timer")).toContainText(/9:5\d|10:00/);
   // Answer whichever question comes first on this phone, then the other.
   for (let i = 0; i < 2; i++) {

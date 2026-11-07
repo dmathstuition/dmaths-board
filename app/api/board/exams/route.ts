@@ -21,7 +21,7 @@ const bad = (error: string, status = 400) => NextResponse.json({ error }, { stat
 const MISSING = /board_exam/i;
 const dbFail = (msg: string) => MISSING.test(msg) ? bad("Exam mode needs supabase/migration-exams-stars.sql — run it in Supabase.", 501) : bad(msg, 500);
 
-type ExamRow = { id: string; session_id: string; title: string; questions: ExamQ[]; minutes: number; review: boolean; status: "open" | "closed"; created_at: string; ends_at: string; closed_at: string | null };
+type ExamRow = { id: string; session_id: string; title: string; questions: ExamQ[]; minutes: number; review: boolean; calculator?: boolean | null; status: "open" | "closed"; created_at: string; ends_at: string; closed_at: string | null };
 type EntryRow = { exam_id: string; student_id: string; name: string; answers: Record<string, unknown>; flags: number; flag_log: { at: string; reason: string }[]; started_at: string; submitted_at: string | null; score: number | null; total: number | null };
 
 const over = (e: ExamRow, now = Date.now()) => e.status === "closed" || now > new Date(e.ends_at).getTime() + GRACE_MS;
@@ -57,7 +57,7 @@ export async function GET(req: Request) {
     if (!e) return NextResponse.json({ exam: null });
     if (e.status === "open" && over(e)) await closeExam(e);
     const admin = supabaseAdmin();
-    const meta = { id: e.id, title: e.title, minutes: e.minutes, review: e.review, status: e.status, endsAt: new Date(e.ends_at).getTime(), count: e.questions.length, total: e.questions.reduce((s, q) => s + q.marks, 0) };
+    const meta = { id: e.id, title: e.title, minutes: e.minutes, review: e.review, calculator: e.calculator !== false, status: e.status, endsAt: new Date(e.ends_at).getTime(), count: e.questions.length, total: e.questions.reduce((s, q) => s + q.marks, 0) };
     if (v.host) {
       const { data } = await admin.from("board_exam_entries").select("*").eq("exam_id", e.id).limit(500);
       const entries = ((data ?? []) as EntryRow[]).map((r) => ({
@@ -129,12 +129,20 @@ export async function POST(req: Request) {
       const minutes = Math.max(1, Math.min(180, Math.round(Number(body?.minutes) || 20)));
       const open = await latestExam(sessionId);
       if (open?.status === "open") await closeExam(open); // one exam at a time
-      const { data, error } = await admin.from("board_exams").insert({
+      const calculator = body?.calculator !== false;
+      const row = {
         session_id: sessionId, host_id: v.id, title: String(body?.title ?? "Class test").slice(0, 120) || "Class test",
         questions, minutes, review: body?.review !== false, status: "open", ends_at: new Date(Date.now() + minutes * 60_000).toISOString(),
-      }).select("id").single();
-      if (error) return dbFail(error.message);
-      return NextResponse.json({ id: data.id });
+      };
+      let { data, error } = await admin.from("board_exams").insert({ ...row, calculator }).select("id").single();
+      // Before migration-learner-tools.sql there's no calculator column: the calculator stays on.
+      let note: string | undefined;
+      if (error && /calculator/i.test(error.message)) {
+        ({ data, error } = await admin.from("board_exams").insert(row).select("id").single());
+        if (!calculator) note = "The exam started, but the calculator couldn't be switched off — run supabase/migration-learner-tools.sql once to allow that.";
+      }
+      if (error || !data) return dbFail(error?.message ?? "insert failed");
+      return NextResponse.json({ id: data.id, note });
     }
 
     const e = await examById(String(body?.examId ?? ""));
