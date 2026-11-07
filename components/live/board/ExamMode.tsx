@@ -10,7 +10,8 @@ import { useServerClock } from "@/lib/serverClock";
 import { UK_SETS } from "@/lib/ukPrimary";
 import { SCHEMES, gradeOf, schemeById, type GradeScheme } from "@/lib/examReport";
 import { CalculatorButton } from "@/components/live/PhoneCalculator";
-import { EXAM_MINUTES, EXAM_TOPICS, clockLeft, keepsOrder, spokenSpelling, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
+import { EXAM_MINUTES, EXAM_TOPICS, MAX_PAGE_MARKS, clockLeft, isHandMarked, keepsOrder, pageDone, spokenSpelling, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
+import { MarkingDesk, PageFlow } from "@/components/live/board/PaperPages";
 import type { Difficulty } from "@/lib/games/generators";
 
 // Exam mode: a timed test every learner takes on their own phone — questions
@@ -20,8 +21,8 @@ import type { Difficulty } from "@/lib/games/generators";
 // so phones check at once (they also check every few seconds); { examId, at }
 // when the teacher reads spelling number `at` out — phones go to it.
 
-type Meta = { id: string; title: string; minutes: number; review: boolean; calculator?: boolean; inOrder?: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number ; questions?: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
-type Entry = { id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null;
+type Meta = { id: string; title: string; minutes: number; review: boolean; calculator?: boolean; inOrder?: boolean; handMarked?: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number ; questions?: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
+type Entry = { pageMarks?: Record<string, number>; toMark?: number[]; id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null;
   answers?: Record<string, unknown>; startedAt?: string | null; submittedAt?: string | null };
 type Analysis = { score: number; total: number; right: number; wrong: number; blank: number; average: number | null; best: number | null; takers: number; position: number | null; flags: number };
 type Review = { q: string; kind: ExamQ["kind"]; options: string[]; answer: number | string; given: unknown; right: boolean; marks: number };
@@ -83,6 +84,19 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   const [satsNote, setSatsNote] = useState<string | null>(null);
   const [paperPages, setPaperPages] = useState<(string | null)[]>([]);
   const [paperBusy, setPaperBusy] = useState(false);
+  // How an uploaded paper is marked: by the teacher, page by page (learners write
+  // on the pages), or with answer boxes marked automatically.
+  const [paperMode, setPaperMode] = useState<"hand" | "auto">("hand");
+  const pageQ = (url: string) => qs.find((x) => x.kind === "page" && x.img === url);
+  function setPageMarks(url: string, marks: number) {
+    setQs((cur) => {
+      const rest = cur.filter((x) => !(x.kind === "page" && x.img === url));
+      const next = marks > 0 ? [...rest, { q: cur.find((x) => x.kind === "page" && x.img === url)?.q ?? `Page ${paperPages.indexOf(url) + 1}`, kind: "page" as const, options: [], answer: "", marks: Math.min(MAX_PAGE_MARKS, marks), img: url }] : rest;
+      // Pages stay in the paper's order.
+      const at = (x: ExamQ) => (x.kind === "page" && x.img ? paperPages.indexOf(x.img) : -1);
+      return [...next.filter((x) => x.kind !== "page"), ...next.filter((x) => x.kind === "page").sort((a, b) => at(a) - at(b))];
+    });
+  }
   const paperInput = useRef<HTMLInputElement>(null);
   const fixedOrder = keepsOrder(qs, inOrder);
   const ownTitle = useRef(false); // the teacher typed a title: presets leave it alone
@@ -113,7 +127,9 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
       setPaperPages(urls);
       satsSetup(files[0].name.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").slice(0, 80) || "SATs paper", 40); pickScale("ks2");
       const missed = urls.filter((u) => !u).length;
-      setSatsNote(`✓ ${urls.length - missed} page${urls.length - missed === 1 ? "" : "s"} ready${missed ? ` (${missed} didn't upload — try again for those)` : ""}. Tap “+ Question” under a page for each answer on it, then type the answers from the mark scheme.`);
+      setSatsNote(`✓ ${urls.length - missed} page${urls.length - missed === 1 ? "" : "s"} ready${missed ? ` (${missed} didn't upload — try again for those)` : ""}. ${paperMode === "hand"
+        ? "Set the marks for each page (0 = leave it out, e.g. the cover). Learners write on each page and hand it in; you mark each page as it comes in."
+        : "Tap “+ Question” under a page for each answer on it, then type the answers from the mark scheme."}`);
     } catch (err) {
       setSatsNote(`Couldn't read the paper${err instanceof Error && err.message ? ` (${err.message})` : ""} — save it as a PDF and try again.`);
     } finally { setPaperBusy(false); }
@@ -153,7 +169,8 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   const entries: Entry[] = data?.entries ?? [];
   const setQ = (i: number, q: Partial<ExamQ>) => setQs((cur) => cur.map((x, k) => (k === i ? { ...x, ...q } : x)));
   async function start() {
-    const empty = qs.findIndex((q) => q.kind !== "choice" && !String(q.answer).trim());
+    if (isHandMarked(qs) && qs.some((q) => q.kind !== "page")) { setNote("A paper you mark by hand can only have its pages — clear the other questions, or switch the paper to answer boxes."); return; }
+    const empty = qs.findIndex((q) => q.kind !== "choice" && q.kind !== "page" && !String(q.answer).trim());
     if (empty >= 0) { setNote(`Question ${empty + 1} has no answer yet — type the answer (from the mark scheme), or remove it.`); return; }
     setBusy(true); setNote(null);
     const { ok, j } = await api({ action: "create", sessionId, title, minutes, review, calculator: calcOk, inOrder: fixedOrder, questions: qs });
@@ -175,7 +192,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
     setPdfBusy(only?.id ?? "all"); setNote(null);
     try {
       const [{ examReports }, { learnerPdf, classPdf, savePdf }] = await Promise.all([import("@/lib/examReport"), import("@/lib/examPdf")]);
-      const cr = examReports(exam.questions, entries.map((e) => ({ id: e.id, name: e.name, answers: e.answers ?? {}, flags: e.flags, flagLog: e.flagLog, startedAt: e.startedAt ?? null, submittedAt: e.submittedAt ?? null })), scheme);
+      const cr = examReports(exam.questions, entries.map((e) => ({ id: e.id, name: e.name, answers: e.answers ?? {}, flags: e.flags, flagLog: e.flagLog, startedAt: e.startedAt ?? null, submittedAt: e.submittedAt ?? null, pageMarks: e.pageMarks })), scheme);
       const meta = { className: exam.className || "Class", examTitle: exam.title, teacher: exam.teacher, date: new Date(exam.createdAt ?? Date.now()).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) };
       if (only) {
         const r = cr.learners.find((l) => l.id === only.id);
@@ -258,14 +275,29 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
               )}
               {satsNote && <p role="status" className={`mt-2 text-xs font-bold ${satsNote.startsWith("✓") ? "text-[#0A4F52]" : "text-ink/70"}`}>{satsNote}</p>}
               {paperPages.length > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="How is this paper marked?">
+                  <span className="text-xs font-black text-ink/60">Marking:</span>
+                  <button type="button" onClick={() => setPaperMode("hand")} aria-pressed={paperMode === "hand"} className={`min-h-[36px] rounded-lg px-3 text-xs font-black ring-1 ${paperMode === "hand" ? "bg-[#0A4F52] text-white ring-[#0A4F52]" : "bg-white text-[#0A4F52] ring-[#A9D6D3]"}`}>✍️ I mark each page myself</button>
+                  <button type="button" onClick={() => setPaperMode("auto")} aria-pressed={paperMode === "auto"} className={`min-h-[36px] rounded-lg px-3 text-xs font-black ring-1 ${paperMode === "auto" ? "bg-[#0A4F52] text-white ring-[#0A4F52]" : "bg-white text-[#0A4F52] ring-[#A9D6D3]"}`}>⚡ Answer boxes, marked automatically</button>
+                  {paperMode === "hand" && isHandMarked(qs) && <span className="text-xs font-bold text-ink/60">{qs.filter((x) => x.kind === "page").length} pages · {qs.filter((x) => x.kind === "page").reduce((a, x) => a + x.marks, 0)} marks</span>}
+                </div>
+              )}
+              {paperPages.length > 0 && (
                 <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6" aria-label="The paper's pages">
                   {paperPages.map((u, i) => (
                     <div key={i} className="rounded-lg bg-white p-1 ring-1 ring-[#CDE7E5]">
                       {u ? <img src={u} alt={`Page ${i + 1}`} loading="lazy" className="h-28 w-full rounded object-contain" /> : <p className="flex h-28 items-center justify-center text-center text-[11px] font-bold text-red-700">Didn&apos;t upload</p>}
                       <div className="mt-1 flex items-center justify-between gap-1">
-                        <span className="text-[11px] font-black text-ink/55">p{i + 1}{u && qs.some((x) => x.img === u) ? ` · ${qs.filter((x) => x.img === u).length} Q` : ""}</span>
-                        {u && <button type="button" onClick={() => addPaperQ(u)} aria-label={`Add a question on page ${i + 1}`} className="rounded-md bg-[#0E6E72] px-1.5 py-1 text-[11px] font-black text-white">+ Question</button>}
+                        <span className="text-[11px] font-black text-ink/55">p{i + 1}{u && paperMode === "auto" && qs.some((x) => x.img === u) ? ` · ${qs.filter((x) => x.img === u).length} Q` : ""}</span>
+                        {u && paperMode === "auto" && <button type="button" onClick={() => addPaperQ(u)} aria-label={`Add a question on page ${i + 1}`} className="rounded-md bg-[#0E6E72] px-1.5 py-1 text-[11px] font-black text-white">+ Question</button>}
                       </div>
+                      {u && paperMode === "hand" && (() => { const m = pageQ(u)?.marks ?? 0; return (
+                        <div className="mt-1 flex items-center justify-between gap-1">
+                          <button type="button" onClick={() => setPageMarks(u, m - 1)} disabled={m === 0} aria-label={`Fewer marks for page ${i + 1}`} className="h-8 w-8 rounded-md bg-white text-sm font-black text-[#0A4F52] ring-1 ring-[#A9D6D3] disabled:opacity-30">−</button>
+                          <span className={`text-center text-[11px] font-black ${m ? "text-[#0A4F52]" : "text-ink/40"}`} aria-live="polite">{m ? `${m} mark${m === 1 ? "" : "s"}` : "Not in test"}</span>
+                          <button type="button" onClick={() => setPageMarks(u, m + 1)} disabled={m >= MAX_PAGE_MARKS} aria-label={`More marks for page ${i + 1}`} className="h-8 w-8 rounded-md bg-[#0E6E72] text-sm font-black text-white disabled:opacity-30">+</button>
+                        </div>
+                      ); })()}
                     </div>
                   ))}
                 </div>
@@ -335,7 +367,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                     {q.img && <a href={q.img} target="_blank" rel="noreferrer" title="Open the page" className="shrink-0"><img src={q.img} alt={`The page for question ${i + 1}`} loading="lazy" className="h-14 w-10 rounded object-cover ring-1 ring-slate-200" /></a>}
                     <input value={q.q} maxLength={400} onChange={(e) => setQ(i, { q: e.target.value })} aria-label={`Question ${i + 1}`} className={field} />
                     <select value={q.marks} onChange={(e) => setQ(i, { marks: Number(e.target.value) })} aria-label={`Marks for question ${i + 1}`} className="rounded-lg bg-slate-50 px-1 py-2 text-xs font-black ring-1 ring-slate-200">
-                      {[1, 2, 3, 4, 5].map((m) => <option key={m} value={m}>{m} mark{m === 1 ? "" : "s"}</option>)}
+                      {Array.from({ length: q.kind === "page" ? MAX_PAGE_MARKS : 5 }, (_, k) => k + 1).map((m) => <option key={m} value={m}>{m} mark{m === 1 ? "" : "s"}</option>)}
                     </select>
                     <button type="button" onClick={() => setQs((cur) => cur.filter((_, k) => k !== i))} aria-label={`Remove question ${i + 1}`} className="rounded-lg px-2 py-2 text-xs font-black text-red-600 hover:bg-red-50">✕</button>
                   </div>
@@ -348,6 +380,8 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                         </label>
                       ))}
                     </div>
+                  ) : q.kind === "page" ? (
+                    <p className="mt-2 pl-5 text-xs font-bold text-ink/60">✍️ Learners write on this page and hand it in — you mark it.</p>
                   ) : q.kind === "spell" ? (
                     <div className="mt-2 flex flex-wrap items-center gap-2 pl-5 text-xs font-bold text-ink/60">
                       <label className="flex items-center gap-2">Word
@@ -371,12 +405,13 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
             <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-3">
               <button type="button" onClick={start} disabled={busy || !qs.length} className="min-h-[44px] rounded-xl bg-[#C2451C] px-5 text-sm font-black text-white disabled:opacity-40">{busy ? "Starting…" : `Start the exam (${qs.length} question${qs.length === 1 ? "" : "s"}, ${minutes} min)`}</button>
               {exam && <button type="button" onClick={() => setBuilding(false)} className="text-xs font-black text-ink/60 underline">Back to the last exam’s results</button>}
-              <p className="text-xs font-semibold text-ink/55">{fixedOrder ? "Everyone gets the questions in the same order." : "Each phone gets the questions in its own order."} Leaving the exam page is reported to you.</p>
+              <p className="text-xs font-semibold text-ink/55">{isHandMarked(qs) ? "Learners write on each page and hand it in (they can't go back to it); you mark each page as it comes in." : fixedOrder ? "Everyone gets the questions in the same order." : "Each phone gets the questions in its own order."} Leaving the exam page is reported to you.</p>
             </div>
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {running && exam?.questions?.some((q) => q.kind === "spell") && <ReadAloud qs={exam.questions} onRead={(n) => tell(exam.id, n)} />}
+            {exam?.questions && isHandMarked(exam.questions) && <MarkingDesk examId={exam.id} questions={exam.questions} entries={entries} api={api} reload={reload} running={running} />}
             <div className="mb-3 grid gap-2 sm:grid-cols-4">
               {[["Taking it", entries.length], ["Handed in", marked.length], ["Left the page", entries.filter((e) => e.flags > 0).length], ["Average", avg == null ? "—" : `${avg}%`]].map(([l, v]) => (
                 <div key={String(l)} className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200"><p className="text-[11px] font-black uppercase tracking-wider text-ink/50">{l}</p><p className="text-2xl font-black">{v}</p></div>
@@ -393,7 +428,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                       <td className="p-2">{e.answered} / {exam!.count}</td>
                       <td className="p-2">{e.flags ? <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-black text-red-700" title={e.flagLog.map((f) => `${new Date(f.at).toLocaleTimeString()} — ${f.reason}`).join("\n")}>⚠ {e.flags}×</span> : <span className="text-xs font-bold text-emerald-700">No</span>}</td>
                       <td className="p-2 text-xs font-black">{e.submitted ? <span className="text-emerald-700">Handed in</span> : <span className="text-ink/55">Writing…</span>}</td>
-                      <td className="p-2 text-right font-black">{e.submitted ? `${e.score} / ${e.total}` : running ? "—" : ""}</td>
+                      <td className="p-2 text-right font-black">{e.submitted ? `${e.score} / ${e.total}` : e.toMark ? `${e.live ?? 0} / ${e.total} so far` : running ? "—" : ""}{e.toMark?.length ? <span className="block text-[11px] font-bold text-amber-700">{e.toMark.length} page{e.toMark.length === 1 ? "" : "s"} to mark</span> : null}</td>
                       <td className="p-2 text-right">{e.submitted && e.total ? (() => { const p = Math.round(((e.score ?? 0) / e.total) * 100); return <span className={`rounded-md px-2 py-0.5 text-xs font-black ${p >= scheme.pass ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>{gradeOf(p, scheme)}</span>; })() : ""}</td>
                       <td className="p-2 text-right">
                         <button type="button" onClick={() => reports(e)} disabled={!!pdfBusy} aria-label={`Download ${e.name}'s report (PDF)`}
@@ -580,6 +615,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
         <ul className="mx-auto mt-4 max-w-sm space-y-1 text-left text-sm font-semibold text-ink/75">
           <li>✍️ Your answers save as you go.</li>
           {exam.inOrder ? <li>📋 The questions are in order, like the real paper.</li> : <li>🔒 Everyone has the questions in a different order.</li>}
+          {exam.handMarked && <li>✍️ Write on each page, then hand it in. You can&apos;t go back to a page after that.</li>}
           <li>⚠️ Leaving this page is reported to your teacher.</li>
           <li>⏱ When time is up, your exam is handed in for you.</li>
         </ul>
@@ -591,15 +627,21 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
   }
   if (taking && paper) {
     const q = paper[Math.min(at, paper.length - 1)];
-    const done = paper.filter((x) => answers[String(x.n)] != null && answers[String(x.n)] !== "").length;
+    const hand = paper.some((x) => x.kind === "page"); // a paper the teacher marks, page by page
+    const done = paper.filter((x) => (x.kind === "page" ? pageDone(answers[String(x.n)]) : answers[String(x.n)] != null && answers[String(x.n)] !== "")).length;
     return shell(<>
       <div className="sticky top-0 z-10 -mx-3 flex items-center gap-2 bg-[#FFF7ED]/95 px-3 py-2 backdrop-blur sm:-mx-6 sm:px-6">
         <p className="min-w-0 flex-1 truncate text-sm font-black">{exam.title}</p>
-        <span className="text-xs font-bold text-ink/60">{done}/{paper.length} answered</span>
+        <span className="text-xs font-bold text-ink/60">{done}/{paper.length} {hand ? "handed in" : "answered"}</span>
         {exam.calculator !== false ? <CalculatorButton /> : <span className="rounded-lg bg-white px-2 py-1 text-[11px] font-black text-ink/55 ring-1 ring-orange-200" title="Your teacher switched the calculator off for this exam">🚫🧮 No calculator</span>}
         <span role="timer" className={`rounded-xl px-3 py-1.5 text-sm font-black ${left < 60_000 ? "bg-red-600 text-white" : "bg-white text-[#C2451C] ring-1 ring-orange-200"}`}>⏱ {clockLeft(left)}</span>
       </div>
       {warned > 0 && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-black text-red-700 ring-1 ring-red-200">⚠️ You left the exam page{warned > 1 ? ` ${warned} times` : ""}. Your teacher has been told.</p>}
+      {hand ? (
+        <div className="rounded-2xl bg-white p-3 shadow ring-1 ring-orange-200">
+          <PageFlow examId={exam.id} myId={entry?.id ?? "learner"} paper={paper} answers={answers} setAnswers={setAnswers} api={api} onFinished={() => { submitted.current = true; submit(true); }} />
+        </div>
+      ) : (<>
       <div className="select-none rounded-2xl bg-white p-4 shadow ring-1 ring-orange-200">
         <p className="text-xs font-black uppercase tracking-wider text-[#C2451C]">Question {at + 1} of {paper.length} · {q.marks} mark{q.marks === 1 ? "" : "s"}</p>
         {q.img && <PaperPage key={q.img} src={q.img} label={`The page for ${q.q}`} />}
@@ -643,6 +685,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
         })}
       </nav>
       <button type="button" onClick={() => submit()} className="min-h-[48px] rounded-xl bg-emerald-600 text-sm font-black text-white">Hand in my exam</button>
+      </>)}
       {note && <p role="alert" className="text-sm font-bold text-red-700">{note}</p>}
     </>);
   }
@@ -653,13 +696,17 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
     if (hidden && !over) {
       return <button type="button" onClick={() => setHidden(false)} className="fixed bottom-4 left-4 z-[95] rounded-full bg-[#C2451C] px-4 py-3 text-sm font-black text-white shadow-2xl">📝 My exam</button>;
     }
-    const score = result?.score ?? entry?.score, total = result?.total ?? entry?.total ?? exam.total;
+    // A paper marked by hand: the score grows as the teacher marks each page.
+    const marking: { left: number; pages: number } | null = entry?.marking ?? null;
+    const score = marking ? entry?.score : result?.score ?? entry?.score, total = (marking ? entry?.total : result?.total ?? entry?.total) ?? exam.total;
     return shell(<>
       <div className="rounded-2xl bg-white p-6 text-center shadow-xl ring-1 ring-orange-200">
         <p className="text-xs font-black uppercase tracking-[.2em] text-emerald-700">Handed in ✓</p>
         <h2 className="mt-1 font-display text-2xl font-black">{exam.title}</h2>
         {score != null && <p className="mt-3 font-display text-5xl font-black text-[#C2451C]">{score} / {total}</p>}
-        {score != null && <p className="mt-1 text-sm font-bold text-ink/60">{Math.round((score / Math.max(1, total)) * 100)}%</p>}
+        {score != null && <p className="mt-1 text-sm font-bold text-ink/60">{Math.round((score / Math.max(1, total)) * 100)}%{marking?.left ? " so far" : ""}</p>}
+        {marking && marking.left > 0 && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-900 ring-1 ring-amber-200">✍️ Your teacher is marking your paper — {marking.left} page{marking.left === 1 ? "" : "s"} still to mark. Your score goes up as each page is marked.</p>}
+        {marking && marking.left === 0 && <p className="mt-3 text-sm font-bold text-emerald-700">✓ Your teacher has marked every page.</p>}
         {exam.status === "open" && <p className="mt-3 text-sm font-semibold text-ink/60">{exam.review ? "You can see the right answers when the exam ends." : "Wait for your teacher."}</p>}
         {over && analysis && <ExamAnalysis a={analysis} />}
         {over && analysis && analysis.score < analysis.total && <FixMistakes sessionId={sessionId} />}
@@ -672,8 +719,8 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
             <li key={i} className={`rounded-xl p-3 ring-1 ${r.right ? "bg-emerald-50 ring-emerald-200" : "bg-red-50 ring-red-200"}`}>
               <p className="text-sm font-black">{r.right ? "✓" : "✗"} {i + 1}. {r.q}</p>
               <p className="mt-0.5 text-xs font-semibold text-ink/70">
-                You: {r.given == null || r.given === "" ? "no answer" : r.kind === "choice" ? r.options[Number(r.given)] : String(r.given)}
-                {!r.right && <> · <span className="font-black text-emerald-800">Answer: {r.kind === "choice" ? r.options[Number(r.answer)] : String(r.answer).split("|")[0].trim()}</span></>}
+                {r.kind === "page" ? (r.given == null ? "Not marked yet" : `Your teacher's mark: ${r.given} / ${r.marks}`) : <>You: {r.given == null || r.given === "" ? "no answer" : r.kind === "choice" ? r.options[Number(r.given)] : String(r.given)}</>}
+                {!r.right && r.kind !== "page" && <> · <span className="font-black text-emerald-800">Answer: {r.kind === "choice" ? r.options[Number(r.answer)] : String(r.answer).split("|")[0].trim()}</span></>}
               </p>
             </li>
           ))}

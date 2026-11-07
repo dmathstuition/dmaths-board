@@ -11,11 +11,14 @@ alter table public.board_ai_cache enable row level security;
 -- No policies: only the server (service role) reads and writes it.
 
 -- Exams: whether learners may use the calculator on their phone (on unless the teacher switches it off),
--- and whether everyone gets the questions in the same order (a SATs paper).
+-- whether everyone gets the questions in the same order (a SATs paper), and the
+-- teacher's marks for pages of a paper they mark by hand.
 -- (Skipped if exams aren't set up yet — run migration-exams-stars.sql, then this again.)
 do $$ begin
   if to_regclass('public.board_exams') is not null then
     alter table public.board_exams add column if not exists calculator boolean not null default true;
     alter table public.board_exams add column if not exists in_order boolean not null default false;
+    -- Papers the teacher marks by hand, page by page: their marks, by page.
+    alter table public.board_exam_entries add column if not exists page_marks jsonb not null default '{}'::jsonb;
   end if;
 end $$;

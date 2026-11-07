@@ -5,14 +5,18 @@ import { question as numericQuestion, type Difficulty, type Skill } from "@/lib/
 import { choiceQuestion, type ChoiceSkill } from "@/lib/games/senior";
 import { moreChoice, MORE_CHOICE, type MoreChoiceSkill } from "@/lib/games/moreMaths";
 import { CLASS_GAMES } from "@/lib/games/catalog";
-import { isSlideUrl } from "@/lib/whiteboard";
+import { isSlideUrl, type Stroke } from "@/lib/whiteboard";
+import { cleanAnswerStrokes } from "@/lib/answerBoards";
 
 // kind "spell": a spelling test word. q is the whole sentence with the word in
 // it (the teacher reads it out); learners see it with a gap. hear: learners may
 // play the sentence on their own phone. img: a page of a real paper (uploaded
 // like a slide) shown with the question.
-export type ExamQ = { q: string; kind: "choice" | "typed" | "spell"; options: string[]; answer: number | string; marks: number; img?: string; hear?: boolean };
+// kind "page": a whole page of an uploaded paper that learners write on and the
+// teacher marks by hand (marks = the most the page can earn).
+export type ExamQ = { q: string; kind: "choice" | "typed" | "spell" | "page"; options: string[]; answer: number | string; marks: number; img?: string; hear?: boolean };
 export const MAX_EXAM_QUESTIONS = 60;
+export const MAX_PAGE_MARKS = 20;
 export const EXAM_MINUTES = [5, 10, 15, 20, 30, 40, 45, 60, 90] as const;
 // How long after the end an answer still counts (a slow connection).
 export const GRACE_MS = 20_000;
@@ -28,6 +32,10 @@ export function cleanExamQuestions(v: unknown): ExamQ[] {
     if (!q) continue;
     const marks = Math.max(1, Math.min(10, Math.round(Number(x?.marks) || 1)));
     const img = isSlideUrl(x?.img) ? { img: x.img as string } : {};
+    if (x?.kind === "page") {
+      if (img.img) out.push({ q, kind: "page", options: [], answer: "", marks: Math.max(1, Math.min(MAX_PAGE_MARKS, Math.round(Number(x?.marks) || 1))), img: img.img });
+      continue;
+    }
     if (x?.kind === "spell") {
       const answer = str(x?.answer, 60).trim();
       if (answer && /^[\p{L}' -]+$/u.test(answer)) out.push({ q, kind: "spell", options: [], answer, marks, ...(x?.hear === false ? {} : { hear: true }) });
@@ -121,19 +129,64 @@ export function typedRight(given: string, answer: string): boolean {
 export const cleanGiven = (v: unknown): string | number | null =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 && v < 10 ? v : typeof v === "string" ? v.slice(0, 120) : null;
 
+// ── Pages marked by the teacher ──
+// What a learner wrote on a page: their writing (as board strokes, 0–1 across
+// the page) and anything typed. done: when they handed the page in — after
+// that it's locked, and it waits for the teacher's mark.
+export type PageAnswer = { ink: Stroke[]; text: string; done?: string };
+export const MAX_PAGE_TEXT = 1000;
+export function cleanPageAnswer(v: unknown): PageAnswer {
+  const x = (v && typeof v === "object" ? v : {}) as any;
+  return { ink: cleanAnswerStrokes(x.ink), text: typeof x.text === "string" ? x.text.replace(/\r/g, "").slice(0, MAX_PAGE_TEXT) : "" };
+}
+const asPage = (v: unknown) => (v && typeof v === "object" ? (v as Partial<PageAnswer>) : null);
+export const pageDone = (v: unknown) => !!asPage(v)?.done;
+export const pageBlank = (v: unknown) => { const p = asPage(v) as any; if (!p) return true; if (typeof p.blank === "boolean") return p.blank; return !(p.ink ?? []).some((s: Stroke) => !s.erase) && !String(p.text ?? "").trim(); };
+export const isHandMarked = (qs: Pick<ExamQ, "kind">[]) => qs.some((q) => q.kind === "page");
+// The teacher's marks, by question number: only whole numbers a page can earn.
+export function cleanPageMarks(qs: ExamQ[], v: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!v || typeof v !== "object") return out;
+  for (const [k, m] of Object.entries(v as Record<string, unknown>)) {
+    const q = qs[Number(k)];
+    const n = Math.round(Number(m));
+    if (q?.kind === "page" && m != null && Number.isFinite(n) && n >= 0) out[k] = Math.min(q.marks, n);
+  }
+  return out;
+}
+// Answers without the writing (it's big): for lists the teacher polls, and for
+// a learner's own copy (all but the page they're on).
+export function slimAnswers(qs: ExamQ[], answers: Record<string, unknown>, keep = -1): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(answers ?? {})) {
+    const q = qs[Number(k)];
+    if (q?.kind !== "page" || Number(k) === keep) { out[k] = v; continue; }
+    const p = asPage(v);
+    out[k] = { done: p?.done ?? null, blank: pageBlank(v), text: String(p?.text ?? "").slice(0, 300) };
+  }
+  return out;
+}
+// The page a learner is on: the first one they haven't handed in.
+export const currentPage = (qs: ExamQ[], answers: Record<string, unknown>) => qs.findIndex((q, i) => q.kind === "page" && !pageDone(answers?.[String(i)]));
+// Pages handed in with something on them and no mark yet (blank pages earn 0 by themselves).
+export function pagesToMark(qs: ExamQ[], answers: Record<string, unknown>, marks: Record<string, number>, submitted = false): number[] {
+  return qs.map((_, i) => i).filter((i) => qs[i].kind === "page" && (submitted || pageDone(answers?.[String(i)])) && !pageBlank(answers?.[String(i)]) && marks[String(i)] == null);
+}
+
 // Spelling: letter for letter (capitals, spaces round it and a full stop don't matter).
 const spellTidy = (s: string) => s.normalize("NFC").replace(/[‘’ʼ]/g, "'").replace(/\s+/g, " ").trim().replace(/[.!?,]+$/, "").toLowerCase();
 export const spelledRight = (given: string, word: string) => !!spellTidy(given) && spellTidy(given) === spellTidy(word);
 
 export function isRight(q: ExamQ, given: unknown): boolean {
-  if (given == null) return false;
+  if (given == null || q.kind === "page") return false;
   if (q.kind === "choice") return Number(given) === q.answer;
   if (q.kind === "spell") return spelledRight(String(given), String(q.answer));
   return typedRight(String(given), String(q.answer));
 }
-export function markPaper(qs: ExamQ[], answers: Record<string, unknown>): { score: number; total: number; right: boolean[] } {
-  const right = qs.map((q, i) => isRight(q, answers[String(i)]));
-  return { score: qs.reduce((s, q, i) => s + (right[i] ? q.marks : 0), 0), total: qs.reduce((s, q) => s + q.marks, 0), right };
+// pageMarks: the teacher's marks for pages (added up with everything marked automatically).
+export function markPaper(qs: ExamQ[], answers: Record<string, unknown>, pageMarks: Record<string, number> = {}): { score: number; total: number; right: boolean[] } {
+  const got = qs.map((q, i) => (q.kind === "page" ? Math.max(0, Math.min(q.marks, Math.round(Number(pageMarks?.[String(i)]) || 0))) : isRight(q, answers?.[String(i)]) ? q.marks : 0));
+  return { score: got.reduce((a, b) => a + b, 0), total: qs.reduce((s, q) => s + q.marks, 0), right: qs.map((q, i) => q.marks > 0 && got[i] === q.marks) };
 }
 
 // ── Make questions from a maths topic (the arcade games' question makers) ──

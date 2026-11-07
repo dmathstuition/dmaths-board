@@ -1,10 +1,11 @@
 // One learner's exam result and analysis, and the class's, for the reports
 // the teacher downloads (lib/examPdf.ts). Pure.
-import { markPaper, shownQ, type ExamQ } from "@/lib/exams";
+import { markPaper, pageBlank, shownQ, type ExamQ } from "@/lib/exams";
 
 export type ReportEntry = {
   id: string; name: string; answers: Record<string, unknown>; flags: number; flagLog: { at: string; reason: string }[];
   startedAt: string | null; submittedAt: string | null;
+  pageMarks?: Record<string, number>; // a paper marked by hand: the teacher's marks, by page
 };
 export type ReportItem = { n: number; q: string; given: string; correct: string; right: boolean; blank: boolean; marks: number; classRight: number | null };
 export type LearnerReport = {
@@ -70,7 +71,7 @@ const answerText = (q: ExamQ, v: unknown): string => {
   if (q.kind === "choice") { const i = Number(v); return Number.isInteger(i) && q.options[i] != null ? q.options[i] : ""; }
   return String(v).slice(0, 200);
 };
-const correctText = (q: ExamQ) => (q.kind === "choice" ? q.options[Number(q.answer)] ?? "" : String(q.answer));
+const correctText = (q: ExamQ) => (q.kind === "page" ? "Marked by the teacher" : q.kind === "choice" ? q.options[Number(q.answer)] ?? "" : String(q.answer));
 
 function remarkFor(pct: number, avg: number | null, blank: number, flags: number, scheme: GradeScheme): string {
   const g = gradeOf(pct, scheme), named = scheme.id === "gcse" ? `grade ${g}` : g;
@@ -91,7 +92,7 @@ function remarkFor(pct: number, avg: number | null, blank: number, flags: number
 }
 
 export function examReports(questions: ExamQ[], entries: ReportEntry[], scheme: GradeScheme = GCSE): ClassReport {
-  const marked = entries.map((e) => ({ e, m: markPaper(questions, e.answers ?? {}) }));
+  const marked = entries.map((e) => ({ e, m: markPaper(questions, e.answers ?? {}, e.pageMarks ?? {}) }));
   const total = questions.reduce((s, q) => s + q.marks, 0);
   const pct = (score: number) => (total ? Math.round((score / total) * 100) : 0);
   const n = marked.length;
@@ -103,6 +104,11 @@ export function examReports(questions: ExamQ[], entries: ReportEntry[], scheme: 
 
   const learners: LearnerReport[] = marked.map(({ e, m }) => {
     const items: ReportItem[] = questions.map((q, i) => {
+      if (q.kind === "page") {
+        const v = e.answers?.[String(i)], mark = e.pageMarks?.[String(i)], blank = pageBlank(v);
+        const given = blank ? "" : mark != null ? `${mark} / ${q.marks} marks` : "Not marked yet";
+        return { n: i + 1, q: q.q, given, correct: "Marked by the teacher", right: m.right[i], blank, marks: q.marks, classRight: classRight[i] };
+      }
       const given = answerText(q, e.answers?.[String(i)]);
       return { n: i + 1, q: shownQ(q), given, correct: correctText(q), right: m.right[i], blank: !given, marks: q.marks, classRight: classRight[i] };
     });
