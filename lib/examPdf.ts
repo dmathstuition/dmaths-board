@@ -109,7 +109,7 @@ function table(c: Ctx, heading: string, cols: { title: string; w: number; align?
 function learnerPages(c: Ctx, r: LearnerReport) {
   newPage(c, r.name);
   boxes(c, [
-    ["Score", `${r.score} / ${r.total}`], ["Percent", `${r.percent}%`], [`Grade · ${r.scale}`, r.grade],
+    ["Score", `${r.score} / ${r.total}`], ["Percent", `${r.percent}%`], [`Grade · ${r.scale}`, r.scaled != null ? `${r.grade} · ${r.scaled}` : r.grade],
     ["Position", r.position ? `${ordinal(r.position)} of ${r.of}` : "-"],
   ]);
   boxes(c, [
@@ -155,6 +155,11 @@ export async function classPdf(meta: ReportMeta, cr: ClassReport): Promise<Uint8
   newPage(c, "Class summary");
   boxes(c, [["Took the exam", String(cr.takers)], ["Average", cr.average == null ? "-" : `${cr.average}%`], ["Best", cr.best == null ? "-" : `${cr.best}%`], [cr.scheme.passLabel, `${cr.passed} of ${cr.takers}`]]);
   if (cr.scheme.strong && cr.strong != null) text(c, `${cr.scheme.strong.label}: ${cr.strong} of ${cr.takers}`, { size: 9.5, color: MUTED, gap: 4 });
+  if (cr.scheme.id === "ks2") {
+    const sc = cr.learners.map((l) => l.scaled).filter((x): x is number => x != null);
+    if (sc.length) text(c, `Average estimated scaled score: ${Math.round(sc.reduce((a, b) => a + b, 0) / sc.length)}`, { size: 9.5, color: MUTED, gap: 2 });
+    text(c, "HS = high score (110+), EXS = expected standard (100+), WTS = working towards. Scaled scores are estimates: each year's conversion table is published after the tests.", { size: 8.5, color: MUTED, gap: 4 });
+  }
   // Grades as bars.
   text(c, `Grades — ${cr.scheme.name}`, { bold: true, size: 11, color: DEEP, gap: 4 });
   const most = Math.max(1, ...cr.grades.map((g) => g.count)), barW = A4[0] - M * 2 - 70;

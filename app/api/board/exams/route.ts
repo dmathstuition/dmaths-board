@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { sessionViewer } from "@/lib/sessionAccess";
 import { rateLimit } from "@/lib/ratelimit";
-import { AI_EXAM_SYSTEM, GRACE_MS, aiExamPrompt, cleanAiExam, cleanExamQuestions, cleanGiven, learnerPaper, markPaper, type ExamQ } from "@/lib/exams";
+import { AI_EXAM_SYSTEM, GRACE_MS, aiExamPrompt, cleanAiExam, cleanExamQuestions, cleanGiven, keepsOrder, learnerPaper, markPaper, shownQ, type ExamQ } from "@/lib/exams";
 import { aiChat, aiErrorResponse, extractJson } from "@/lib/ai";
 
 // Exam mode (supabase/migration-exams-stars.sql). Each learner takes the test
@@ -21,7 +21,7 @@ const bad = (error: string, status = 400) => NextResponse.json({ error }, { stat
 const MISSING = /board_exam/i;
 const dbFail = (msg: string) => MISSING.test(msg) ? bad("Exam mode needs supabase/migration-exams-stars.sql — run it in Supabase.", 501) : bad(msg, 500);
 
-type ExamRow = { id: string; session_id: string; title: string; questions: ExamQ[]; minutes: number; review: boolean; calculator?: boolean | null; status: "open" | "closed"; created_at: string; ends_at: string; closed_at: string | null };
+type ExamRow = { id: string; session_id: string; title: string; questions: ExamQ[]; minutes: number; review: boolean; calculator?: boolean | null; in_order?: boolean | null; status: "open" | "closed"; created_at: string; ends_at: string; closed_at: string | null };
 type EntryRow = { exam_id: string; student_id: string; name: string; answers: Record<string, unknown>; flags: number; flag_log: { at: string; reason: string }[]; started_at: string; submitted_at: string | null; score: number | null; total: number | null };
 
 const over = (e: ExamRow, now = Date.now()) => e.status === "closed" || now > new Date(e.ends_at).getTime() + GRACE_MS;
@@ -57,7 +57,7 @@ export async function GET(req: Request) {
     if (!e) return NextResponse.json({ exam: null });
     if (e.status === "open" && over(e)) await closeExam(e);
     const admin = supabaseAdmin();
-    const meta = { id: e.id, title: e.title, minutes: e.minutes, review: e.review, calculator: e.calculator !== false, status: e.status, endsAt: new Date(e.ends_at).getTime(), count: e.questions.length, total: e.questions.reduce((s, q) => s + q.marks, 0) };
+    const meta = { id: e.id, title: e.title, minutes: e.minutes, review: e.review, calculator: e.calculator !== false, inOrder: keepsOrder(e.questions, !!e.in_order), status: e.status, endsAt: new Date(e.ends_at).getTime(), count: e.questions.length, total: e.questions.reduce((s, q) => s + q.marks, 0) };
     if (v.host) {
       const { data } = await admin.from("board_exam_entries").select("*").eq("exam_id", e.id).limit(500);
       const entries = ((data ?? []) as EntryRow[]).map((r) => ({
@@ -74,7 +74,7 @@ export async function GET(req: Request) {
     // An exam that ended more than 2 hours ago and they never started: nothing to show.
     if (!entry && e.status === "closed") return NextResponse.json({ exam: null });
     const out: any = { exam: meta, entry: entry ? { started: true, submitted: !!entry.submitted_at, answers: entry.answers ?? {}, flags: entry.flags, score: entry.score, total: entry.total } : null };
-    if (entry && !entry.submitted_at && e.status === "open") out.paper = learnerPaper(e.id, v.id, e.questions);
+    if (entry && !entry.submitted_at && e.status === "open") out.paper = learnerPaper(e.id, v.id, e.questions, !!e.in_order);
     // Once it's over: how they did, against the class — and (if the teacher
     // allows it) their answers against the right ones.
     if (entry && e.status === "closed") {
@@ -89,7 +89,7 @@ export async function GET(req: Request) {
         average: pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null, best: pcts.length ? Math.round(Math.max(...pcts)) : null,
         takers: pcts.length, position: pcts.length ? better + 1 : null, flags: entry.flags,
       };
-      if (e.review) out.review = e.questions.map((q, i) => ({ q: q.q, kind: q.kind, options: q.options, answer: q.answer, given: given[String(i)] ?? null, right: m.right[i], marks: q.marks }));
+      if (e.review) out.review = e.questions.map((q, i) => ({ q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, given: given[String(i)] ?? null, right: m.right[i], marks: q.marks }));
     }
     return NextResponse.json(out, { headers: { "Cache-Control": "no-store" } });
   } catch (err: any) { return dbFail(String(err?.message ?? err)); }
@@ -134,9 +134,15 @@ export async function POST(req: Request) {
         session_id: sessionId, host_id: v.id, title: String(body?.title ?? "Class test").slice(0, 120) || "Class test",
         questions, minutes, review: body?.review !== false, status: "open", ends_at: new Date(Date.now() + minutes * 60_000).toISOString(),
       };
-      let { data, error } = await admin.from("board_exams").insert({ ...row, calculator }).select("id").single();
-      // Before migration-learner-tools.sql there's no calculator column: the calculator stays on.
+      const inOrder = body?.inOrder === true;
+      let { data, error } = await admin.from("board_exams").insert({ ...row, calculator, ...(inOrder ? { in_order: true } : {}) }).select("id").single();
+      // Before migration-learner-tools.sql there are no calculator / in_order columns:
+      // the calculator stays on, and only papers and spelling tests keep their order.
       let note: string | undefined;
+      if (error && /in_order/i.test(error.message)) {
+        ({ data, error } = await admin.from("board_exams").insert({ ...row, calculator }).select("id").single());
+        if (!keepsOrder(questions)) note = "The exam started, but each phone has its own question order — run supabase/migration-learner-tools.sql once to keep the same order for everyone.";
+      }
       if (error && /calculator/i.test(error.message)) {
         ({ data, error } = await admin.from("board_exams").insert(row).select("id").single());
         if (!calculator) note = "The exam started, but the calculator couldn't be switched off — run supabase/migration-learner-tools.sql once to allow that.";

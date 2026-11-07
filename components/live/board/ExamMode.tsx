@@ -1,5 +1,8 @@
 "use client";
 import { ReadingButton, Speak } from "@/components/live/Reading";
+import { speak, stopSpeaking } from "@/lib/reading";
+import { SATS_ARITHMETIC, SPELLING_LISTS, parseSpellings, satsArithmetic } from "@/lib/sats";
+import { PAPER_FIT, sendSlides } from "@/components/live/board/slides";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
@@ -7,16 +10,17 @@ import { useServerClock } from "@/lib/serverClock";
 import { UK_SETS } from "@/lib/ukPrimary";
 import { SCHEMES, gradeOf, schemeById, type GradeScheme } from "@/lib/examReport";
 import { CalculatorButton } from "@/components/live/PhoneCalculator";
-import { EXAM_MINUTES, EXAM_TOPICS, clockLeft, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
+import { EXAM_MINUTES, EXAM_TOPICS, clockLeft, keepsOrder, spokenSpelling, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
 import type { Difficulty } from "@/lib/games/generators";
 
 // Exam mode: a timed test every learner takes on their own phone — questions
 // in a different order on each phone, answers saved as they go, leaving the
 // exam page reported to the teacher, and marked automatically.
 // Message: "exam" (teacher → all, signed): { examId } when one starts or ends,
-// so phones check at once (they also check every few seconds).
+// so phones check at once (they also check every few seconds); { examId, at }
+// when the teacher reads spelling number `at` out — phones go to it.
 
-type Meta = { id: string; title: string; minutes: number; review: boolean; calculator?: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number ; questions?: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
+type Meta = { id: string; title: string; minutes: number; review: boolean; calculator?: boolean; inOrder?: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number ; questions?: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
 type Entry = { id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null;
   answers?: Record<string, unknown>; startedAt?: string | null; submittedAt?: string | null };
 type Analysis = { score: number; total: number; right: number; wrong: number; blank: number; average: number | null; best: number | null; takers: number; position: number | null; flags: number };
@@ -32,7 +36,12 @@ export default function ExamMode({ sessionId, host, open, onOpen, onClose }: { s
     const j = r ? await r.json().catch(() => null) : null;
     if (r?.ok && j) setData(j); else if (r && r.status === 501) setData({ exam: null, setup: j?.error });
   }, [sessionId]);
-  const send = useLive({ exam: (p) => { if (!host && p?.host) load(); } });
+  const [follow, setFollow] = useState<{ n: number; k: number } | null>(null);
+  const send = useLive({ exam: (p) => {
+    if (host || !p?.host) return;
+    load();
+    if (Number.isInteger(p.at) && p.at >= 0) setFollow({ n: p.at, k: Date.now() });
+  } });
   const exam: Meta | null = data?.exam ?? null;
   const running = exam?.status === "open";
   // Teachers: often while watching; learners: every few seconds while a class runs.
@@ -42,14 +51,14 @@ export default function ExamMode({ sessionId, host, open, onOpen, onClose }: { s
     const t = setInterval(load, every);
     return () => clearInterval(t);
   }, [load, host, open, running]);
-  const tell = (examId: string | null) => send("exam", { host: true, examId });
+  const tell = (examId: string | null, at?: number) => send("exam", { host: true, examId, ...(at != null ? { at } : {}) });
 
   if (host) return <Teacher open={open} onOpen={onOpen} onClose={onClose} data={data} reload={load} sessionId={sessionId} tell={tell} />;
-  return <Learner data={data} reload={load} sessionId={sessionId} />;
+  return <Learner data={data} reload={load} sessionId={sessionId} follow={follow} />;
 }
 
 // ── Teacher ──
-function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { open: boolean; onOpen: () => void; onClose: () => void; data: any; reload: () => Promise<void>; sessionId: string; tell: (id: string | null) => void }) {
+function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { open: boolean; onOpen: () => void; onClose: () => void; data: any; reload: () => Promise<void>; sessionId: string; tell: (id: string | null, at?: number) => void }) {
   const now = useServerClock()();
   const [pdfBusy, setPdfBusy] = useState<string | null>(null); // PDF reports being made
   // Grading: the UK's GCSE 9–1 unless this teacher picks WAEC (kept on this device).
@@ -65,7 +74,51 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   const [minutes, setMinutes] = useState(20);
   const [review, setReview] = useState(true);
   const [calcOk, setCalcOk] = useState(true); // learners' phone calculator in this exam
+  const [inOrder, setInOrder] = useState(false); // everyone gets the same order (a real paper)
   const [qs, setQs] = useState<ExamQ[]>([]);
+  // KS2 SATs: spelling tests, and real papers uploaded as a PDF.
+  const [spellOpen, setSpellOpen] = useState(false);
+  const [spellText, setSpellText] = useState("");
+  const [spellHear, setSpellHear] = useState(true);
+  const [satsNote, setSatsNote] = useState<string | null>(null);
+  const [paperPages, setPaperPages] = useState<(string | null)[]>([]);
+  const [paperBusy, setPaperBusy] = useState(false);
+  const paperInput = useRef<HTMLInputElement>(null);
+  const fixedOrder = keepsOrder(qs, inOrder);
+  const ownTitle = useRef(false); // the teacher typed a title: presets leave it alone
+  function satsSetup(t: string, mins: number) {
+    if (!ownTitle.current || !title.trim()) setTitle(t);
+    setMinutes(mins); setCalcOk(false); setInOrder(true);
+  }
+  function useArithmetic() {
+    if (qs.length && !window.confirm(`Replace the ${qs.length} question${qs.length === 1 ? "" : "s"} below with a new arithmetic paper?`)) return;
+    setQs(satsArithmetic()); satsSetup(SATS_ARITHMETIC.title, SATS_ARITHMETIC.minutes); pickScale("ks2");
+    setSatsNote(`✓ A new arithmetic paper: ${SATS_ARITHMETIC.questions} questions, 40 marks, 30 minutes, no calculator. Graded as an estimated SATs scaled score.`);
+  }
+  function addSpellings() {
+    const got = parseSpellings(spellText, spellHear);
+    if (!got.length) { setSatsNote("Write one sentence per line with the word in *stars*, e.g. I did a *rough* sketch."); return; }
+    setQs((cur) => [...cur, ...got].slice(0, 60)); satsSetup("Spelling test", 15);
+    setSatsNote(`✓ ${got.length} spelling${got.length === 1 ? "" : "s"} added. When the test starts, read each one out from your screen — every phone goes to the word you read.`);
+    setSpellOpen(false);
+  }
+  async function uploadPaper(list: FileList | null) {
+    const files = Array.from(list ?? []);
+    if (paperInput.current) paperInput.current.value = "";
+    if (!files.length) return;
+    setPaperBusy(true); setSatsNote(null);
+    try {
+      const urls = await sendSlides({ sessionId }, files, 40, (m) => setSatsNote(m.replace(/slides?/g, (w) => (w === "slide" ? "page" : "pages"))), PAPER_FIT);
+      if (!urls.some(Boolean)) { setSatsNote("Couldn't upload the paper — check the internet and try again."); return; }
+      setPaperPages(urls);
+      satsSetup(files[0].name.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").slice(0, 80) || "SATs paper", 40); pickScale("ks2");
+      const missed = urls.filter((u) => !u).length;
+      setSatsNote(`✓ ${urls.length - missed} page${urls.length - missed === 1 ? "" : "s"} ready${missed ? ` (${missed} didn't upload — try again for those)` : ""}. Tap “+ Question” under a page for each answer on it, then type the answers from the mark scheme.`);
+    } catch (err) {
+      setSatsNote(`Couldn't read the paper${err instanceof Error && err.message ? ` (${err.message})` : ""} — save it as a PDF and try again.`);
+    } finally { setPaperBusy(false); }
+  }
+  const addPaperQ = (url: string) => setQs((cur) => [...cur, { q: `Question ${cur.filter((x) => x.img).length + 1}`, kind: "typed" as const, options: [], answer: "", marks: 1, img: url }].slice(0, 60));
   const [topic, setTopic] = useState(EXAM_TOPICS[0]?.id ?? "");
   const [level, setLevel] = useState<Difficulty>("medium");
   const [count, setCount] = useState(10);
@@ -100,8 +153,10 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   const entries: Entry[] = data?.entries ?? [];
   const setQ = (i: number, q: Partial<ExamQ>) => setQs((cur) => cur.map((x, k) => (k === i ? { ...x, ...q } : x)));
   async function start() {
+    const empty = qs.findIndex((q) => q.kind !== "choice" && !String(q.answer).trim());
+    if (empty >= 0) { setNote(`Question ${empty + 1} has no answer yet — type the answer (from the mark scheme), or remove it.`); return; }
     setBusy(true); setNote(null);
-    const { ok, j } = await api({ action: "create", sessionId, title, minutes, review, calculator: calcOk, questions: qs });
+    const { ok, j } = await api({ action: "create", sessionId, title, minutes, review, calculator: calcOk, inOrder: fixedOrder, questions: qs });
     setBusy(false);
     if (!ok) { setNote(j.error ?? "Couldn't start the exam."); return; }
     setBuilding(false); tell(j.id); await reload();
@@ -167,13 +222,56 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
         {showBuilder ? (
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-              <label className="text-xs font-black text-ink/60">Title<input value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} className={`${field} mt-1`} /></label>
+              <label className="text-xs font-black text-ink/60">Title<input value={title} maxLength={120} onChange={(e) => { ownTitle.current = true; setTitle(e.target.value); }} className={`${field} mt-1`} /></label>
               <label className="flex items-end gap-2 text-xs font-black text-ink/70"><input type="checkbox" checked={review} onChange={(e) => setReview(e.target.checked)} className="mb-3 h-4 w-4 accent-[#C2451C]" /><span className="mb-2.5">Learners see the right answers when it ends</span></label>
               <label className="flex items-end gap-2 text-xs font-black text-ink/70"><input type="checkbox" checked={calcOk} onChange={(e) => setCalcOk(e.target.checked)} className="mb-3 h-4 w-4 accent-[#C2451C]" /><span className="mb-2.5">🧮 Calculator allowed</span></label>
+              <label className="flex items-end gap-2 text-xs font-black text-ink/70" title={keepsOrder(qs) ? "Spelling tests and real papers always keep their order" : undefined}>
+                <input type="checkbox" checked={fixedOrder} disabled={keepsOrder(qs)} onChange={(e) => setInOrder(e.target.checked)} className="mb-3 h-4 w-4 accent-[#C2451C]" /><span className="mb-2.5">Same order for everyone (like the real paper)</span>
+              </label>
             </div>
             <fieldset className="mt-3"><legend className="text-xs font-black text-ink/60">Time</legend>
               <div className="mt-1 flex flex-wrap gap-1.5">{EXAM_MINUTES.map((m) => <button key={m} type="button" aria-pressed={minutes === m} onClick={() => setMinutes(m)} className={chip(minutes === m)}>{m} min</button>)}</div>
             </fieldset>
+            <section aria-label="KS2 SATs" className="mt-4 rounded-xl bg-[#EEF7F6] p-3 ring-1 ring-[#CDE7E5]">
+              <p className="text-xs font-black text-[#0A4F52]">📘 KS2 SATs practice</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <button type="button" onClick={useArithmetic} className="min-h-[40px] rounded-xl bg-[#0E6E72] px-3 text-xs font-black text-white">➗ Arithmetic paper (36 questions · 30 min)</button>
+                <button type="button" onClick={() => setSpellOpen((v) => !v)} aria-expanded={spellOpen} className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 ${spellOpen ? "bg-[#0A4F52] text-white ring-[#0A4F52]" : "bg-white text-[#0A4F52] ring-[#A9D6D3]"}`}>✏️ Spelling test (read aloud)</button>
+                <button type="button" onClick={() => paperInput.current?.click()} disabled={paperBusy} className="min-h-[40px] rounded-xl bg-white px-3 text-xs font-black text-[#0A4F52] ring-1 ring-[#A9D6D3] disabled:opacity-60">{paperBusy ? "Uploading the paper…" : "📄 A real paper (PDF) — e.g. reasoning"}</button>
+                <input ref={paperInput} type="file" accept=".pdf,application/pdf,image/*" multiple hidden aria-label="Upload a SATs paper" onChange={(e) => uploadPaper(e.target.files)} />
+              </div>
+              {spellOpen && (
+                <div className="mt-3 rounded-xl bg-white p-3 ring-1 ring-[#CDE7E5]">
+                  <p className="text-xs font-bold text-ink/65">One sentence per line, with the word in <b>*stars*</b> — e.g. <i>I did a *rough* sketch before starting my painting.</i> Or start from a ready-made list:</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {SPELLING_LISTS.map((l) => (
+                      <button key={l.id} type="button" onClick={() => setSpellText(l.lines.join("\n"))} className="min-h-[36px] rounded-lg bg-[#EEF7F6] px-3 text-xs font-black text-[#0A4F52] ring-1 ring-[#CDE7E5]">{l.title} ({l.lines.length})</button>
+                    ))}
+                  </div>
+                  <textarea value={spellText} onChange={(e) => setSpellText(e.target.value)} rows={6} aria-label="Spelling sentences" placeholder={"I did a *rough* sketch before starting my painting.\nThe complicated map caused a lot of *confusion*."}
+                    className={`${field} mt-2 resize-y font-mono text-xs`} />
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <label className="flex items-center gap-2 text-xs font-black text-ink/70"><input type="checkbox" checked={spellHear} onChange={(e) => setSpellHear(e.target.checked)} className="h-4 w-4 accent-[#0E6E72]" />Learners can also hear each sentence on their phone (headphones)</label>
+                    <button type="button" onClick={addSpellings} disabled={!spellText.trim()} className="min-h-[40px] rounded-xl bg-[#0E6E72] px-4 text-xs font-black text-white disabled:opacity-40">Add {parseSpellings(spellText).length || ""} spellings</button>
+                  </div>
+                </div>
+              )}
+              {satsNote && <p role="status" className={`mt-2 text-xs font-bold ${satsNote.startsWith("✓") ? "text-[#0A4F52]" : "text-ink/70"}`}>{satsNote}</p>}
+              {paperPages.length > 0 && (
+                <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6" aria-label="The paper's pages">
+                  {paperPages.map((u, i) => (
+                    <div key={i} className="rounded-lg bg-white p-1 ring-1 ring-[#CDE7E5]">
+                      {u ? <img src={u} alt={`Page ${i + 1}`} loading="lazy" className="h-28 w-full rounded object-contain" /> : <p className="flex h-28 items-center justify-center text-center text-[11px] font-bold text-red-700">Didn&apos;t upload</p>}
+                      <div className="mt-1 flex items-center justify-between gap-1">
+                        <span className="text-[11px] font-black text-ink/55">p{i + 1}{u && qs.some((x) => x.img === u) ? ` · ${qs.filter((x) => x.img === u).length} Q` : ""}</span>
+                        {u && <button type="button" onClick={() => addPaperQ(u)} aria-label={`Add a question on page ${i + 1}`} className="rounded-md bg-[#0E6E72] px-1.5 py-1 text-[11px] font-black text-white">+ Question</button>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="mt-2 text-[11px] font-semibold text-ink/55">Results can be graded as an estimated SATs scaled score (100 = expected standard) — pick “KS2 SATs” under Grading.</p>
+            </section>
             <div className="mt-4 rounded-xl bg-violet-50 p-3 ring-1 ring-violet-200">
               <p className="text-xs font-black text-violet-800">✨ Ask the A.I to write the questions — any subject</p>
               <label className="mt-2 block text-xs font-bold text-ink/60">What should they be on?
@@ -234,6 +332,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                 <li key={i} className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
                   <div className="flex items-start gap-2">
                     <span className="mt-2 text-xs font-black text-ink/45">{i + 1}.</span>
+                    {q.img && <a href={q.img} target="_blank" rel="noreferrer" title="Open the page" className="shrink-0"><img src={q.img} alt={`The page for question ${i + 1}`} loading="lazy" className="h-14 w-10 rounded object-cover ring-1 ring-slate-200" /></a>}
                     <input value={q.q} maxLength={400} onChange={(e) => setQ(i, { q: e.target.value })} aria-label={`Question ${i + 1}`} className={field} />
                     <select value={q.marks} onChange={(e) => setQ(i, { marks: Number(e.target.value) })} aria-label={`Marks for question ${i + 1}`} className="rounded-lg bg-slate-50 px-1 py-2 text-xs font-black ring-1 ring-slate-200">
                       {[1, 2, 3, 4, 5].map((m) => <option key={m} value={m}>{m} mark{m === 1 ? "" : "s"}</option>)}
@@ -249,9 +348,16 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                         </label>
                       ))}
                     </div>
+                  ) : q.kind === "spell" ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 pl-5 text-xs font-bold text-ink/60">
+                      <label className="flex items-center gap-2">Word
+                        <input value={String(q.answer)} maxLength={40} onChange={(e) => setQ(i, { answer: e.target.value })} aria-label={`Spelling word ${i + 1}`} className={`${field} max-w-[12rem]`} />
+                      </label>
+                      <button type="button" onClick={() => speak(spokenSpelling(q, i + 1))} className="rounded-lg bg-[#EEF7F6] px-2 py-1.5 text-xs font-black text-[#0A4F52] ring-1 ring-[#CDE7E5]">🔊 Hear it</button>
+                    </div>
                   ) : (
                     <label className="mt-2 flex items-center gap-2 pl-5 text-xs font-bold text-ink/60">Answer
-                      <input value={String(q.answer)} maxLength={120} onChange={(e) => setQ(i, { answer: e.target.value })} aria-label={`Answer to question ${i + 1}`} placeholder="e.g. 12  (or 12 | twelve)" className={`${field} max-w-xs`} />
+                      <input value={String(q.answer)} maxLength={120} onChange={(e) => setQ(i, { answer: e.target.value })} aria-label={`Answer to question ${i + 1}`} placeholder={q.img ? "From the mark scheme, e.g. 5  (or 0.5 | 1/2)" : "e.g. 12  (or 12 | twelve)"} className={`${field} max-w-xs`} />
                     </label>
                   )}
                 </li>
@@ -260,15 +366,17 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
             <div className="mt-2 flex flex-wrap gap-2">
               <button type="button" onClick={() => setQs((cur) => [...cur, { q: "", kind: "choice", options: ["", "", "", ""], answer: 0, marks: 1 }])} className="min-h-[40px] rounded-xl bg-slate-100 px-3 text-xs font-black">+ Multiple-choice question</button>
               <button type="button" onClick={() => setQs((cur) => [...cur, { q: "", kind: "typed", options: [], answer: "", marks: 1 }])} className="min-h-[40px] rounded-xl bg-slate-100 px-3 text-xs font-black">+ Typed-answer question</button>
+              {qs.length > 1 && <button type="button" onClick={() => { if (window.confirm(`Remove all ${qs.length} questions?`)) setQs([]); }} className="min-h-[40px] rounded-xl px-3 text-xs font-black text-red-700 hover:bg-red-50">Clear all questions</button>}
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-3">
               <button type="button" onClick={start} disabled={busy || !qs.length} className="min-h-[44px] rounded-xl bg-[#C2451C] px-5 text-sm font-black text-white disabled:opacity-40">{busy ? "Starting…" : `Start the exam (${qs.length} question${qs.length === 1 ? "" : "s"}, ${minutes} min)`}</button>
               {exam && <button type="button" onClick={() => setBuilding(false)} className="text-xs font-black text-ink/60 underline">Back to the last exam’s results</button>}
-              <p className="text-xs font-semibold text-ink/55">Each phone gets the questions in its own order. Leaving the exam page is reported to you.</p>
+              <p className="text-xs font-semibold text-ink/55">{fixedOrder ? "Everyone gets the questions in the same order." : "Each phone gets the questions in its own order."} Leaving the exam page is reported to you.</p>
             </div>
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {running && exam?.questions?.some((q) => q.kind === "spell") && <ReadAloud qs={exam.questions} onRead={(n) => tell(exam.id, n)} />}
             <div className="mb-3 grid gap-2 sm:grid-cols-4">
               {[["Taking it", entries.length], ["Handed in", marked.length], ["Left the page", entries.filter((e) => e.flags > 0).length], ["Average", avg == null ? "—" : `${avg}%`]].map(([l, v]) => (
                 <div key={String(l)} className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200"><p className="text-[11px] font-black uppercase tracking-wider text-ink/50">{l}</p><p className="text-2xl font-black">{v}</p></div>
@@ -315,8 +423,74 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   );
 }
 
+// The teacher reads a spelling test out, as in the national test: the word,
+// the sentence, the word. Reading one sends every phone to that word.
+function ReadAloud({ qs, onRead }: { qs: ExamQ[]; onRead: (n: number) => void }) {
+  const words = qs.map((q, n) => ({ q, n })).filter((x) => x.q.kind === "spell");
+  const [k, setK] = useState(0);
+  const [read, setRead] = useState<Set<number>>(new Set());
+  useEffect(() => () => stopSpeaking(), []);
+  if (!words.length) return null;
+  const cur = words[Math.min(k, words.length - 1)];
+  const go = (to: number) => {
+    const w = words[to]; if (!w) return;
+    setK(to); setRead((r) => new Set(r).add(to));
+    speak(spokenSpelling(w.q, w.n + 1)); onRead(w.n);
+  };
+  return (
+    <section aria-label="Read the spellings" className="mb-3 rounded-2xl bg-[#EEF7F6] p-3 ring-1 ring-[#CDE7E5]">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="mr-auto text-xs font-black uppercase tracking-wider text-[#0A4F52]">📢 Read the spellings · {k + 1} of {words.length}</p>
+        <p className="text-[11px] font-bold text-ink/55">Phones go to the word you read.</p>
+      </div>
+      <p className="mt-2 font-display text-3xl font-black text-[#0A4F52]">{String(cur.q.answer)}</p>
+      <p className="mt-1 text-sm font-semibold text-ink/75">{cur.q.q}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" onClick={() => go(k - 1)} disabled={k === 0} className="min-h-[44px] rounded-xl bg-white px-4 text-sm font-black text-[#0A4F52] ring-1 ring-[#CDE7E5] disabled:opacity-40">◀ Back</button>
+        <button type="button" onClick={() => go(k)} className="min-h-[44px] flex-1 rounded-xl bg-[#0E6E72] px-4 text-sm font-black text-white">🔊 {read.has(k) ? "Read it again" : `Read spelling ${k + 1}`}</button>
+        <button type="button" onClick={() => go(k + 1)} disabled={k >= words.length - 1} className="min-h-[44px] rounded-xl bg-white px-4 text-sm font-black text-[#0A4F52] ring-1 ring-[#CDE7E5] disabled:opacity-40">Next ▶</button>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1" aria-label="Jump to a spelling">
+        {words.map((w, i) => (
+          <button key={w.n} type="button" onClick={() => go(i)} aria-label={`Read spelling ${i + 1}`} aria-current={i === k}
+            className={`h-8 min-w-[32px] rounded-lg text-xs font-black ${i === k ? "bg-[#0E6E72] text-white" : read.has(i) ? "bg-[#CDE7E5] text-[#0A4F52]" : "bg-white text-ink/60 ring-1 ring-[#CDE7E5]"}`}>{i + 1}</button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// A page of a real paper with the question: tap to see it bigger.
+function PaperPage({ src, label }: { src: string; label: string }) {
+  const [big, setBig] = useState(false);
+  const [zoom, setZoom] = useState(2);
+  return (
+    <>
+      <div className="relative mt-3 overflow-hidden rounded-xl bg-white ring-1 ring-orange-200">
+        {/* The page scrolls in its own box, so the answer stays in view. */}
+        <div className="max-h-[52dvh] overflow-y-auto">
+          <img src={src} alt={label} className="w-full" draggable={false} onClick={() => setBig(true)} />
+        </div>
+        <button type="button" onClick={() => setBig(true)} aria-label={`${label} — tap to see it bigger`}
+          className="absolute bottom-2 right-2 rounded-lg bg-black/75 px-3 py-2 text-xs font-black text-white">🔍 Bigger</button>
+      </div>
+      {big && (
+        <div role="dialog" aria-modal="true" aria-label={label} className="fixed inset-0 z-[140] flex flex-col bg-black/90">
+          <div className="flex items-center gap-2 p-2">
+            {[1, 2, 3].map((z) => <button key={z} type="button" onClick={() => setZoom(z)} aria-pressed={zoom === z} className={`h-10 rounded-lg px-3 text-sm font-black ${zoom === z ? "bg-white text-ink" : "bg-white/15 text-white"}`}>{z}×</button>)}
+            <button type="button" onClick={() => setBig(false)} className="ml-auto h-10 rounded-lg bg-white px-4 text-sm font-black text-ink">Close</button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto">
+            <img src={src} alt={label} style={{ width: `${zoom * 100}%`, maxWidth: "none" }} draggable={false} />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── Learner ──
-function Learner({ data, reload, sessionId }: { data: any; reload: () => Promise<void>; sessionId: string }) {
+function Learner({ data, reload, sessionId, follow }: { data: any; reload: () => Promise<void>; sessionId: string; follow: { n: number; k: number } | null }) {
   const now = useServerClock()();
   const [, tick] = useState(0);
   const exam: Meta | null = data?.exam ?? null;
@@ -335,6 +509,13 @@ function Learner({ data, reload, sessionId }: { data: any; reload: () => Promise
   const [result, setResult] = useState<{ score: number; total: number } | null>(null);
   const seeded = useRef<string | null>(null);
   const taking = !!exam && exam.status === "open" && !!entry && !entry.submitted && !!paper;
+  // The teacher is reading a spelling out: go to it.
+  const followed = useRef(0);
+  useEffect(() => {
+    if (!follow || !paper || followed.current === follow.k) return;
+    const i = paper.findIndex((q) => q.n === follow.n);
+    if (i >= 0) { followed.current = follow.k; setAt(i); }
+  }, [follow, paper]);
 
   useEffect(() => { if (!exam?.endsAt) return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [exam?.endsAt]);
   // Their saved answers (after a refresh, or on another visit).
@@ -398,7 +579,7 @@ function Learner({ data, reload, sessionId }: { data: any; reload: () => Promise
         <p className="mt-2 text-sm font-bold text-ink/65">{exam.count} questions · {exam.total} marks · {clockLeft(left)} left</p>
         <ul className="mx-auto mt-4 max-w-sm space-y-1 text-left text-sm font-semibold text-ink/75">
           <li>✍️ Your answers save as you go.</li>
-          <li>🔒 Everyone has the questions in a different order.</li>
+          {exam.inOrder ? <li>📋 The questions are in order, like the real paper.</li> : <li>🔒 Everyone has the questions in a different order.</li>}
           <li>⚠️ Leaving this page is reported to your teacher.</li>
           <li>⏱ When time is up, your exam is handed in for you.</li>
         </ul>
@@ -421,10 +602,14 @@ function Learner({ data, reload, sessionId }: { data: any; reload: () => Promise
       {warned > 0 && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-black text-red-700 ring-1 ring-red-200">⚠️ You left the exam page{warned > 1 ? ` ${warned} times` : ""}. Your teacher has been told.</p>}
       <div className="select-none rounded-2xl bg-white p-4 shadow ring-1 ring-orange-200">
         <p className="text-xs font-black uppercase tracking-wider text-[#C2451C]">Question {at + 1} of {paper.length} · {q.marks} mark{q.marks === 1 ? "" : "s"}</p>
+        {q.img && <PaperPage key={q.img} src={q.img} label={`The page for ${q.q}`} />}
         <div className="mt-2 flex items-start gap-2">
           <p className="flex-1 whitespace-pre-wrap text-xl font-black leading-snug">{q.q}</p>
-          <Speak text={`${q.q}. ${q.kind === "choice" ? q.options.map((o, k) => `Option ${String.fromCharCode(65 + k)}: ${o.text}.`).join(" ") : ""}`} />
+          {q.kind !== "spell" && <Speak text={`${q.q}. ${q.kind === "choice" ? q.options.map((o, k) => `Option ${String.fromCharCode(65 + k)}: ${o.text}.`).join(" ") : ""}`} />}
         </div>
+        {q.kind === "spell" && (q.say
+          ? <button type="button" onClick={() => speak(q.say!)} className="mt-3 min-h-[48px] w-full rounded-xl bg-[#EEF7F6] text-base font-black text-[#0A4F52] ring-1 ring-[#CDE7E5]">🔊 Hear the sentence</button>
+          : <p className="mt-2 text-sm font-semibold text-ink/60">🎧 Listen to your teacher read the sentence, then write the missing word.</p>)}
         {q.kind === "choice" ? (
           <div className="mt-4 grid gap-2" role="radiogroup" aria-label="Your answer">
             {q.options.map((o, k) => {
@@ -438,8 +623,8 @@ function Learner({ data, reload, sessionId }: { data: any; reload: () => Promise
             })}
           </div>
         ) : (
-          <label className="mt-4 block text-sm font-bold text-ink/60">Your answer
-            <input value={String(answers[String(q.n)] ?? "")} maxLength={120} onChange={(e) => answer(q.n, e.target.value, true)} autoComplete="off" autoCapitalize="off" spellCheck={false}
+          <label className="mt-4 block text-sm font-bold text-ink/60">{q.kind === "spell" ? "The missing word" : "Your answer"}
+            <input value={String(answers[String(q.n)] ?? "")} maxLength={120} onChange={(e) => answer(q.n, e.target.value, true)} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
               className="mt-1 w-full rounded-xl bg-white px-4 py-3 text-xl font-black text-ink ring-2 ring-orange-200 focus:outline-none focus:ring-[#C2451C]" />
           </label>
         )}

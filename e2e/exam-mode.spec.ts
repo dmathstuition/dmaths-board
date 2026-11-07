@@ -1,14 +1,14 @@
 import { readFile } from "fs/promises";
 import { test, expect, type Browser, type BrowserContext } from "@playwright/test";
 import { SID, agree, classServer, realtimeHub } from "./helpers";
-import { cleanExamQuestions, learnerPaper, markPaper, type ExamQ } from "../lib/exams";
+import { cleanExamQuestions, keepsOrder, learnerPaper, markPaper, shownQ, type ExamQ } from "../lib/exams";
 
 // Exam mode with a stand-in for /api/board/exams that keeps the exam in memory
 // and marks with the real marking code.
 function examServer() {
-  let exam: { id: string; title: string; minutes: number; review: boolean; calculator: boolean; status: "open" | "closed"; endsAt: number; questions: ExamQ[] } | null = null;
+  let exam: { id: string; title: string; minutes: number; review: boolean; calculator: boolean; inOrder: boolean; status: "open" | "closed"; endsAt: number; questions: ExamQ[] } | null = null;
   const entries = new Map<string, { name: string; answers: Record<string, unknown>; flags: number; submitted: boolean; score: number | null; total: number | null }>();
-  const meta = () => exam && { id: exam.id, title: exam.title, minutes: exam.minutes, review: exam.review, calculator: exam.calculator, status: exam.status, endsAt: exam.endsAt, count: exam.questions.length, total: exam.questions.reduce((s, q) => s + q.marks, 0) };
+  const meta = () => exam && { id: exam.id, title: exam.title, minutes: exam.minutes, review: exam.review, calculator: exam.calculator, inOrder: keepsOrder(exam.questions, exam.inOrder), status: exam.status, endsAt: exam.endsAt, count: exam.questions.length, total: exam.questions.reduce((s, q) => s + q.marks, 0) };
   const close = () => { if (!exam) return; exam.status = "closed"; for (const e of entries.values()) if (!e.submitted) { const m = markPaper(exam.questions, e.answers); Object.assign(e, { submitted: true, score: m.score, total: m.total }); } };
   return async (ctx: BrowserContext, who: "teacher" | "learner", me = { id: "33333333-3333-4333-8333-333333333333", name: "Emmanuel" }) => {
     await ctx.route("**/api/board/exams**", async (r) => {
@@ -17,9 +17,9 @@ function examServer() {
         if (who === "teacher") return r.fulfill({ json: { exam: { ...meta(), questions: exam.questions }, entries: [...entries].map(([id, e]) => ({ id, name: e.name, answered: Object.keys(e.answers).length, flags: e.flags, flagLog: [], submitted: e.submitted, score: e.score, total: e.total, live: null, answers: e.answers, startedAt: new Date(Date.now() - 300_000).toISOString(), submittedAt: e.submitted ? new Date().toISOString() : null })) } });
         const e = entries.get(me.id);
         const out: any = { exam: meta(), entry: e ? { started: true, submitted: e.submitted, answers: e.answers, flags: e.flags, score: e.score, total: e.total } : null };
-        if (e && !e.submitted && exam.status === "open") out.paper = learnerPaper(exam.id, me.id, exam.questions);
+        if (e && !e.submitted && exam.status === "open") out.paper = learnerPaper(exam.id, me.id, exam.questions, exam.inOrder);
         if (e && exam.status === "closed") { const m = markPaper(exam.questions, e.answers);
-          out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = exam.questions.map((q, i) => ({ q: q.q, kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks })); }
+          out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = exam.questions.map((q, i) => ({ q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks })); }
         return r.fulfill({ json: out });
       }
       const b = JSON.parse(r.request().postData() ?? "{}");
@@ -27,7 +27,7 @@ function examServer() {
         { q: `${b.topic}: which gas do plants take in?`, kind: "choice", options: ["Oxygen", "Carbon dioxide", "Nitrogen", "Helium"], answer: 1, marks: 1 },
         { q: `${b.topic}: what colour is chlorophyll?`, kind: "typed", options: [], answer: "green", marks: 1 },
       ].slice(0, b.count) } });
-      if (b.action === "create") { exam = { id: "exam-1", title: b.title, minutes: b.minutes, review: b.review, calculator: b.calculator !== false, status: "open", endsAt: Date.now() + b.minutes * 60_000, questions: cleanExamQuestions(b.questions) }; return r.fulfill({ json: { id: exam.id } }); }
+      if (b.action === "create") { exam = { id: "exam-1", title: b.title, minutes: b.minutes, review: b.review, calculator: b.calculator !== false, inOrder: b.inOrder === true, status: "open", endsAt: Date.now() + b.minutes * 60_000, questions: cleanExamQuestions(b.questions) }; return r.fulfill({ json: { id: exam.id } }); }
       if (b.action === "close") { close(); return r.fulfill({ json: { ok: true } }); }
       if (b.action === "start") { entries.set(me.id, { name: me.name, answers: {}, flags: 0, submitted: false, score: null, total: null }); return r.fulfill({ json: { ok: true } }); }
       const e = entries.get(me.id)!;
@@ -39,11 +39,24 @@ function examServer() {
   };
 }
 
+// Paper pages upload to (stand-in) storage.
+async function storage(ctx: BrowserContext) {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+  let n = 0;
+  await ctx.route("**/api/live-sessions/slides", (r) => {
+    const { count } = JSON.parse(r.request().postData() ?? "{}");
+    r.fulfill({ json: { uploads: Array.from({ length: count }, () => { const path = `slides/${SID}/paper-${++n}.jpg`; return { path, token: "t", url: `${base}/storage/v1/object/public/materials/${path}` }; }) } });
+  });
+  const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "PUT, POST" };
+  await ctx.route("**/storage/v1/object/upload/sign/**", (r) => r.fulfill(r.request().method() === "OPTIONS" ? { status: 204, headers: cors } : { status: 200, headers: cors, json: { Key: "x" } }));
+  await ctx.route("**/storage/v1/object/public/**", (r) => r.fulfill({ status: 200, contentType: "image/svg+xml", headers: cors, body: '<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="1754"><rect width="100%" height="100%" fill="#fff"/><text x="80" y="200" font-size="60">1  Circle the greatest number.</text></svg>' }));
+}
+
 async function openClass(browser: Browser) {
   const hub = realtimeHub(), server = classServer(), exams = examServer();
   const open = async (who: "teacher" | "learner") => {
     const ctx = await browser.newContext(who === "learner" ? { viewport: { width: 400, height: 820 }, isMobile: true, hasTouch: true } : {});
-    await hub.attach(ctx, who); await server.attach(ctx, who); await exams(ctx, who);
+    await hub.attach(ctx, who); await server.attach(ctx, who); await exams(ctx, who); await storage(ctx);
     const page = await ctx.newPage();
     page.on("dialog", (d) => d.accept());
     await page.goto(who === "teacher" ? `/e2e-host?id=${SID}` : `/class/${SID}`, { waitUntil: "networkidle" });
@@ -147,4 +160,105 @@ test("exam mode: a timed test on a learner's phone, leaving the page flagged, ma
   await expect(learner.getByRole("button", { name: "📝 My exam" })).toHaveCount(0);
   await learner.waitForTimeout(11_000); // the next check for the exam doesn't bring it back
   await expect(learner.getByRole("dialog", { name: /Exam:/ })).toHaveCount(0);
+});
+
+test("KS2 SATs: a spelling test read aloud, phones following the teacher, graded as a scaled score", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const { teacher, learner } = await openClass(browser);
+  await teacher.getByRole("button", { name: "Exam mode" }).click();
+  const panel = teacher.getByRole("dialog", { name: "Exam mode" });
+  const sats = panel.getByRole("region", { name: "KS2 SATs" });
+  // A ready-made list fills the box; the teacher writes their own instead.
+  await sats.getByRole("button", { name: /Spelling test/ }).click();
+  await sats.getByRole("button", { name: /list A \(20\)/ }).click();
+  await expect(sats.getByLabel("Spelling sentences")).toHaveValue(/We will \*achieve\* our goal/);
+  await sats.getByLabel("Spelling sentences").fill("I did a *rough* sketch before starting my painting.\nThe complicated map caused a lot of *confusion*.\nBats are *nocturnal* animals.");
+  await sats.getByRole("button", { name: "Add 3 spellings" }).click();
+  await expect(sats.getByText(/✓ 3 spellings added/)).toBeVisible();
+  await expect(panel.getByLabel("Title")).toHaveValue("Spelling test");
+  await expect(panel.getByLabel("Spelling word 2")).toHaveValue("confusion");
+  await expect(panel.getByLabel(/Same order for everyone/)).toBeChecked();
+  await panel.getByRole("button", { name: /Start the exam \(3 questions, 15 min\)/ }).click();
+
+  // The learner's phone: in order, the sentence with a gap, and they can hear it.
+  const exam = learner.getByRole("dialog", { name: "Exam: Spelling test" });
+  await expect(exam.getByText(/The questions are in order/)).toBeVisible({ timeout: 20_000 });
+  await exam.getByRole("button", { name: "Start the exam" }).click();
+  await expect(exam.getByText("I did a ________ sketch before starting my painting.")).toBeVisible();
+  await expect(exam.getByRole("button", { name: "🔊 Hear the sentence" })).toBeVisible();
+  await exam.getByLabel("The missing word").fill("rough");
+
+  // The teacher reads spelling 3 — the phone goes to it.
+  const reader = panel.getByRole("region", { name: "Read the spellings" });
+  await expect(reader.getByText("rough", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await reader.getByRole("button", { name: "Read spelling 3" }).click();
+  await expect(reader.getByText("nocturnal", { exact: true })).toBeVisible();
+  await expect(exam.getByText("Bats are ________ animals.")).toBeVisible({ timeout: 10_000 });
+  await exam.getByLabel("The missing word").fill("nocturnel");
+  await panel.screenshot({ path: "test-results/sats-spelling-teacher.png" });
+  await learner.screenshot({ path: "test-results/sats-spelling-learner.png" });
+  await exam.getByRole("button", { name: "Question 2" }).click();
+  await exam.getByLabel("The missing word").fill("confusion");
+  await learner.waitForTimeout(900);
+  await exam.getByRole("button", { name: "Hand in my exam" }).click();
+  await expect(exam.getByText("2 / 3")).toBeVisible({ timeout: 15_000 });
+
+  // Graded the SATs way: 67% is the expected standard.
+  await expect(panel.getByRole("cell", { name: "2 / 3" })).toBeVisible({ timeout: 15_000 });
+  await panel.getByLabel("Grading").selectOption("ks2");
+  await expect(panel.getByRole("cell", { name: "EXS" })).toBeVisible();
+  await panel.getByRole("button", { name: "End exam" }).click();
+  await expect(exam.getByText(/✗ 3\. Bats are ________ animals\./)).toBeVisible({ timeout: 20_000 });
+  await expect(exam.getByText("Answer: nocturnal")).toBeVisible();
+});
+
+test("KS2 SATs: an arithmetic paper, and a real paper uploaded as a PDF with its pages on the phone", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const maker = await browser.newPage();
+  await maker.setContent(["Key stage 2 Mathematics Paper 2", "1 Circle the greatest number. 2 How many tables?"].map((t, i) =>
+    `<section style="height:100vh;${i === 0 ? "page-break-after:always;" : ""}font:40px sans-serif;padding:40px">${t}</section>`).join(""));
+  const pdf = await maker.pdf({ format: "A4" });
+  await maker.close();
+  const { teacher, learner } = await openClass(browser);
+  await teacher.getByRole("button", { name: "Exam mode" }).click();
+  const panel = teacher.getByRole("dialog", { name: "Exam mode" });
+  const sats = panel.getByRole("region", { name: "KS2 SATs" });
+
+  // Arithmetic: a whole paper at once, 30 minutes, no calculator.
+  await sats.getByRole("button", { name: /Arithmetic paper/ }).click();
+  await expect(panel.getByRole("button", { name: /Start the exam \(36 questions, 30 min\)/ })).toBeVisible();
+  await expect(panel.getByLabel("Question 36", { exact: true })).toHaveValue(/=/);
+  await expect(panel.getByLabel(/Calculator allowed/)).not.toBeChecked();
+  await panel.getByRole("button", { name: "Clear all questions" }).click();
+
+  // A real paper: upload the PDF, then a question for each answer on a page.
+  await sats.getByLabel("Upload a SATs paper").setInputFiles({ name: "ks2-mathematics-2022-paper-2.pdf", mimeType: "application/pdf", buffer: pdf });
+  await expect(sats.getByText(/✓ \d pages ready/)).toBeVisible({ timeout: 60_000 });
+  await sats.getByRole("button", { name: "Add a question on page 2" }).click();
+  await sats.getByRole("button", { name: "Add a question on page 2" }).click();
+  await expect(panel.getByLabel("Question 2", { exact: true })).toHaveValue("Question 2");
+  await panel.getByLabel("Answer to question 1").fill("9,215,300");
+  // Forgetting an answer is caught before the exam starts.
+  await panel.getByRole("button", { name: /Start the exam \(2 questions, 40 min\)/ }).click();
+  await expect(panel.getByText(/Question 2 has no answer yet/)).toBeVisible();
+  await panel.getByLabel("Answer to question 2").fill("5");
+  await sats.screenshot({ path: "test-results/sats-builder.png" });
+  await panel.getByRole("button", { name: /Start the exam \(2 questions, 40 min\)/ }).click();
+
+  const exam = learner.getByRole("dialog", { name: /^Exam: ks2 mathematics 2022 paper 2/ });
+  await expect(exam.getByRole("button", { name: "Start the exam" })).toBeVisible({ timeout: 20_000 });
+  await exam.getByRole("button", { name: "Start the exam" }).click();
+  await expect(exam.getByText("Question 1 of 2")).toBeVisible();
+  await expect(exam.getByRole("img", { name: "The page for Question 1" })).toBeVisible();
+  await learner.screenshot({ path: "test-results/sats-paper-learner.png" });
+  // The page opens bigger to read.
+  await exam.getByRole("button", { name: /tap to see it bigger/ }).click();
+  await expect(learner.getByRole("dialog", { name: "The page for Question 1" })).toBeVisible();
+  await learner.getByRole("button", { name: "Close" }).click();
+  await exam.getByLabel("Your answer").fill("9215300");
+  await exam.getByRole("button", { name: "Next →" }).click();
+  await exam.getByLabel("Your answer").fill("5");
+  await learner.waitForTimeout(900);
+  await exam.getByRole("button", { name: "Hand in", exact: true }).click();
+  await expect(exam.getByText("2 / 2")).toBeVisible({ timeout: 15_000 });
 });

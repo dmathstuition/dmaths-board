@@ -1,6 +1,6 @@
 // One learner's exam result and analysis, and the class's, for the reports
 // the teacher downloads (lib/examPdf.ts). Pure.
-import { markPaper, type ExamQ } from "@/lib/exams";
+import { markPaper, shownQ, type ExamQ } from "@/lib/exams";
 
 export type ReportEntry = {
   id: string; name: string; answers: Record<string, unknown>; flags: number; flagLog: { at: string; reason: string }[];
@@ -12,6 +12,7 @@ export type LearnerReport = {
   classAverage: number | null; best: number | null; right: number; wrong: number; blank: number;
   minutes: number | null; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean;
   items: ReportItem[]; remark: string; focus: string[];
+  scaled: number | null; // KS2 SATs: the estimated scaled score
 };
 export type ClassReport = {
   scheme: GradeScheme; takers: number; average: number | null; best: number | null; lowest: number | null; passed: number; strong: number | null;
@@ -23,9 +24,10 @@ export type ClassReport = {
 // Grading schemes. The standard is the UK's GCSE 9–1 (9 highest; 4 is a
 // standard pass, 5 a strong pass; U is ungraded). Real GCSE boundaries are set
 // for each paper every year, so a class test uses fixed percentages — the
-// usual school practice. WAEC (A1–F9) is there for Nigerian classes.
+// usual school practice. WAEC (A1–F9) is there for Nigerian classes. KS2 SATs
+// gives an estimated scaled score (80–120; 100 = the expected standard).
 export type GradeScheme = {
-  id: "gcse" | "waec"; name: string;
+  id: "gcse" | "waec" | "ks2"; name: string;
   grades: [number, string][];          // [lowest percent, grade], best first
   pass: number; passLabel: string;      // the pass mark and what it's called
   strong?: { min: number; label: string };
@@ -40,7 +42,25 @@ export const WAEC: GradeScheme = {
   grades: [[75, "A1"], [70, "B2"], [65, "B3"], [60, "C4"], [55, "C5"], [50, "C6"], [45, "D7"], [40, "E8"], [0, "F9"]],
   pass: 50, passLabel: "Credit pass (C6+)",
 };
-export const SCHEMES = [GCSE, WAEC];
+// KS2 SATs: each year's raw-mark → scaled-score table is published after the
+// tests, so this is an estimate. Recent papers needed about half the marks for
+// 100 (the expected standard) and roughly 85% for 110 (a high score).
+// HS = high score (110+), EXS = expected standard (100+), WTS = working towards.
+export const KS2: GradeScheme = {
+  id: "ks2", name: "KS2 SATs (estimated scaled score)",
+  grades: [[85, "HS"], [50, "EXS"], [0, "WTS"]],
+  pass: 50, passLabel: "Expected standard (100+)", strong: { min: 85, label: "High score (110+)" },
+};
+const SCALED: [number, number][] = [[0, 80], [50, 100], [85, 110], [100, 120]];
+export function ks2Scaled(pct: number): number {
+  const p = Math.max(0, Math.min(100, pct));
+  for (let i = 1; i < SCALED.length; i++) {
+    const [x0, y0] = SCALED[i - 1], [x1, y1] = SCALED[i];
+    if (p <= x1) return Math.round(y0 + ((p - x0) / (x1 - x0)) * (y1 - y0));
+  }
+  return 120;
+}
+export const SCHEMES = [GCSE, KS2, WAEC];
 export const schemeById = (id: unknown): GradeScheme => SCHEMES.find((s) => s.id === id) ?? GCSE;
 export const gradeOf = (pct: number, scheme: GradeScheme = GCSE) => scheme.grades.find(([min]) => pct >= min)![1];
 export const GRADES = GCSE.grades;
@@ -54,7 +74,13 @@ const correctText = (q: ExamQ) => (q.kind === "choice" ? q.options[Number(q.answ
 
 function remarkFor(pct: number, avg: number | null, blank: number, flags: number, scheme: GradeScheme): string {
   const g = gradeOf(pct, scheme), named = scheme.id === "gcse" ? `grade ${g}` : g;
-  const lead = pct >= 80 ? `Excellent work — ${named}.`
+  const ks2 = scheme.id === "ks2" ? ks2Scaled(pct) : 0;
+  const lead = scheme.id === "ks2"
+    ? (ks2 >= 110 ? `Excellent work — an estimated scaled score of ${ks2}, a high score.`
+      : ks2 >= 100 ? `Good work — an estimated scaled score of ${ks2}, at the expected standard.`
+        : ks2 >= 95 ? `Nearly there — an estimated scaled score of ${ks2}. A few more marks reach the expected standard (100).`
+          : `An estimated scaled score of ${ks2} — working towards the expected standard (100). Keep practising.`)
+    : pct >= 80 ? `Excellent work — ${named}.`
     : scheme.strong && pct >= scheme.strong.min ? `Good work — ${named}, a strong pass.`
       : pct >= scheme.pass ? `${pct >= 60 ? "Good work" : "A fair result"} — ${named}, a ${scheme.id === "gcse" ? "standard" : "credit"} pass.`
         : pct >= scheme.pass - 10 ? `Nearly there — ${named}. A little more practice reaches a pass.` : `This topic needs more work — ${named}.`;
@@ -78,7 +104,7 @@ export function examReports(questions: ExamQ[], entries: ReportEntry[], scheme: 
   const learners: LearnerReport[] = marked.map(({ e, m }) => {
     const items: ReportItem[] = questions.map((q, i) => {
       const given = answerText(q, e.answers?.[String(i)]);
-      return { n: i + 1, q: q.q, given, correct: correctText(q), right: m.right[i], blank: !given, marks: q.marks, classRight: classRight[i] };
+      return { n: i + 1, q: shownQ(q), given, correct: correctText(q), right: m.right[i], blank: !given, marks: q.marks, classRight: classRight[i] };
     });
     const right = items.filter((x) => x.right).length, blank = items.filter((x) => x.blank).length;
     const p = pct(m.score);
@@ -89,6 +115,7 @@ export function examReports(questions: ExamQ[], entries: ReportEntry[], scheme: 
       id: e.id, name: e.name || "Learner", scale: scheme.name, score: m.score, total, percent: p, grade: gradeOf(p, scheme), position: null, of: n, classAverage: average, best,
       right, wrong: items.length - right - blank, blank, minutes, flags: e.flags || 0, flagLog: (e.flagLog ?? []).slice(-10),
       submitted: !!e.submittedAt, items, remark: remarkFor(p, average, blank, e.flags || 0, scheme), focus,
+      scaled: scheme.id === "ks2" ? ks2Scaled(p) : null,
     };
   });
   // Position: equal scores share a place (1, 2, 2, 4).
@@ -99,7 +126,7 @@ export function examReports(questions: ExamQ[], entries: ReportEntry[], scheme: 
     scheme, takers: n, average, best, lowest, passed: learners.filter((l) => l.percent >= scheme.pass).length,
     strong: scheme.strong ? learners.filter((l) => l.percent >= scheme.strong!.min).length : null,
     grades: scheme.grades.map(([min, g]) => ({ grade: g, count: learners.filter((l) => l.grade === g).length, pass: min >= scheme.pass })),
-    items: questions.map((q, i) => ({ n: i + 1, q: q.q, correct: correctText(q), classRight: classRight[i] })),
+    items: questions.map((q, i) => ({ n: i + 1, q: shownQ(q), correct: correctText(q), classRight: classRight[i] })),
     learners,
   };
 }

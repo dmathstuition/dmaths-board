@@ -117,7 +117,12 @@ const toJpeg = (c: HTMLCanvasElement) => new Promise<Blob>((ok, no) => c.toBlob(
 
 // Each source slide, ready to be drawn when its turn comes.
 type Source = { render: () => Promise<Blob> };
-async function sourcesFor(files: File[], room: number): Promise<{ list: Source[]; close: () => Promise<void> }> {
+// fit: the largest size a page is drawn at (the board's, unless a paper's pages
+// want to be taller — an A4 page of a SATs paper is read on a phone).
+type Fit = { w: number; h: number };
+const BOARD_FIT: Fit = { w: BOARD_W, h: BOARD_H };
+export const PAPER_FIT: Fit = { w: 1240, h: 1754 };
+async function sourcesFor(files: File[], room: number, fit: Fit = BOARD_FIT): Promise<{ list: Source[]; close: () => Promise<void> }> {
   const list: Source[] = [], docs: { destroy: () => Promise<void> }[] = [];
   for (const f of files) {
     if (list.length >= room) break;
@@ -130,7 +135,7 @@ async function sourcesFor(files: File[], room: number): Promise<{ list: Source[]
           render: async () => {
             const page = await doc.getPage(i);
             const base = page.getViewport({ scale: 1 });
-            const vp = page.getViewport({ scale: Math.min(BOARD_W / base.width, BOARD_H / base.height) });
+            const vp = page.getViewport({ scale: Math.min(fit.w / base.width, fit.h / base.height) });
             const { c, ctx } = board(vp.width, vp.height);
             await page.render({ canvasContext: ctx, viewport: vp }).promise;
             page.cleanup();
@@ -143,7 +148,7 @@ async function sourcesFor(files: File[], room: number): Promise<{ list: Source[]
         render: async () => {
           const img = await decodePicture(f);
           try {
-            const k = Math.min(BOARD_W / img.w, BOARD_H / img.h, 1.5);
+            const k = Math.min(fit.w / img.w, fit.h / img.h, 1.5);
             const { c, ctx } = board(img.w * k, img.h * k);
             img.draw(ctx, c.width, c.height);
             return await toJpeg(c);
@@ -235,9 +240,9 @@ async function sendOne(t: Ticket, blob: Blob, onProgress: (f: number) => void) {
 // Prepare and upload slides together: each slide starts uploading as soon as
 // it's drawn. Returns each slide's address in order — null where one couldn't
 // be sent (the rest still arrive).
-export async function sendSlides(target: Target, files: File[], room: number, onStep: (msg: string) => void): Promise<(string | null)[]> {
+export async function sendSlides(target: Target, files: File[], room: number, onStep: (msg: string) => void, fit?: Fit): Promise<(string | null)[]> {
   onStep("Opening your file…");
-  const { list, close } = await sourcesFor(files, room);
+  const { list, close } = await sourcesFor(files, room, fit);
   try {
     if (!list.length) return [];
     const total = list.length;

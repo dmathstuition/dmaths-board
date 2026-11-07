@@ -5,7 +5,7 @@
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { learnerDetail } from "@/lib/learnerResults";
-import { markPaper, type ExamQ } from "@/lib/exams";
+import { markPaper, shownQ, type ExamQ } from "@/lib/exams";
 import { aiChat, aiConfigured, extractJson } from "@/lib/ai";
 import { PRACTICE_SYSTEM, buildPractice, practicePrompt, MAX_MISSED, type Missed, type PracticeItem } from "@/lib/practice";
 import { FLASHCARD_SYSTEM, cleanCards, flashcardPrompt, questionCards, type Card, type LessonText } from "@/lib/flashcards";
@@ -47,7 +47,7 @@ export async function missedFor(sessionId: string, studentId: string): Promise<{
         if (m.right[i]) return;
         const v = entry.answers?.[String(i)];
         const given = q.kind === "choice" ? (v == null || v === "" ? "" : q.options[Number(v)] ?? "") : String(v ?? "");
-        missed.push({ from: `Exam Q${i + 1}`, q: q.q, options: q.kind === "choice" ? q.options : [], answer: q.kind === "choice" ? q.options[Number(q.answer)] ?? null : String(q.answer).split("|")[0].trim(), given });
+        missed.push({ from: `Exam Q${i + 1}`, q: shownQ(q), options: q.kind === "choice" ? q.options : [], answer: q.kind === "choice" ? q.options[Number(q.answer)] ?? null : String(q.answer).split("|")[0].trim(), given });
       });
     }
   }
@@ -98,7 +98,7 @@ export async function lessonText(sessionId: string): Promise<LessonText | null> 
   ]);
   for (const qz of quizzes.data ?? []) for (const q of (Array.isArray((qz as any).questions) ? (qz as any).questions : [])) questions.push({ q: String(q?.q ?? ""), answer: Array.isArray(q?.options) ? String(q.options[Number(q.answer)] ?? "") || null : null, from: "Quiz" });
   if (!exams.error) for (const ex of exams.data ?? []) for (const q of (Array.isArray((ex as any).questions) ? (ex as any).questions : []) as ExamQ[]) {
-    questions.push({ q: q.q, answer: q.kind === "choice" ? q.options[Number(q.answer)] ?? null : String(q.answer).split("|")[0].trim(), from: "Exam" });
+    questions.push({ q: shownQ(q), answer: q.kind === "choice" ? q.options[Number(q.answer)] ?? null : String(q.answer).split("|")[0].trim(), from: "Exam" });
   }
   for (const m of marks.data ?? []) if ((m as any).question) questions.push({ q: String((m as any).question), answer: null, from: "Class work" });
   // Words and maths written on the board.

@@ -5,10 +5,15 @@ import { question as numericQuestion, type Difficulty, type Skill } from "@/lib/
 import { choiceQuestion, type ChoiceSkill } from "@/lib/games/senior";
 import { moreChoice, MORE_CHOICE, type MoreChoiceSkill } from "@/lib/games/moreMaths";
 import { CLASS_GAMES } from "@/lib/games/catalog";
+import { isSlideUrl } from "@/lib/whiteboard";
 
-export type ExamQ = { q: string; kind: "choice" | "typed"; options: string[]; answer: number | string; marks: number };
+// kind "spell": a spelling test word. q is the whole sentence with the word in
+// it (the teacher reads it out); learners see it with a gap. hear: learners may
+// play the sentence on their own phone. img: a page of a real paper (uploaded
+// like a slide) shown with the question.
+export type ExamQ = { q: string; kind: "choice" | "typed" | "spell"; options: string[]; answer: number | string; marks: number; img?: string; hear?: boolean };
 export const MAX_EXAM_QUESTIONS = 60;
-export const EXAM_MINUTES = [5, 10, 15, 20, 30, 45, 60, 90] as const;
+export const EXAM_MINUTES = [5, 10, 15, 20, 30, 40, 45, 60, 90] as const;
 // How long after the end an answer still counts (a slow connection).
 export const GRACE_MS = 20_000;
 
@@ -22,14 +27,20 @@ export function cleanExamQuestions(v: unknown): ExamQ[] {
     const q = str(x?.q, 400).trim();
     if (!q) continue;
     const marks = Math.max(1, Math.min(10, Math.round(Number(x?.marks) || 1)));
+    const img = isSlideUrl(x?.img) ? { img: x.img as string } : {};
+    if (x?.kind === "spell") {
+      const answer = str(x?.answer, 60).trim();
+      if (answer && /^[\p{L}' -]+$/u.test(answer)) out.push({ q, kind: "spell", options: [], answer, marks, ...(x?.hear === false ? {} : { hear: true }) });
+      continue;
+    }
     if (x?.kind === "typed") {
       const answer = str(x?.answer, 120).trim();
-      if (answer) out.push({ q, kind: "typed", options: [], answer, marks });
+      if (answer) out.push({ q, kind: "typed", options: [], answer, marks, ...img });
       continue;
     }
     const options = (Array.isArray(x?.options) ? x.options : []).map((o: unknown) => str(o, 160).trim()).filter(Boolean).slice(0, 6);
     const answer = Math.round(Number(x?.answer));
-    if (options.length >= 2 && answer >= 0 && answer < options.length) out.push({ q, kind: "choice", options, answer, marks });
+    if (options.length >= 2 && answer >= 0 && answer < options.length) out.push({ q, kind: "choice", options, answer, marks, ...img });
   }
   return out;
 }
@@ -43,16 +54,41 @@ function shuffled(n: number, r: () => number): number[] {
   return a;
 }
 // The order this learner sees: question numbers, and for each question the option numbers.
-export function learnerOrder(examId: string, studentId: string, qs: Pick<ExamQ, "options">[]): { order: number[]; opts: number[][] } {
+// inOrder: everyone gets the paper as it was set (a real paper, a spelling test).
+export function learnerOrder(examId: string, studentId: string, qs: Pick<ExamQ, "options">[], inOrder = false): { order: number[]; opts: number[][] } {
+  if (inOrder) return { order: qs.map((_, i) => i), opts: qs.map((q) => q.options.map((_, i) => i)) };
   const r = rng(hash(`${examId}|${studentId}`));
   return { order: shuffled(qs.length, r), opts: qs.map((q) => shuffled(q.options.length, r)) };
 }
+// Spelling tests and real papers always keep their order (the teacher reads the
+// words out in turn; a paper's pictures go with its numbering).
+export const keepsOrder = (qs: ExamQ[], asked = false) => asked || qs.some((q) => q.kind === "spell" || !!q.img);
 
-// What a learner's phone gets while the exam is open: no answers.
-export type LearnerQ = { n: number; q: string; kind: ExamQ["kind"]; options: { i: number; text: string }[]; marks: number };
-export function learnerPaper(examId: string, studentId: string, qs: ExamQ[]): LearnerQ[] {
-  const { order, opts } = learnerOrder(examId, studentId, qs);
-  return order.map((n) => ({ n, q: qs[n].q, kind: qs[n].kind, marks: qs[n].marks, options: opts[n].map((i) => ({ i, text: qs[n].options[i] })) }));
+// A spelling sentence with its word taken out: "I did a ________ sketch."
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export function gapped(q: Pick<ExamQ, "q" | "answer">): string {
+  const w = String(q.answer).trim();
+  const re = new RegExp(`(^|[^\\p{L}])${escapeRe(w)}(?=$|[^\\p{L}])`, "iu");
+  return re.test(q.q) ? q.q.replace(re, "$1________") : `${q.q} ________`;
+}
+// How the word is read out, as in the national test: the word, the sentence, the word.
+export const spokenSpelling = (q: Pick<ExamQ, "q" | "answer">, n?: number) =>
+  `${n ? `Spelling ${n}. ` : ""}The word is ${String(q.answer).trim()}. ${q.q.trim()} The word is ${String(q.answer).trim()}.`;
+// A question's words as a learner (or a report) should see them.
+export const shownQ = (q: ExamQ) => (q.kind === "spell" ? gapped(q) : q.q);
+
+// What a learner's phone gets while the exam is open: no answers (a spelling
+// word only goes to the phone when the teacher lets learners hear it there).
+export type LearnerQ = { n: number; q: string; kind: ExamQ["kind"]; options: { i: number; text: string }[]; marks: number; img?: string; say?: string };
+export function learnerPaper(examId: string, studentId: string, qs: ExamQ[], inOrder = false): LearnerQ[] {
+  const { order, opts } = learnerOrder(examId, studentId, qs, keepsOrder(qs, inOrder));
+  return order.map((n) => {
+    const x = qs[n];
+    return {
+      n, q: shownQ(x), kind: x.kind, marks: x.marks, options: opts[n].map((i) => ({ i, text: x.options[i] })),
+      ...(x.img ? { img: x.img } : {}), ...(x.kind === "spell" && x.hear ? { say: spokenSpelling(x, n + 1) } : {}),
+    };
+  });
 }
 
 // ── Marking ──
@@ -61,6 +97,9 @@ export function learnerPaper(examId: string, studentId: string, qs: ExamQ[]): Le
 // alternatives separated by | ("4 | four").
 const tidy = (s: string) => s.toLowerCase().replace(/[−–]/g, "-").replace(/×/g, "*").replace(/\s+/g, "").replace(/^x=/, "").replace(/[.,]$/, "");
 function asNumber(s: string): number | null {
+  // A mixed number: "1 3/4".
+  const mixed = s.trim().replace(/[−–]/g, "-").match(/^(-?)(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+  if (mixed && Number(mixed[4])) return (mixed[1] ? -1 : 1) * (Number(mixed[2]) + Number(mixed[3]) / Number(mixed[4]));
   const t = tidy(s).replace(/,/g, "");
   if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t);
   const f = t.match(/^(-?\d+)\/(\d+)$/);
@@ -73,17 +112,23 @@ export function typedRight(given: string, answer: string): boolean {
   return answer.split("|").some((alt) => {
     const a = tidy(alt);
     if (!a) return false;
-    if (g === a) return true;
+    // Numbers as numbers ("13/8" isn't "1 3/8", though both lose their spaces).
     const gn = asNumber(given), an = asNumber(alt);
-    return gn != null && an != null && Math.abs(gn - an) < 1e-9 * Math.max(1, Math.abs(an));
+    if (gn != null && an != null) return Math.abs(gn - an) < 1e-9 * Math.max(1, Math.abs(an));
+    return g === a;
   });
 }
 export const cleanGiven = (v: unknown): string | number | null =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 && v < 10 ? v : typeof v === "string" ? v.slice(0, 120) : null;
 
+// Spelling: letter for letter (capitals, spaces round it and a full stop don't matter).
+const spellTidy = (s: string) => s.normalize("NFC").replace(/[‘’ʼ]/g, "'").replace(/\s+/g, " ").trim().replace(/[.!?,]+$/, "").toLowerCase();
+export const spelledRight = (given: string, word: string) => !!spellTidy(given) && spellTidy(given) === spellTidy(word);
+
 export function isRight(q: ExamQ, given: unknown): boolean {
   if (given == null) return false;
   if (q.kind === "choice") return Number(given) === q.answer;
+  if (q.kind === "spell") return spelledRight(String(given), String(q.answer));
   return typedRight(String(given), String(q.answer));
 }
 export function markPaper(qs: ExamQ[], answers: Record<string, unknown>): { score: number; total: number; right: boolean[] } {
