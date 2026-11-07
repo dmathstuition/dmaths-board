@@ -8,7 +8,7 @@ const query = (table: string) => {
   let url = "";
   const q: any = {
     select: () => q, limit: () => q, neq: () => q,
-    contains: (_c: string, v: { bg: string[] }) => { url = v.bg[0]; return q; },
+    contains: (_c: string, v: any) => { url = Array.isArray(v) ? v[0].img : v.bg[0]; return q; }, // a board's pictures, or an exam's pages
     then: (ok: any) => ok({ data: usedElsewhere.has(`${table}:${url}`) ? [{ id: "x" }] : [], error: null }),
   };
   return q;
@@ -38,6 +38,13 @@ describe("removing slides from storage", () => {
     const res = await del({ sessionId: SID, urls: [url("lesson-abc", "x-01"), url("22222222-2222-2222-2222-222222222222", "y-01"), "https://evil.example/x.jpg"] });
     expect(await res.json()).toEqual({ removed: 0, kept: 0 });
     expect(remove).not.toHaveBeenCalled();
+  });
+  it("keeps a picture an exam still uses", async () => {
+    viewer.mockResolvedValue({ id: "t1", host: true });
+    usedElsewhere.add(`board_exams:${url(SID, "a-02")}`);
+    const res = await del({ sessionId: SID, urls: [url(SID, "a-01"), url(SID, "a-02")] });
+    expect(await res.json()).toEqual({ removed: 1, kept: 1 });
+    expect(remove).toHaveBeenCalledWith([`slides/${SID}/a-01.jpg`]);
   });
   it("keeps a picture a saved lesson still uses", async () => {
     viewer.mockResolvedValue({ id: "t1", host: true });
