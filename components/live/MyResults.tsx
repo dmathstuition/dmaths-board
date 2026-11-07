@@ -48,7 +48,13 @@ export default function MyResults({ sessionId, ended }: { sessionId: string; end
           <a href={`https://wa.me/?text=${encodeURIComponent(`My class results: ${full}`)}`} target="_blank" rel="noreferrer" className="min-h-[40px] rounded-xl bg-[#25D366] px-3 py-2.5 text-xs font-black text-white">WhatsApp</a>
         </div>
       )}
-      {d && <div className="mt-3 flex flex-wrap items-center gap-2"><ProgressLink sessionId={sessionId} label="My term progress" /></div>}
+      {d && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {link && <a href={link.replace("/report?", "/practice?")} target="_blank" rel="noreferrer" className="min-h-[40px] rounded-xl bg-[#C2451C] px-3 py-2.5 text-xs font-black text-white">🔁 Fix my mistakes</a>}
+          {link && <a href={link.replace("/report?", "/flashcards?")} target="_blank" rel="noreferrer" className="min-h-[40px] rounded-xl bg-[#0A4F52] px-3 py-2.5 text-xs font-black text-white">📇 Flashcards</a>}
+          <ProgressLink sessionId={sessionId} label="My term progress" />
+        </div>
+      )}
     </section>
   );
 }

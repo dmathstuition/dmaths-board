@@ -1155,3 +1155,9 @@ html:not(.dark) .portal-sky { color: #0B1220; }
   background-size: 96px 96px, 96px 96px, 100% 100%;
 }
 .font-dmbDisplay { font-weight: 500; letter-spacing: -0.025em; }
+
+/* Easier to read (lib/reading.ts): bigger text and the easy-read font. */
+html[data-text-size="2"] { font-size: 112.5%; }
+html[data-text-size="3"] { font-size: 125%; }
+html[data-easy-read="1"] body, html[data-easy-read="1"] body * { font-family: var(--font-easy), Verdana, sans-serif !important; letter-spacing: 0.01em; word-spacing: 0.06em; }
+html[data-easy-read="1"] body p, html[data-easy-read="1"] body li { line-height: 1.6; }

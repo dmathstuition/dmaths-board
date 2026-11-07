@@ -1,4 +1,5 @@
 "use client";
+import { ReadingButton, Speak } from "@/components/live/Reading";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
@@ -42,7 +43,7 @@ export default function ExamMode({ sessionId, host, open, onOpen, onClose }: { s
   const tell = (examId: string | null) => send("exam", { host: true, examId });
 
   if (host) return <Teacher open={open} onOpen={onOpen} onClose={onClose} data={data} reload={load} sessionId={sessionId} tell={tell} />;
-  return <Learner data={data} reload={load} />;
+  return <Learner data={data} reload={load} sessionId={sessionId} />;
 }
 
 // ── Teacher ──
@@ -299,7 +300,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
 }
 
 // ── Learner ──
-function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
+function Learner({ data, reload, sessionId }: { data: any; reload: () => Promise<void>; sessionId: string }) {
   const now = useServerClock()();
   const [, tick] = useState(0);
   const exam: Meta | null = data?.exam ?? null;
@@ -368,7 +369,7 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
   if (!exam) return null;
   const shell = (children: React.ReactNode) => (
     <div role="dialog" aria-modal="true" aria-label={`Exam: ${exam.title}`} className="fixed inset-0 z-[120] overflow-y-auto bg-[#FFF7ED] text-ink" onCopy={(e) => e.preventDefault()}>
-      <div className="mx-auto flex min-h-full max-w-2xl flex-col gap-3 p-3 sm:p-6">{children}</div>
+      <div className="mx-auto flex min-h-full max-w-2xl flex-col gap-3 p-3 sm:p-6"><div className="flex justify-end"><ReadingButton /></div>{children}</div>
     </div>
   );
 
@@ -403,7 +404,10 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
       {warned > 0 && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-black text-red-700 ring-1 ring-red-200">⚠️ You left the exam page{warned > 1 ? ` ${warned} times` : ""}. Your teacher has been told.</p>}
       <div className="select-none rounded-2xl bg-white p-4 shadow ring-1 ring-orange-200">
         <p className="text-xs font-black uppercase tracking-wider text-[#C2451C]">Question {at + 1} of {paper.length} · {q.marks} mark{q.marks === 1 ? "" : "s"}</p>
-        <p className="mt-2 whitespace-pre-wrap text-xl font-black leading-snug">{q.q}</p>
+        <div className="mt-2 flex items-start gap-2">
+          <p className="flex-1 whitespace-pre-wrap text-xl font-black leading-snug">{q.q}</p>
+          <Speak text={`${q.q}. ${q.kind === "choice" ? q.options.map((o, k) => `Option ${String.fromCharCode(65 + k)}: ${o.text}.`).join(" ") : ""}`} />
+        </div>
         {q.kind === "choice" ? (
           <div className="mt-4 grid gap-2" role="radiogroup" aria-label="Your answer">
             {q.options.map((o, k) => {
@@ -456,6 +460,7 @@ function Learner({ data, reload }: { data: any; reload: () => Promise<void> }) {
         {score != null && <p className="mt-1 text-sm font-bold text-ink/60">{Math.round((score / Math.max(1, total)) * 100)}%</p>}
         {exam.status === "open" && <p className="mt-3 text-sm font-semibold text-ink/60">{exam.review ? "You can see the right answers when the exam ends." : "Wait for your teacher."}</p>}
         {over && analysis && <ExamAnalysis a={analysis} />}
+        {over && analysis && analysis.score < analysis.total && <FixMistakes sessionId={sessionId} />}
         <button type="button" onClick={() => { if (over) markSeen(exam.id); else setHidden(true); }} className="mt-4 min-h-[44px] rounded-xl bg-[#C2451C] px-5 text-sm font-black text-white">{over ? "Done — back to the class" : "Back to the class"}</button>
       </div>
       {review && (
@@ -502,5 +507,24 @@ function ExamAnalysis({ a }: { a: Analysis }) {
       )}
       {a.flags > 0 && <p className="text-xs font-bold text-red-700">⚠ You left the exam page {a.flags} time{a.flags === 1 ? "" : "s"} — your teacher can see this.</p>}
     </section>
+  );
+}
+
+// Opens "Fix my mistakes" (practice from this class's wrong answers) with the learner's own results link.
+function FixMistakes({ sessionId }: { sessionId: string }) {
+  const [busy, setBusy] = useState(false);
+  async function go() {
+    setBusy(true);
+    const tab = window.open("", "_blank");
+    const r = await fetch(`/api/live-sessions/my-results?id=${encodeURIComponent(sessionId)}`, { cache: "no-store" }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : {};
+    setBusy(false);
+    const url = r?.ok && j.link ? String(j.link).replace("/report?", "/practice?") : null;
+    if (url && tab) tab.location.href = url; else if (url) window.location.assign(url); else tab?.close();
+  }
+  return (
+    <button type="button" onClick={go} disabled={busy} className="mt-4 mr-2 min-h-[44px] rounded-xl bg-[#0E6E72] px-5 text-sm font-black text-white disabled:opacity-60">
+      {busy ? "Opening…" : "🔁 Fix my mistakes"}
+    </button>
   );
 }

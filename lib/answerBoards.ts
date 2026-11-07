@@ -26,7 +26,7 @@ export const TIME_LIMITS = [0, 2, 5, 10, 15, 30] as const; // minutes (0 = no li
 export const MAX_PER = 60;
 export const MARK_CHOICES = [1, 2, 5, 10] as const;
 // `imgs`: photos the learner took of their work (pages of it); `done`: handed in.
-export type Answer = { by: string; name: string; strokes: Stroke[]; text: string; imgs?: string[]; done?: boolean; v: number; at: number };
+export type Answer = { by: string; name: string; strokes: Stroke[]; text: string; imgs?: string[]; done?: boolean; sure?: boolean | null; v: number; at: number }; // sure: the confidence check (null = didn't say)
 export const cleanImg = (v: unknown): string | null => (isSlideUrl(v) ? v : null);
 // Up to MAX_PHOTOS board pictures (an older board sent one, as `img`).
 export function cleanImgs(v: unknown, old?: unknown): string[] {

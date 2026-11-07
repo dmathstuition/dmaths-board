@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Poppins, Fira_Code, Outfit, Manrope, Caveat } from "next/font/google";
+import { Poppins, Fira_Code, Outfit, Manrope, Caveat, Atkinson_Hyperlegible } from "next/font/google";
 import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 import { siteBaseUrl } from "@/lib/siteUrl";
@@ -11,6 +11,8 @@ const display = Outfit({ subsets: ["latin"], variable: "--font-dmb-display", wei
 const body = Manrope({ subsets: ["latin"], variable: "--font-dmb-body", weight: ["400", "500", "600", "700", "800"] });
 const hand = Caveat({ subsets: ["latin"], variable: "--font-dmb-hand", weight: ["600", "700"] });
 const poppins = Poppins({ subsets: ["latin"], variable: "--font-poppins", weight: ["400", "500", "600", "700", "800"] });
+// Easy-read: made for low vision, and easier for many dyslexic readers (learners switch it on: lib/reading).
+const easy = Atkinson_Hyperlegible({ subsets: ["latin"], variable: "--font-easy", weight: ["400", "700"], display: "swap", preload: false });
 const fira = Fira_Code({ subsets: ["latin"], variable: "--font-fira", weight: ["400", "500"] });
 
 const description = "The interactive whiteboard for teachers: teach live with a PIN, slides, activities, quizzes and class reports. 7-day free trial.";
@@ -38,7 +40,7 @@ export const viewport: Viewport = { themeColor: "#0E6E72", width: "device-width"
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${poppins.variable} ${fira.variable} ${display.variable} ${body.variable} ${hand.variable}`}>
+    <html lang="en" className={`${poppins.variable} ${fira.variable} ${display.variable} ${body.variable} ${hand.variable} ${easy.variable}`}>
       <body>
         <div className="font-dmbBody text-dmb-ink">{children}</div>
         <Analytics />

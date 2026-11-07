@@ -1,4 +1,5 @@
 "use client";
+import { ReadingButton } from "@/components/live/Reading";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { LiveChannelProvider, useLive } from "@/components/live/LiveChannel";
@@ -87,6 +88,7 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
           <button type="button" onClick={() => setMine((m) => !m)} aria-expanded={mine}
             className="min-h-[40px] rounded-full bg-white px-4 text-sm font-black text-[#0E6E72] ring-1 ring-[#A9D6D3] hover:ring-[#0E6E72]">📊 {mine ? "Hide my results" : "My results"}</button>
         )}
+        <ReadingButton />
         {!ended && (
           <span className={`rounded-full px-3 py-1.5 text-sm font-bold ${room.me.canWrite ? "bg-[#C6F35C] text-ink" : "bg-white/10 text-white/80"}`} role="status">
             {room.me.canWrite ? "✏️ You can write" : "👀 Watching"}
@@ -100,7 +102,7 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
 
       {!ended && (
         <div hidden={!showQuiz}>
-          <QuizPlayer sessionId={id} myName={room.me.name} onState={onState} onDismiss={() => quiz && setDismissed(quiz.id)} />
+          <QuizPlayer sessionId={id} myName={room.me.name} myId={room.me.id} onState={onState} onDismiss={() => quiz && setDismissed(quiz.id)} />
         </div>
       )}
       <div hidden={showQuiz}>

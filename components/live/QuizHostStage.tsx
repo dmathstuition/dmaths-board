@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Confetti from "@/components/ui/Confetti";
 import { useLive } from "@/components/live/LiveChannel";
+import { CONFIDENCE_LABELS, confidence } from "@/lib/confidence";
 import type { QuizView } from "@/lib/liveQuiz";
 import { formatCode } from "@/lib/liveSession";
 import { ANSWER_STYLE, Leaderboard, Shape, secondsLeft, useCountdown } from "@/components/live/QuizBits";
@@ -17,6 +18,9 @@ type Person = { id: string; name: string; online: boolean };
 // class. Picks a prepared quiz from the library, then runs it like Kahoot:
 // lobby with the PIN and names → question with timer → answer chart →
 // scoreboard → … → podium.
+// After the last answer, how long to wait before the reveal (the confidence check).
+const SURE_WAIT_MS = 4000;
+
 export default function QuizHostStage({ sessionId, code, people, base, onActive }: {
   sessionId: string; code: string; people: Person[]; base: HostBase; onActive?: (active: boolean) => void;
 }) {
@@ -34,7 +38,16 @@ export default function QuizHostStage({ sessionId, code, people, base, onActive 
     if (!r.ok) { setErr(j.error ?? "Couldn't load the quiz."); return; }
     setQuiz(j.quiz); if (j.serverNow) setOffset(j.serverNow - Date.now());
   }, [sessionId]);
-  const send = useLive({ "quiz-answered": () => load() });
+  // Confidence check: who said sure / not sure, with what they chose (lib/confidence).
+  const [sures, setSures] = useState<Record<string, { by: string; name: string; choice: number; sure: boolean }[]>>({});
+  const send = useLive({
+    "quiz-answered": () => load(),
+    "quiz-sure": (p) => {
+      if (typeof p?.quiz !== "string" || typeof p?.by !== "string") return;
+      const key = `${p.quiz}:${Number(p.idx)}`, e = { by: p.by.slice(0, 60), name: String(p.name ?? "Learner").slice(0, 60), choice: Number(p.choice), sure: !!p.sure };
+      setSures((cur) => ({ ...cur, [key]: [...(cur[key] ?? []).filter((x) => x.by !== e.by), e].slice(-500) }));
+    },
+  });
   useEffect(() => { load(); const id = setInterval(load, 4000); return () => clearInterval(id); }, [load]);
   // A quiz launched from the board's Games panel: show it straight away.
   useEffect(() => { window.addEventListener("live-quiz-launched", load); return () => window.removeEventListener("live-quiz-launched", load); }, [load]);
@@ -64,12 +77,16 @@ export default function QuizHostStage({ sessionId, code, people, base, onActive 
   // The time check is recomputed from this question's own start (never a
   // leftover 0 from the last one), and the server double-checks it too.
   const autoRevealed = useRef<string>("");
+  const allIn = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   useEffect(() => {
     if (!quiz || quiz.status !== "question" || busy || !q?.startedAt) return;
     const key = `${quiz.id}:${quiz.current}`;
     const timeUp = secondsLeft(q.startedAt, q.seconds, offset) === 0;
     const everyone = quiz.roster > 0 && quiz.answered >= quiz.roster;
-    if ((timeUp || everyone) && autoRevealed.current !== key) {
+    // Everyone's in: wait a few seconds so the last ones can still say how sure they are.
+    if (everyone && allIn.current.key !== key) allIn.current = { key, at: Date.now() };
+    const settled = everyone && Date.now() - allIn.current.at >= SURE_WAIT_MS;
+    if ((timeUp || settled) && autoRevealed.current !== key) {
       autoRevealed.current = key;
       // If the server says "not yet" (clocks disagree), try again on the next tick.
       act({ action: "reveal", quizId: quiz.id, auto: true }).then((after) => {
@@ -193,6 +210,7 @@ export default function QuizHostStage({ sessionId, code, people, base, onActive 
               </div>
             ))}
           </div>
+          <ConfidencePanel entries={(sures[`${quiz.id}:${quiz.current}`] ?? []).map((e) => ({ ...e, right: e.choice === q.answer }))} />
         </div>
       )}
 
@@ -295,5 +313,27 @@ function ReadyMade({ busy, onLaunch }: { busy: boolean; onLaunch: (title: string
         </>
       )}
     </div>
+  );
+}
+
+// How sure they were, against whether they were right (only for learners who said).
+function ConfidencePanel({ entries }: { entries: { by: string; name: string; right: boolean; sure: boolean }[] }) {
+  const c = confidence(entries);
+  const nameOf = (id: string) => entries.find((e) => e.by === id)?.name ?? "Learner";
+  if (!c.total) return null;
+  return (
+    <section aria-label="Confidence check" className="mt-5 rounded-2xl bg-white/10 p-4">
+      <p className="text-sm font-black">How sure they were <span className="font-bold text-white/60">· {c.total} said</span></p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-4">
+        {(Object.keys(CONFIDENCE_LABELS) as (keyof typeof CONFIDENCE_LABELS)[]).map((k) => (
+          <div key={k} className={`rounded-xl p-3 ${k === "misconception" && c[k].length ? "bg-amber-400 text-ink" : "bg-white/10"}`}>
+            <p className="text-2xl font-black">{CONFIDENCE_LABELS[k].icon} {c[k].length}</p>
+            <p className="text-sm font-black">{CONFIDENCE_LABELS[k].title}</p>
+            <p className={`text-[11px] font-bold ${k === "misconception" && c[k].length ? "text-ink/70" : "text-white/60"}`}>{CONFIDENCE_LABELS[k].hint}</p>
+            {(k === "misconception" || k === "lucky") && c[k].length > 0 && <p className="mt-1 text-xs font-bold">{c[k].map(nameOf).join(", ")}</p>}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

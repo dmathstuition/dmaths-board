@@ -1,4 +1,5 @@
 "use client";
+import { Speak } from "@/components/live/Reading";
 import { useClassScale } from "@/lib/classScale";
 import { useEffect, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
@@ -229,7 +230,7 @@ export default function PulsePoll({ host, myId, myName, people, pollOpen, onPoll
           <div className="mb-2 flex items-start justify-between gap-2">
             <div>
               <p className="text-[11px] font-black uppercase tracking-wider text-[#0E6E72]">Quick poll</p>
-              <p className="text-base font-black leading-snug">{poll.q || "Choose one"}</p>
+              <div className="flex items-start gap-2"><p className="flex-1 text-base font-black leading-snug">{poll.q || "Choose one"}</p>{poll.q && <Speak text={poll.q} />}</div>
             </div>
             <button type="button" onClick={() => setPollHidden(true)} className="rounded-lg bg-ink/5 px-2.5 py-1.5 text-xs font-black text-ink/70">Hide</button>
           </div>

@@ -1,4 +1,5 @@
 "use client";
+import { Speak } from "@/components/live/Reading";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import type { QuizView } from "@/lib/liveQuiz";
@@ -22,14 +23,15 @@ function keepMine(z: QuizView | null, m: Mine): QuizView | null {
   return { ...z, me: { ...z.me, answer: { choice: m.choice, correct: null, points: null, streak: null } } };
 }
 
-export default function QuizPlayer({ sessionId, myName, onState, onDismiss }: {
-  sessionId: string; myName: string;
+export default function QuizPlayer({ sessionId, myName, myId = "", onState, onDismiss }: {
+  sessionId: string; myName: string; myId?: string;
   onState?: (s: { id: string; status: string } | null) => void; onDismiss?: () => void;
 }) {
   const [quiz, setQuiz] = useState<QuizView | null>(null);
   const [offset, setOffset] = useState(0);
   const [sending, setSending] = useState<number | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [sure, setSure] = useState<{ key: string; sure: boolean } | null>(null); // confidence check for this question
 
   // The answer this phone gave to the current question. A reply that's a
   // second behind (another server) mustn't flip the screen back to the buttons.
@@ -119,7 +121,21 @@ export default function QuizPlayer({ sessionId, myName, onState, onDismiss }: {
           <div className="m-auto text-center">
             <span className="quiz-pop mx-auto flex h-24 w-24 items-center justify-center rounded-3xl" style={{ background: ANSWER_STYLE[mine.choice].color }}><Shape i={mine.choice} className="h-12 w-12" /></span>
             <p className="mt-5 font-display text-3xl font-black">Answer locked in</p>
-            <p className="quiz-bob mt-2 text-white/75">Were you fast enough…?</p>
+            {(() => {
+              const key = `${quiz.id}:${quiz.current}`;
+              const said = sure?.key === key ? sure.sure : null;
+              const tell = (v: boolean) => { setSure({ key, sure: v }); send("quiz-sure", { quiz: quiz.id, idx: quiz.current, by: myId || myName, name: myName, choice: mine.choice, sure: v }); };
+              return (
+                <div className="mt-4" role="group" aria-label="How sure are you?">
+                  <p className="font-bold text-white/85">How sure are you?</p>
+                  <div className="mt-2 flex justify-center gap-2">
+                    <button type="button" onClick={() => tell(true)} aria-pressed={said === true} className={`min-h-[48px] rounded-2xl px-5 font-black ${said === true ? "bg-white text-violet-700" : "bg-white/15"}`}>😎 Sure</button>
+                    <button type="button" onClick={() => tell(false)} aria-pressed={said === false} className={`min-h-[48px] rounded-2xl px-5 font-black ${said === false ? "bg-white text-violet-700" : "bg-white/15"}`}>🤔 Not sure</button>
+                  </div>
+                  {said == null && <p className="quiz-bob mt-2 text-sm text-white/70">Were you fast enough…?</p>}
+                </div>
+              );
+            })()}
           </div>
         </div>
       );
@@ -131,6 +147,7 @@ export default function QuizPlayer({ sessionId, myName, onState, onDismiss }: {
         {top}
         <div className="mt-2 flex items-start gap-3 rounded-2xl bg-white p-3 text-ink sm:mt-3 sm:p-4 [@media(max-height:520px)]:py-2">
           <p className="max-h-[30vh] flex-1 overflow-y-auto font-display text-lg font-black leading-snug [@media(max-height:520px)]:text-base">{q.q}</p>
+          <Speak text={`${q.q}. ${q.options.map((o, i) => `Option ${i + 1}: ${o}.`).join(" ")}`} />
           <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full font-black text-white ${left <= 5 ? "bg-red-500" : "bg-violet-600"}`} aria-label={`${left} seconds left`}>{left}</span>
         </div>
         <div className="mt-2 grid min-h-0 flex-1 auto-rows-fr grid-cols-2 gap-2 sm:mt-3 sm:gap-3 [@media(max-height:520px)]:grid-cols-4">

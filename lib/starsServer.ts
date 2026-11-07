@@ -19,7 +19,7 @@ export async function standings(hostId: string, sessionId: string, createdAt: st
     rowsOf<any>(admin.from("live_class_marks").select("session_id, student_id, name, mark, max_mark").in("session_id", ids).limit(20000)),
     rowsOf<any>(admin.from("live_quizzes").select("id, session_id").in("session_id", ids).limit(2000)),
     rowsOf<any>(admin.from("board_exams").select("id, session_id").in("session_id", ids).limit(2000)),
-    rowsOf<any>(admin.from("board_game_scores").select("session_id, student_id, name, correct").in("session_id", ids).limit(20000)),
+    rowsOf<any>(admin.from("board_game_scores").select("session_id, student_id, name, correct, game_id").in("session_id", ids).limit(20000)),
   ]);
   const quizSession = new Map(quizzes.map((q: any) => [q.id, q.session_id]));
   const examSession = new Map(exams.map((e: any) => [e.id, e.session_id]));
@@ -49,7 +49,7 @@ export async function termRows(hostId: string, days: number): Promise<TermRows> 
     rowsOf<any>(admin.from("live_class_marks").select("session_id, student_id, name, mark, max_mark").in("session_id", ids).limit(20000)),
     rowsOf<any>(admin.from("live_quizzes").select("id, session_id, questions, status, current").in("session_id", ids).limit(2000)),
     rowsOf<any>(admin.from("board_exams").select("id, session_id").in("session_id", ids).limit(2000)),
-    rowsOf<any>(admin.from("board_game_scores").select("session_id, student_id, name, correct").in("session_id", ids).limit(20000)),
+    rowsOf<any>(admin.from("board_game_scores").select("session_id, student_id, name, correct, game_id").in("session_id", ids).limit(20000)),
   ]);
   const quizSession = new Map(quizzes.map((q: any) => [q.id, q.session_id]));
   const examSession = new Map(exams.map((e: any) => [e.id, e.session_id]));

@@ -15,7 +15,7 @@ export type StarRows = {
   marks: { session_id: string; student_id: string; name: string; mark: number | null; max_mark: number }[];
   quiz: { session_id: string; student_id: string; correct: boolean }[];
   exams: { session_id: string; student_id: string; name: string; score: number | null; total: number | null }[];
-  games: { session_id: string; student_id: string; name: string; correct: number }[];
+  games: { session_id: string; student_id: string; name: string; correct: number; game_id?: string }[];
 };
 export type Badge = { id: string; icon: string; label: string };
 export const BADGES: Record<string, Badge> = {
@@ -33,6 +33,8 @@ export type Standing = { key: string; name: string; stars: number; classStars: n
 export const nameKey = (name: string) => name.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 60);
 export const examStars = (score: number | null, total: number | null) => (score != null && total ? Math.min(5, Math.floor((score / total) * 5 + 1e-9)) : 0);
 export const gameStars = (correct: number) => Math.min(3, Math.floor(Math.max(0, correct) / 5));
+// "Fix my mistakes" practice earns 1 star per right answer (up to 10); a game round up to 3.
+export const roundStars = (g: { correct: number; game_id?: string }) => (g.game_id === "practice" ? Math.min(10, Math.max(0, Math.round(g.correct))) : gameStars(g.correct));
 
 // `current`: this class's id, for "stars this class".
 export function leaderboard(rows: StarRows, current: string | null): Standing[] {
@@ -60,7 +62,7 @@ export function leaderboard(rows: StarRows, current: string | null): Standing[] 
   for (const q of rows.quiz) { const p = get(q.student_id); if (p && q.correct) { p.quizRight++; add(p, q.session_id, 1, "quiz"); } }
   for (const m of rows.marks) { const p = get(m.student_id); if (p && m.mark != null) { add(p, m.session_id, m.mark, "work"); if (m.mark >= m.max_mark) p.fullMarks++; } }
   for (const e of rows.exams) { const p = get(e.student_id); if (p) { add(p, e.session_id, examStars(e.score, e.total), "exams"); if (e.total && e.score === e.total) p.perfect = true; } }
-  for (const g of rows.games) { const p = get(g.student_id); if (p) { p.rounds++; add(p, g.session_id, gameStars(g.correct), "games"); } }
+  for (const g of rows.games) { const p = get(g.student_id); if (p) { p.rounds++; add(p, g.session_id, roundStars(g), "games"); } }
 
   return [...people.values()].map((p) => {
     const b: Badge[] = [];

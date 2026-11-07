@@ -1,7 +1,9 @@
 "use client";
+import { Speak } from "@/components/live/Reading";
 import { useClassScale } from "@/lib/classScale";
 import { useEffect, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
+import { confidence } from "@/lib/confidence";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
 import { localPoint } from "@/components/live/board/rotation";
 import { MARK_CHOICES, MAX_ANSWER_TEXT, MAX_NOTE, MAX_PHOTOS, TIME_LIMITS, anonLabel, answerSummary, canEdit, cleanAnswerStrokes, cleanAnswerText, cleanImgs, cleanNote, cleanRound, hasAnswered, shareOut, taskFor, timeLeft, type Answer, type AnswerMode, type Round, type Task } from "@/lib/answerBoards";
@@ -62,6 +64,8 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
   const photosRef = useRef(photos); photosRef.current = photos;
   const [done, setDone] = useKeptState<boolean>(keep, k("done"), false); // handed in
   const doneRef = useRef(done); doneRef.current = done;
+  const [sure, setSure] = useKeptState<boolean | null>(keep, k("sure"), null); // confidence check: "sure" / "not sure"
+  const sureRef = useRef(sure); sureRef.current = sure;
   const backSeen = useKeptRef(keep, k("backSeen"), 0);
   const [sentBack, setSentBack] = useKeptState<boolean>(keep, k("sentBack"), false);
   const now = useServerClock()();
@@ -80,7 +84,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
       if (!r || !r.open) { setRound(null); return; }
       if (roundRef.current?.id !== r.id) {
         setMine([]); mineRef.current = []; setTyped(""); typedRef.current = ""; setPhotos([]); photosRef.current = []; version.current = 0; setHidden(false);
-        setDone(false); doneRef.current = false; backSeen.current = 0; setSentBack(false);
+        setDone(false); doneRef.current = false; backSeen.current = 0; setSentBack(false); setSure(null); sureRef.current = null;
         setWay(r.mode === "type" ? "type" : "draw");
       }
       // Sent back to try again: unlock it, once for each send-back.
@@ -101,7 +105,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
         if (old && old.v >= v) return cur;
         if (!order.current.includes(p.by)) order.current.push(p.by);
         const next = new Map(cur);
-        next.set(p.by, { by: p.by, name: String(p.name ?? "Learner").slice(0, 60), strokes: cleanAnswerStrokes(p.strokes), text: cleanAnswerText(p.text), imgs: cleanImgs(p.imgs, p.img), done: !!p.done, v, at: Date.now() });
+        next.set(p.by, { by: p.by, name: String(p.name ?? "Learner").slice(0, 60), strokes: cleanAnswerStrokes(p.strokes), text: cleanAnswerText(p.text), imgs: cleanImgs(p.imgs, p.img), done: !!p.done, sure: p.sure === true ? true : p.sure === false ? false : null, v, at: Date.now() });
         return next;
       });
     },
@@ -130,7 +134,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
       return;
     }
     lastSent.current = now;
-    send("ab-answer", { round: r.id, by: myId, name: myName, v: version.current, strokes: mineRef.current, text: typedRef.current, imgs: photosRef.current, done: doneRef.current });
+    send("ab-answer", { round: r.id, by: myId, name: myName, v: version.current, strokes: mineRef.current, text: typedRef.current, imgs: photosRef.current, done: doneRef.current, sure: sureRef.current });
   };
   useEffect(() => {
     if (host || !round) return;
@@ -231,6 +235,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
             <div className="min-w-0 flex-1">
               <p className="text-base font-black">Answer boards</p>
               {round && <p className="truncate text-xs font-bold text-ink/55">{round.q || "No question — learners answer what you ask out loud"} · {answered} of {online.length || list.length} answered · {handedIn} handed in · {Object.keys(round.marks).length} marked (out of {round.max})</p>}
+              {round && <SureLine answers={list} marks={round.marks} max={round.max} labelFor={labelFor} />}
             </div>
             {round && (
               <label className="flex items-center gap-2 text-xs font-black text-ink/70">
@@ -338,6 +343,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                         <span className="min-w-0 truncate">{labelFor(a)}</span>
                         {showing && <span className="rounded bg-amber-400 px-1.5 text-[10px] text-ink">On screen</span>}
                         {a.done && <span className="shrink-0 rounded bg-emerald-100 px-1.5 text-[10px] text-emerald-800">Handed in</span>}
+                        {a.sure != null && <span className="shrink-0 text-[12px]" title={a.sure ? "Said they're sure" : "Said they're not sure"} aria-label={a.sure ? "Sure" : "Not sure"}>{a.sure ? "😎" : "🤔"}</span>}
                         {round.notes[a.by] && <span className="shrink-0 text-[11px]" title={round.notes[a.by]} aria-label="Feedback given">💬</span>}
                         <MarkButtons who={labelFor(a)} max={round.max} mark={round.marks[a.by]} onMark={(m) => giveMark(a, m)} />
                       </div>
@@ -408,7 +414,10 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-[11px] font-black uppercase tracking-wider text-[#0E6E72]">{round.mode === "type" ? "Type your answer" : round.mode === "draw" ? "Answer on your board" : "Draw or type your answer"}</p>
-            <p className="text-lg font-black leading-snug">{task.q || "Answer the tutor’s question"}</p>
+            <div className="flex items-start gap-2">
+              <p className="flex-1 text-lg font-black leading-snug">{task.q || "Answer the tutor’s question"}</p>
+              {task.q && <Speak text={task.q} />}
+            </div>
             {round.per[myId] && <p className="text-xs font-bold text-ink/50">This class work is just for you</p>}
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
@@ -467,8 +476,17 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
             {!round.closed && !timeUp && <button type="button" onClick={() => handIn(false)} className="ml-auto min-h-[40px] rounded-xl bg-white px-3 text-xs font-black text-ink/70 ring-1 ring-emerald-200">Change my answer</button>}
           </div>
         ) : edit && (
-          <button type="button" onClick={() => handIn(true)} disabled={!something}
-            className="min-h-[48px] rounded-xl bg-emerald-600 px-5 text-sm font-black text-white shadow disabled:opacity-40">✅ Hand in my work</button>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-black text-ink/60" id="ab-sure">How sure are you?</span>
+            <span className="flex gap-1" role="group" aria-labelledby="ab-sure">
+              {([[true, "😎 Sure"], [false, "🤔 Not sure"]] as const).map(([v, l]) => (
+                <button key={l} type="button" aria-pressed={sure === v} onClick={() => { const n = sure === v ? null : v; setSure(n); sureRef.current = n; version.current++; sendMine(true); }}
+                  className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 ${sure === v ? "bg-[#0E6E72] text-white ring-[#0E6E72]" : "bg-white text-ink/70 ring-slate-200"}`}>{l}</button>
+              ))}
+            </span>
+            <button type="button" onClick={() => handIn(true)} disabled={!something}
+              className="ml-auto min-h-[48px] rounded-xl bg-emerald-600 px-5 text-sm font-black text-white shadow disabled:opacity-40">✅ Hand in my work</button>
+          </div>
         )}
         {round.mode === "both" && way === "type" && mine.length > 0 && <p className="text-xs font-bold text-ink/50">Your drawing is kept too — your tutor sees both.</p>}
         {round.mode === "both" && way === "draw" && typed.trim() && <p className="text-xs font-bold text-ink/50">Your typed answer is kept too — your tutor sees both.</p>}
@@ -657,5 +675,20 @@ function Pad({ strokes, by, bg, locked = false, onChange, onDone }: { strokes: S
         <span className="ml-auto text-xs font-bold text-emerald-700">{strokes.length ? "✓ Your tutor can see this" : "Draw or write your answer"}</span>
       </div>)}
     </div>
+  );
+}
+
+// Confidence check, once answers are marked: who was sure but got it wrong
+// (a misconception), and who was right but not sure (lib/confidence).
+function SureLine({ answers, marks, max, labelFor }: { answers: Answer[]; marks: Record<string, number>; max: number; labelFor: (a: Answer) => string }) {
+  const said = answers.filter((a) => a.sure != null && marks[a.by] != null);
+  if (!said.length) return null;
+  const c = confidence(said.map((a) => ({ by: a.by, right: marks[a.by] * 2 >= max, sure: !!a.sure })));
+  const names = (ids: string[]) => ids.map((id) => labelFor(answers.find((a) => a.by === id)!)).join(", ");
+  return (
+    <p className="mt-0.5 text-xs font-bold text-ink/70">
+      <span title="Right and sure">✅ {c.knew.length}</span> · <span title="Right but not sure">🎲 {c.lucky.length}</span> · <span title="Unsure and wrong">🤔 {c.unsure.length}</span>
+      {c.misconception.length > 0 && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-amber-900">⚠️ Sure but wrong: {names(c.misconception)}</span>}
+    </p>
   );
 }

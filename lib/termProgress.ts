@@ -3,7 +3,7 @@
 // improving. Pure: the server gathers the rows (lib/starsServer.ts), this adds
 // them up. Board learners have no accounts, so one learner is matched by name
 // across classes (lib/stars.ts nameKey).
-import { examStars, gameStars, leaderboard, nameKey, type Badge, type StarRows } from "@/lib/stars";
+import { examStars, roundStars, leaderboard, nameKey, type Badge, type StarRows } from "@/lib/stars";
 
 export type TermRows = StarRows & {
   titles: Record<string, string>;            // session id → class title
@@ -76,7 +76,7 @@ export function termProgress(rows: TermRows, who: string, days: number): TermPro
     const exam: [number, number] | null = es.length ? [es.reduce((a, e) => a + (e.score ?? 0), 0), es.reduce((a, e) => a + (e.total ?? 0), 0)] : null;
     const stars = !attended ? 0 : 1 + right + ms.reduce((a, m) => a + Math.max(0, m.mark ?? 0), 0)
       + es.reduce((a, e) => a + examStars(e.score, e.total), 0)
-      + games.filter((g) => g.session_id === s.id).reduce((a, g) => a + gameStars(g.correct), 0);
+      + games.filter((g) => g.session_id === s.id).reduce((a, g) => a + roundStars(g), 0);
     return { id: s.id, at: s.at, title: rows.titles[s.id] || "Class", attended, work, quiz: quizPart, exam, percent: attended ? sumPct([work, quizPart, exam]) : null, stars };
   });
 

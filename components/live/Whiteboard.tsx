@@ -22,6 +22,7 @@ import ExamMode from "@/components/live/board/ExamMode";
 import Leaderboard from "@/components/live/board/Leaderboard";
 import PulsePoll from "@/components/live/board/PulsePoll";
 import GroupBoards from "@/components/live/board/GroupBoards";
+import AskTeacher from "@/components/live/board/AskTeacher";
 import dynamic from "next/dynamic";
 import LessonPicker from "@/components/live/board/LessonPicker";
 import Roster, { type RosterProps } from "@/components/live/board/Roster";
@@ -206,6 +207,8 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const [examOpen, setExamOpen] = useState(false);
   const [starsOpen, setStarsOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);   // private questions (components/live/board/AskTeacher)
+  const [askCount, setAskCount] = useState(0);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [labOpen, setLabOpen] = useState(false);
   // State of the class panels (answer boards, lab) that must survive the board
@@ -1427,6 +1430,10 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
               <button type="button" onClick={() => setPollOpen(true)} className={`${btn} ${pollOpen ? on : idle}`} title="Ask a quick question — learners tap a choice" aria-label="Quick poll">
                 <BoardIcon name="poll" />{full ? "" : "Poll"}
               </button>
+              <button type="button" onClick={() => setAskOpen(true)} className={`${btn} relative ${askOpen ? on : idle}`} title="Questions learners asked you privately" aria-label={`Private questions${askCount ? `, ${askCount} waiting` : ""}`}>
+                <span aria-hidden className="text-base leading-none">🙋</span>{full ? "" : "Questions"}
+                {askCount > 0 && <span aria-hidden className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#C2451C] px-1 text-[11px] font-black text-white">{askCount}</span>}
+              </button>
               <button type="button" onClick={() => setGroupsOpen(true)} className={`${btn} ${groupsOpen ? on : idle}`} title="Split the class into groups, each with its own board" aria-label="Group boards">
                 <BoardIcon name="groups" />{full ? "" : "Groups"}
               </button>
@@ -1481,6 +1488,12 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
           className={`${btn} ${hand.up ? "bg-amber-400 text-ink ring-2 ring-amber-500" : full ? "bg-amber-400/20 text-amber-200 ring-1 ring-amber-300/60" : "bg-amber-50 text-amber-900 ring-1 ring-amber-300"}`}
           title={hand.up ? "Your hand is up — tap to lower it" : "Raise your hand"} aria-label={hand.up ? "Lower my hand" : "Raise my hand"}>
           <span aria-hidden className="text-base leading-none">✋</span>{full ? "" : hand.up ? "Hand up" : "Raise hand"}
+        </button>
+      )}
+      {hand && !readOnly && sessionId && (
+        <button type="button" onClick={() => setAskOpen(true)} className={`${btn} ${full ? "bg-white/10 text-white ring-1 ring-white/25" : "bg-[#E2F3F2] text-[#0A4F52] ring-1 ring-[#A9D6D3]"}`}
+          title="Ask your teacher a question only they can see" aria-label="Ask my teacher privately">
+          <span aria-hidden className="text-base leading-none">🙋</span>{full ? "" : "Ask privately"}
         </button>
       )}
       <button type="button" onClick={toggleFull} className={`${btn} ${full ? "bg-white text-ink" : on}`} title={full ? "Exit full screen (Esc)" : "Full screen (F)"} aria-label={full ? "Exit full screen" : "Full screen"}><BoardIcon name={full ? "shrink" : "expand"} />{full ? "" : "Full screen"}</button>
@@ -1548,6 +1561,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
         )}
         {lessonsOpen && <LessonPicker current={() => ({ board: { v: 2, pages: pages.current, paper: papersRef.current, bg: bgsRef.current }, widgets: widgetsRef.current })}
           onOpen={applyLesson} onClose={() => setLessonsOpen(false)} notify={setNotice} />}
+        {!readOnly && !lessonId && sessionId && <AskTeacher host={host} myId={myId} myName={myName} open={askOpen} onClose={() => setAskOpen(false)} onCount={setAskCount} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <PulsePoll host={host} myId={myId} myName={myName} people={people} pollOpen={pollOpen} onPollOpen={() => setPollOpen(true)} onPollClose={() => setPollOpen(false)} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <GroupBoards host={host} myId={myId} myName={myName} people={people} open={groupsOpen} onOpen={() => setGroupsOpen(true)} onClose={() => setGroupsOpen(false)} onBring={addBoardPage} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <Leaderboard sessionId={sessionId} host={host} myName={myName} open={starsOpen} onClose={() => setStarsOpen(false)} />}

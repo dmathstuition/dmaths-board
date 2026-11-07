@@ -67,7 +67,7 @@ test("a ready-made quiz launches as a live quiz", async ({ browser }) => {
   // The class moves to the live quiz.
   await expect(teacher.getByRole("tab", { name: /Live quiz/ })).toHaveAttribute("aria-selected", "true");
   // The quiz tab lists the ready-made quizzes too.
-  await expect(teacher.getByText(/Ready-made quizzes — early years/)).toBeVisible();
+  await expect(teacher.getByText("Ready-made quizzes", { exact: true })).toBeVisible();
 });
 
 test("upper-school maths games: the teacher picks one for SSS and learners play it", async ({ browser }) => {

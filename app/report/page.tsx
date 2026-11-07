@@ -55,6 +55,14 @@ export default async function ClassReportPage({ searchParams }: { searchParams: 
             <div className="mt-3"><ResultsBreakdown d={r} /></div>
           </details>
         )}
+        <div className="rounded-2xl border border-dmb-rule p-4">
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-dmb-board">Keep learning</p>
+          <p className="mt-1 text-sm text-dmb-muted">Practise the questions you missed with similar new ones and the working shown — and earn stars. Or revise the lesson with flashcards.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link href={`/practice?t=${encodeURIComponent(searchParams.t ?? "")}`} className="dmb-btn">🔁 Fix my mistakes</Link>
+            <Link href={`/flashcards?t=${encodeURIComponent(searchParams.t ?? "")}`} className="dmb-btn-ghost">📇 Flashcards</Link>
+          </div>
+        </div>
         {link.h && (
           <div className="rounded-2xl bg-dmb-penSoft p-4">
             <p className="text-xs font-bold uppercase tracking-[.14em] text-dmb-pen">Homework</p>
