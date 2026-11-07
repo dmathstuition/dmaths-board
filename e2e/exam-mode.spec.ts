@@ -40,6 +40,11 @@ function examServer() {
       ].slice(0, b.count) } });
       if (b.action === "create") { exam = { id: "exam-1", title: b.title, minutes: b.minutes, review: b.review, calculator: b.calculator !== false, inOrder: b.inOrder === true, status: "open", endsAt: Date.now() + b.minutes * 60_000, questions: cleanExamQuestions(b.questions) }; return r.fulfill({ json: { id: exam.id } }); }
       if (b.action === "close") { close(); return r.fulfill({ json: { ok: true } }); }
+      if (b.action === "wipe-paper") {
+        const n = exam!.questions.filter((q) => q.img).length;
+        exam!.questions = exam!.questions.map(({ img: _img, ...q }) => q);
+        return r.fulfill({ json: { ok: true, removed: n, kept: 0 } });
+      }
       if (b.action === "page-view" || b.action === "mark") {
         const t = entries.get(b.studentId)!;
         if (b.action === "page-view") { const pa = cleanPageAnswer(t.answers[String(b.n)]); return r.fulfill({ json: { ...pa, done: true, mark: t.marks?.[String(b.n)] ?? null } }); }
@@ -356,4 +361,13 @@ test("a paper the teacher marks by hand: learners write page by page, each page 
   await expect(panel.getByRole("cell", { name: /5 \/ 5/ })).toBeVisible({ timeout: 15_000 });
   await expect(exam.getByText("5 / 5")).toBeVisible({ timeout: 20_000 });
   await expect(exam.getByText(/marked every page/)).toBeVisible();
+
+  // Marking done: end the exam and delete the uploaded paper. The marks stay.
+  await panel.getByRole("button", { name: "End exam" }).click();
+  await panel.getByRole("button", { name: "🗑 Delete the paper (2 pages)" }).click();
+  await expect(panel.getByText(/The paper is deleted \(2 pages\)\. Marks and scores are kept\./)).toBeVisible({ timeout: 15_000 });
+  await expect(panel.getByRole("button", { name: /Delete the paper/ })).toHaveCount(0);
+  await expect(panel.getByRole("cell", { name: /5 \/ 5/ })).toBeVisible();
+  await desk.getByRole("button", { name: "Emmanuel, page 2: 3 of 3" }).click();
+  await expect(desk.getByText(/pages were deleted — only what was typed is left/)).toBeVisible();
 });

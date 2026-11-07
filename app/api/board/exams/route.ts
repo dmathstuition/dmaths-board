@@ -4,6 +4,7 @@ import { sessionViewer } from "@/lib/sessionAccess";
 import { rateLimit } from "@/lib/ratelimit";
 import { AI_EXAM_SYSTEM, GRACE_MS, aiExamPrompt, cleanAiExam, cleanExamQuestions, cleanGiven, cleanPageAnswer, cleanPageMarks, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, pageBlank, pageDone, pagesToMark, shownQ, slimAnswers, type ExamQ } from "@/lib/exams";
 import { aiChat, aiErrorResponse, extractJson } from "@/lib/ai";
+import { removeSlidePictures } from "@/lib/slideStore";
 
 // Exam mode (supabase/migration-exams-stars.sql). Each learner takes the test
 // on their own phone, in their own order; the answers stay on the server
@@ -19,6 +20,8 @@ import { aiChat, aiErrorResponse, extractJson } from "@/lib/ai";
 //        { action: "page-done", examId, n }       hand in page n: it's locked   (learner)
 //        { action: "mark", examId, studentId, n, mark }   the teacher's mark for a page (null clears)
 //        { action: "page-view", examId, studentId, n }    a learner's page, writing and all (teacher)
+//        { action: "wipe-paper", examId }         once it's over: delete the paper's pages from
+//                                                 storage and the writing on them (marks and scores stay)
 // Papers marked by hand: learners write on each page and hand it in; the
 // teacher's marks (board_exam_entries.page_marks) add up to the score.
 export const dynamic = "force-dynamic";
@@ -181,6 +184,35 @@ export async function POST(req: Request) {
     if (!e) return bad("That exam isn't there any more.", 404);
     const v = await sessionViewer(e.session_id).catch(() => null);
     if (!v) return bad("Join the class first.", 403);
+
+    if (action === "wipe-paper") {
+      if (!v.host) return bad("Only the teacher can delete the paper.", 403);
+      if (e.status === "open" && !over(e)) return bad("End the exam first, then delete the paper.", 409);
+      if (!rateLimit(`exam-wipe:${v.id}`, 10, 60_000)) return bad("Wait a minute.", 429);
+      if (e.status === "open") await closeExam(e);
+      const urls = e.questions.map((q) => q.img).filter(Boolean) as string[];
+      // The pictures go first: if storage refuses, nothing else changes and the teacher can try again.
+      const gone = await removeSlidePictures(urls, e.session_id.replace(/[^a-z0-9-]/gi, "").slice(0, 48), { examId: e.id });
+      if (gone.error) return bad(`Storage refused: ${gone.error}`, 502);
+      // The writing on the pages goes too (it can't be shown without them); whether a
+      // page was blank, its typed answers, and every mark stay for the results.
+      const { data: rows } = await admin.from("board_exam_entries").select("student_id, answers").eq("exam_id", e.id).limit(1000);
+      for (const r of (rows ?? []) as Pick<EntryRow, "student_id" | "answers">[]) {
+        let changed = false;
+        const answers = { ...(r.answers ?? {}) };
+        e.questions.forEach((q, i) => {
+          const a = answers[String(i)] as any;
+          if (q.kind !== "page" || !a || typeof a !== "object" || !Array.isArray(a.ink) || !a.ink.length) return;
+          answers[String(i)] = { ink: [], text: String(a.text ?? ""), done: a.done ?? null, blank: pageBlank(a), wiped: true };
+          changed = true;
+        });
+        if (changed) await admin.from("board_exam_entries").update({ answers }).eq("exam_id", e.id).eq("student_id", r.student_id);
+      }
+      const questions = e.questions.map(({ img: _img, ...q }) => q);
+      const { error } = await admin.from("board_exams").update({ questions }).eq("id", e.id);
+      if (error) return dbFail(error.message);
+      return NextResponse.json({ ok: true, removed: gone.removed, kept: gone.kept });
+    }
 
     if (action === "close" || action === "extend") {
       if (!v.host) return bad("Only the teacher can do that.", 403);

@@ -204,7 +204,8 @@ export function MarkingDesk({ examId, questions, entries, api, reload, running }
       ) : (
         <div className="mt-2 grid gap-3 lg:grid-cols-[1fr_260px]">
           <div className="max-h-[70vh] overflow-auto rounded-xl bg-white ring-1 ring-orange-200">
-            {view?.k === curKey ? <PageCanvas src={q!.img!} ink={view.ink} zoom={zoom} label={`${who?.name ?? "Learner"}'s ${q!.q}`} />
+            {view?.k === curKey && !q!.img ? <p className="p-6 text-center text-sm font-bold text-ink/55">The paper&apos;s pages were deleted — only what was typed is left.</p>
+              : view?.k === curKey ? <PageCanvas src={q!.img!} ink={view.ink} zoom={zoom} label={`${who?.name ?? "Learner"}'s ${q!.q}`} />
               : <p className="p-6 text-center text-sm font-bold text-ink/50">Opening the page…</p>}
           </div>
           <div className="grid content-start gap-2">

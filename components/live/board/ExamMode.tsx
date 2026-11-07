@@ -84,6 +84,8 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   const [satsNote, setSatsNote] = useState<string | null>(null);
   const [paperPages, setPaperPages] = useState<(string | null)[]>([]);
   const [paperBusy, setPaperBusy] = useState(false);
+  const [wiping, setWiping] = useState(false); // deleting a finished exam's paper
+  const [wiped, setWiped] = useState<string | null>(null);
   // How an uploaded paper is marked: by the teacher, page by page (learners write
   // on the pages), or with answer boxes marked automatically.
   const [paperMode, setPaperMode] = useState<"hand" | "auto">("hand");
@@ -179,6 +181,29 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
     setBuilding(false); tell(j.id); await reload();
     if (j.note) setNote(j.note);
   }
+  // Once it's over (and marked): delete the uploaded paper's pages. Marks and scores stay.
+  async function wipePaper() {
+    if (!exam?.questions) return;
+    const pages = exam.questions.filter((q) => q.img).length;
+    const left = entries.reduce((a, e) => a + (e.toMark?.length ?? 0), 0);
+    if (!window.confirm(`${left ? `⚠ ${left} page${left === 1 ? " is" : "s are"} still not marked — you won't be able to see ${left === 1 ? "it" : "them"} after this.\n\n` : ""}Delete this paper's ${pages} page${pages === 1 ? "" : "s"} for good? What learners wrote on them goes too. Their marks, scores and reports stay.`)) return;
+    setWiping(true); setNote(null);
+    const { ok, j } = await api({ action: "wipe-paper", examId: exam.id });
+    setWiping(false);
+    if (!ok) { setNote(j.error ?? "Couldn't delete the paper — try again."); return; }
+    setPaperPages((cur) => cur.filter((u) => !exam.questions!.some((q) => q.img === u)));
+    await reload();
+    setNote(null); setWiped(`✓ The paper is deleted (${j.removed ?? pages} page${(j.removed ?? pages) === 1 ? "" : "s"}). Marks and scores are kept.`);
+  }
+  // Pages uploaded in the builder but not wanted: delete them (pages a started exam uses are kept).
+  async function dropUploaded() {
+    const urls = paperPages.filter((u): u is string => !!u);
+    if (!urls.length || !window.confirm(`Delete these ${urls.length} uploaded pages?`)) return;
+    setQs((cur) => cur.filter((q) => !q.img || !urls.includes(q.img)));
+    setPaperPages([]); setSatsNote("Uploaded pages deleted.");
+    await fetch("/api/live-sessions/slides", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, urls }) }).catch(() => {});
+  }
+
   async function act(action: "close" | "extend", extra: object = {}) {
     if (!exam) return;
     if (action === "close" && !window.confirm("End the exam now? Every paper is handed in and marked.")) return;
@@ -276,6 +301,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
               {satsNote && <p role="status" className={`mt-2 text-xs font-bold ${satsNote.startsWith("✓") ? "text-[#0A4F52]" : "text-ink/70"}`}>{satsNote}</p>}
               {paperPages.length > 0 && (
                 <div className="mt-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="How is this paper marked?">
+                  <button type="button" onClick={dropUploaded} className="order-last ml-auto min-h-[36px] rounded-lg px-2 text-xs font-black text-red-700 hover:bg-red-50">🗑 Delete these pages</button>
                   <span className="text-xs font-black text-ink/60">Marking:</span>
                   <button type="button" onClick={() => setPaperMode("hand")} aria-pressed={paperMode === "hand"} className={`min-h-[36px] rounded-lg px-3 text-xs font-black ring-1 ${paperMode === "hand" ? "bg-[#0A4F52] text-white ring-[#0A4F52]" : "bg-white text-[#0A4F52] ring-[#A9D6D3]"}`}>✍️ I mark each page myself</button>
                   <button type="button" onClick={() => setPaperMode("auto")} aria-pressed={paperMode === "auto"} className={`min-h-[36px] rounded-lg px-3 text-xs font-black ring-1 ${paperMode === "auto" ? "bg-[#0A4F52] text-white ring-[#0A4F52]" : "bg-white text-[#0A4F52] ring-[#A9D6D3]"}`}>⚡ Answer boxes, marked automatically</button>
@@ -449,6 +475,15 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                   </select>
                 </label>
                 {running && <span className="text-xs font-semibold text-ink/55">Reports made now show the papers so far — download again when the exam ends.</span>}
+              </div>
+            )}
+            {wiped && <p role="status" className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{wiped}</p>}
+            {!running && exam?.questions?.some((q) => q.img) && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                <p className="mr-auto text-xs font-bold text-ink/65">Finished marking? Delete the uploaded paper — the marks, scores and reports stay.</p>
+                <button type="button" onClick={wipePaper} disabled={wiping} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50">
+                  {wiping ? "Deleting…" : `🗑 Delete the paper (${exam.questions.filter((q) => q.img).length} pages)`}
+                </button>
               </div>
             )}
           </div>
