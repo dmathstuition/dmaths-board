@@ -27,9 +27,19 @@ export type LabEntry = {
   emoji: string;
   level: string;        // who it's pitched at
   status?: LabStatus;   // omit for a normal live experiment
+  practical?: boolean;  // a hands-on practical on the lab bench (components/lab/bench)
 };
 
 export const LAB: LabEntry[] = [
+  // ── Virtual practicals: real apparatus on a lab bench, step by step ──
+  { slug: "practical-titration", title: "Titration (Bench Practical)", subject: "chemistry", emoji: "🧪", level: "SS 1 – SS 3", status: "new", practical: true,
+    blurb: "Fill a burette, pipette the alkali, add indicator and titrate drop by drop to find an acid's concentration." },
+  { slug: "practical-food-tests", title: "Food Tests (Bench Practical)", subject: "biology", emoji: "🍞", level: "JSS 2 – SS 2", status: "new", practical: true,
+    blurb: "Benedict's in a water bath, iodine on a spotting tile and biuret — record each result and identify what milk contains." },
+  { slug: "practical-ohms-law", title: "Ohm's Law (Bench Practical)", subject: "physics", emoji: "🔌", level: "JSS 3 – SS 3", status: "new", practical: true,
+    blurb: "Wire in an ammeter and voltmeter, set the power supply from 1 to 6 V, read the meters and find the resistance." },
+  { slug: "practical-osmosis", title: "Osmosis (Bench Practical)", subject: "biology", emoji: "🥔", level: "SS 1 – SS 3", status: "new", practical: true,
+    blurb: "Bore potato cylinders, weigh them, soak them in sucrose, reweigh and find the isotonic point from your graph." },
   // ── Mathematics ──
   { slug: "probability", title: "Probability Lab", subject: "maths", emoji: "🎲", level: "JSS 1 – SS 3",
     blurb: "Flip coins, roll dice and spin spinners thousands of times — watch experiment meet theory." },

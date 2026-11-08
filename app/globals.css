@@ -800,6 +800,10 @@ html { scroll-behavior: smooth; }
 .elab-pop { animation: elabPop .35s cubic-bezier(.2, .9, .3, 1.2) both; }
 @keyframes elabDrip { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(70px); opacity: 0; } }
 .elab-drip { animation: elabDrip .6s ease-in both; }
+/* The lab bench (components/lab/bench): the outline on what to use next. */
+@keyframes benchPulse { 0%, 100% { stroke-opacity: 1; } 50% { stroke-opacity: .25; } }
+.bench-pulse { animation: benchPulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .bench-pulse { animation: none; } }
 @media (prefers-reduced-motion: reduce) {
   .elab-float, .elab-bubble, .elab-flow, .elab-pop, .elab-drip { animation: none; }
   .elab-card:hover { transform: none; }

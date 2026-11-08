@@ -93,3 +93,70 @@ for (const device of [
   await expect(lab).toBeHidden();
   await expect(p.getByRole("button", { name: "Exit full screen" })).toBeVisible(); // still in full screen
 });
+
+// A virtual practical on the lab bench, done by hand: drag the meters into the
+// circuit, switch on, turn the dial, read the ammeter and write it down.
+test("a bench practical: Ohm's law done step by step", async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await realtimeHub().attach(ctx, "teacher");
+  await classServer().attach(ctx, "teacher");
+  const p = await ctx.newPage();
+  await p.goto(`/e2e-host?id=${SID}`, { waitUntil: "networkidle" });
+  await agree(p);
+  await p.getByRole("button", { name: "Laboratory" }).click();
+  const lab = p.getByRole("dialog", { name: "Laboratory" });
+  await expect(lab.getByRole("region", { name: "Virtual practicals" })).toBeVisible();
+  await lab.getByRole("button", { name: /^Ohm's Law \(Bench/ }).click();
+  const bench = lab.getByRole("group", { name: /Lab bench/ });
+  await expect(bench).toBeVisible({ timeout: 30_000 });
+
+  // Drag the ammeter from the shelf into the gap in the circuit.
+  const from = (await bench.locator('[data-item="ammeter"]').boundingBox())!;
+  const to = (await bench.locator('[data-item="slotA"]').boundingBox())!;
+  await p.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(from.x + from.width / 2 - 20, from.y + from.height / 2 + 40, { steps: 4 });
+  await p.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 10 });
+  await p.mouse.up();
+  await expect(lab.getByRole("heading", { name: "Connect the voltmeter in parallel" })).toBeVisible();
+
+  // Or tap the voltmeter, then where it goes.
+  await bench.locator('[data-item="voltmeter"]').click();
+  await bench.getByRole("button", { name: /Put it on the leads/ }).click();
+  await lab.getByRole("button", { name: "Switch on" }).click();
+
+  // Turn the dial: the wrong value is pointed out; the right one is accepted.
+  const dial = lab.getByLabel("Power supply output");
+  await dial.fill("2");
+  await lab.getByRole("button", { name: "Done" }).click();
+  await expect(lab.getByRole("alert")).toContainText("turn it to 1 V");
+  await dial.fill("1");
+  await lab.getByRole("button", { name: "Done" }).click();
+
+  // Read the ammeter and write it in the notebook.
+  const field = lab.getByLabel("Current at 1.0 V");
+  await field.fill("5");
+  await lab.getByRole("button", { name: "Check" }).click();
+  await expect(lab.getByText(/tries left/)).toBeVisible();
+  const reading = (await bench.locator('[data-item="ammeter"] text').allTextContents()).find((t) => /^\d\.\d{3}$/.test(t))!;
+  await field.fill(reading);
+  await lab.getByRole("button", { name: "Check" }).click();
+  await expect(lab.getByText("✓ Right")).toBeVisible();
+  await expect(lab.getByRole("heading", { name: "Set the p.d. to 2.0 V" })).toBeVisible();
+
+  // The rest, done for us; then the results, graph and conclusion.
+  for (let i = 0; i < 40 && !(await lab.getByText("✓ Practical complete").isVisible()); i++) {
+    const doIt = lab.getByRole("button", { name: "Do this step for me" });
+    if (await doIt.isVisible()) await doIt.click();
+    else await lab.getByRole("button", { name: "Show me the answer" }).click();
+    await p.waitForTimeout(900);
+  }
+  await expect(lab.getByText("✓ Practical complete")).toBeVisible();
+  const notebook = lab.getByRole("complementary", { name: "Lab notebook" });
+  await expect(notebook.getByRole("tab", { name: "Results" })).toHaveAttribute("aria-selected", "true");
+  await expect(notebook.getByRole("img", { name: /Current against p\.d\./ })).toBeVisible();
+  await expect(notebook.getByText(reading)).toBeVisible();
+
+  // It goes on the board like any experiment.
+  await expect(lab.getByRole("button", { name: "Put the apparatus on the board" })).toBeEnabled();
+});

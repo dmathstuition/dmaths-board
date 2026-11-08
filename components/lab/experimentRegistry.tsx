@@ -11,7 +11,15 @@ const loading = () => (
   </div>
 );
 
+const bench = (name: "TitrationPractical" | "FoodTestsPractical" | "OhmsLawPractical" | "OsmosisPractical") =>
+  dynamic(() => import("@/components/lab/bench/Practicals").then((m) => m[name]), { loading });
+
 export const EXPERIMENTS: Record<string, ComponentType> = {
+  // Virtual practicals on the lab bench (components/lab/bench)
+  "practical-titration": bench("TitrationPractical"),
+  "practical-food-tests": bench("FoodTestsPractical"),
+  "practical-ohms-law": bench("OhmsLawPractical"),
+  "practical-osmosis": bench("OsmosisPractical"),
   probability: dynamic(() => import("@/components/lab/experiments/Probability"), { loading }),
   pythagoras: dynamic(() => import("@/components/lab/experiments/Pythagoras"), { loading }),
   statistics: dynamic(() => import("@/components/lab/experiments/Statistics"), { loading }),

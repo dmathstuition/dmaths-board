@@ -615,6 +615,70 @@ export const GUIDES: Record<string, LabGuide> = {
     ],
     conclusion: "Heart rate rises during exercise to supply the muscles with more oxygen and glucose. A fitter person's heart rate rises less and returns to resting more quickly.",
   },
+
+  // ── Virtual practicals on the lab bench (lib/lab/bench/practicals.ts) ──
+  "practical-titration": {
+    aim: "Find the concentration of hydrochloric acid by titrating it against twenty five cubic centimetres of point one molar sodium hydroxide.",
+    steps: [
+      "Drag the acid bottle onto the burette to fill it.",
+      "Read the burette in the close up, at the bottom of the meniscus, and write the initial reading in your notebook.",
+      "Fill the pipette with sodium hydroxide, then run it into the conical flask.",
+      "Add three drops of phenolphthalein. The alkali turns pink.",
+      "Put the flask on the white tile under the burette.",
+      "Hold the tap to run in acid. When the pink starts to linger, add one drop at a time until it just disappears.",
+      "Read the burette again, then work out the titre and the concentration.",
+    ],
+    tips: [
+      "Read the burette at eye level, at the bottom of the meniscus, to the nearest point zero five.",
+      "Do a rough titration first, then repeat until two titres agree within point one.",
+    ],
+    conclusion: "Moles of sodium hydroxide equal moles of acid at the end point, so the acid's concentration is the moles divided by the titre in cubic decimetres.",
+  },
+  "practical-food-tests": {
+    aim: "Test four foods for reducing sugar, starch and protein, and find what milk contains.",
+    steps: [
+      "Add Benedict's reagent to the four tubes, put them in the water bath and set it to eighty degrees.",
+      "Heat for five minutes and record which tubes changed from blue.",
+      "Add iodine to the spotting tile and record which foods turn blue black.",
+      "Add biuret reagent to the second rack and record which tubes turn purple.",
+      "Use your three results for food D to say what milk contains.",
+    ],
+    tips: [
+      "Use equal volumes of food and reagent in every tube so the test is fair.",
+      "Heat Benedict's in a water bath, never over a naked flame.",
+    ],
+    conclusion: "Glucose is a reducing sugar, starch turns iodine blue black, egg white is protein, and milk contains both a reducing sugar and protein.",
+  },
+  "practical-ohms-law": {
+    aim: "Find how the current through a resistor depends on the potential difference across it, and find its resistance.",
+    steps: [
+      "Drag the ammeter into the gap in the circuit, in series with the resistor.",
+      "Drag the voltmeter to the leads either side of the resistor, in parallel.",
+      "Switch on, set the power supply to one volt and record the current.",
+      "Repeat at two, three, four, five and six volts.",
+      "Switch off and look at the graph. Work out the resistance from a pair of readings.",
+    ],
+    tips: [
+      "Switch off between readings so the resistor stays cool.",
+      "Plot current against potential difference. A straight line through the origin shows they are proportional.",
+    ],
+    conclusion: "The current is proportional to the potential difference, so the resistor obeys Ohm's law, and its resistance is the potential difference divided by the current.",
+  },
+  "practical-osmosis": {
+    aim: "Find the concentration of sucrose solution with the same water potential as potato cells.",
+    steps: [
+      "Cut five potato cylinders with the cork borer.",
+      "Weigh them, then put one in each sucrose solution, from zero to point eight molar.",
+      "Leave them for an hour.",
+      "Blot them dry on the paper towel and weigh them again.",
+      "Work out the percentage change in mass and read where the graph crosses zero.",
+    ],
+    tips: [
+      "Blot every cylinder the same way, so surface water doesn't add to the mass.",
+      "Use percentage change, because the cylinders don't start with exactly the same mass.",
+    ],
+    conclusion: "Cylinders gain water in dilute solutions and lose water in concentrated ones. Where the line crosses zero, the solution has the same water potential as the potato cells.",
+  },
 };
 
 export const guideFor = (slug: string): LabGuide | null => GUIDES[slug] ?? null;

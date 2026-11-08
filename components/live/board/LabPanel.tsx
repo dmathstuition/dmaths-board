@@ -7,6 +7,7 @@ import { EXPERIMENTS } from "@/components/lab/experimentRegistry";
 import { LAB, SUBJECTS, type LabEntry, type LabSubject } from "@/lib/lab/catalog";
 import { BOARD_H, BOARD_W } from "@/lib/whiteboard";
 import { useKeptRef, useKeptState, type KeepStore } from "@/lib/keptState";
+import PracticalThumb from "@/components/lab/bench/Thumb";
 
 // The E-Laboratory on the board. The teacher picks an experiment and works it
 // live; "Put on the board" turns what it shows into a board page, so the
@@ -120,6 +121,9 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
   const list = useMemo(() => BOARD_LAB.filter((e) =>
     (subject === "all" || e.subject === subject) &&
     (!q.trim() || `${e.title} ${e.blurb}`.toLowerCase().includes(q.trim().toLowerCase()))), [subject, q]);
+  // The bench practicals come first, as big cards with a picture of the bench.
+  const practicals = list.filter((e) => e.practical);
+  const others = list.filter((e) => !e.practical);
 
   async function put(what: "apparatus" | "all") {
     const root = stage.current, entry = entryFor(slug);
@@ -239,8 +243,29 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search — e.g. pendulum" className="h-10 w-full rounded-xl bg-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-[#38BDF8]" />
               </label>
             </div>
-            <ul className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {list.map((e) => (
+            {practicals.length > 0 && (
+              <section className="mt-4" aria-label="Virtual practicals">
+                <p className="text-sm font-black">Virtual practicals <span className="font-semibold text-white/50">· real apparatus on a lab bench, done step by step</span></p>
+                <ul className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {practicals.map((e) => (
+                    <li key={e.slug}>
+                      <button type="button" onClick={() => setSlug(e.slug)} aria-label={e.title}
+                        className="flex h-full w-full flex-col overflow-hidden rounded-2xl bg-white/5 text-left ring-1 ring-white/15 transition hover:bg-white/10 hover:ring-white/40">
+                        <PracticalThumb slug={e.slug} />
+                        <span className="block p-3">
+                          <span className="block text-sm font-black">{e.title.replace(" (Bench Practical)", "")}</span>
+                          <span className="block text-[11px] font-bold" style={{ color: SUBJECTS[e.subject].color }}>{SUBJECTS[e.subject].label} · {e.level}</span>
+                          <span className="mt-0.5 line-clamp-2 block text-xs text-white/55">{e.blurb}</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {others.length > 0 && <p className="mt-5 text-sm font-black">Simulations</p>}
+              </section>
+            )}
+            <ul className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {others.map((e) => (
                 <li key={e.slug}>
                   <button type="button" onClick={() => setSlug(e.slug)} className="flex h-full w-full items-start gap-3 rounded-2xl bg-white/5 p-3 text-left ring-1 ring-white/10 transition hover:bg-white/10">
                     <span className="text-2xl" aria-hidden>{e.emoji}</span>
