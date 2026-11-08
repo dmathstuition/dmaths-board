@@ -20,5 +20,10 @@ do $$ begin
     alter table public.board_exams add column if not exists in_order boolean not null default false;
     -- Papers the teacher marks by hand, page by page: their marks, by page.
     alter table public.board_exam_entries add column if not exists page_marks jsonb not null default '{}'::jsonb;
+    -- Extra time for one learner (access arrangements), in milliseconds.
+    alter table public.board_exam_entries add column if not exists extra_ms integer not null default 0;
+    -- A spelling test: each learner's own words from earlier tests, added to their paper.
+    alter table public.board_exam_entries add column if not exists extra_qs jsonb;
+    alter table public.board_exams add column if not exists personal_words smallint not null default 0;
   end if;
 end $$;

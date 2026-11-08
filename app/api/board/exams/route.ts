@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { sessionViewer } from "@/lib/sessionAccess";
 import { rateLimit } from "@/lib/ratelimit";
-import { AI_EXAM_SYSTEM, GRACE_MS, aiExamPrompt, cleanAiExam, cleanExamQuestions, cleanGiven, cleanPageAnswer, cleanPageMarks, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, pageBlank, pageDone, pagesToMark, shownQ, slimAnswers, type ExamQ } from "@/lib/exams";
+import { AI_EXAM_SYSTEM, GRACE_MS, aiExamPrompt, cleanAiExam, cleanExamQuestions, cleanGiven, cleanPageAnswer, cleanPageMarks, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageBlank, pageDone, pagesToMark, shownQ, slimAnswers, teacherMax, workingKey, type ExamQ } from "@/lib/exams";
+import { isWarmUp, missedSpellings } from "@/lib/sats";
+import { nameKey } from "@/lib/stars";
 import { aiChat, aiErrorResponse, extractJson } from "@/lib/ai";
 import { removeSlidePictures } from "@/lib/slideStore";
 
@@ -22,18 +24,32 @@ import { removeSlidePictures } from "@/lib/slideStore";
 //        { action: "page-view", examId, studentId, n }    a learner's page, writing and all (teacher)
 //        { action: "wipe-paper", examId }         once it's over: delete the paper's pages from
 //                                                 storage and the writing on them (marks and scores stay)
+//        { action: "extra", examId, studentId, on }       extra time (25%) for one learner (teacher)
+//        { action: "working", examId, n, value }  working shown for a method mark (learner)
+//   GET  ?sessionId=&warmups=1      → the teacher's daily warm-ups, for the tracker
 // Papers marked by hand: learners write on each page and hand it in; the
-// teacher's marks (board_exam_entries.page_marks) add up to the score.
+// teacher's marks (board_exam_entries.page_marks) add up to the score — so do
+// method marks. Extra time: each learner's own deadline is ends_at + extra_ms,
+// and the exam stays open until the last one has passed. Personal spelling
+// words: board_exams.personal_words of each learner's earlier misses go on the
+// end of their test (board_exam_entries.extra_qs).
 export const dynamic = "force-dynamic";
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
 const MISSING = /board_exam/i;
 const dbFail = (msg: string) => MISSING.test(msg) ? bad("Exam mode needs supabase/migration-exams-stars.sql — run it in Supabase.", 501) : bad(msg, 500);
 
-type ExamRow = { id: string; session_id: string; title: string; questions: ExamQ[]; minutes: number; review: boolean; calculator?: boolean | null; in_order?: boolean | null; status: "open" | "closed"; created_at: string; ends_at: string; closed_at: string | null };
-type EntryRow = { exam_id: string; student_id: string; name: string; answers: Record<string, unknown>; flags: number; flag_log: { at: string; reason: string }[]; started_at: string; submitted_at: string | null; score: number | null; total: number | null; page_marks?: Record<string, number> | null };
-const marksOf = (e: ExamRow, r: EntryRow) => cleanPageMarks(e.questions, r.page_marks);
+type ExamRow = { host_id?: string | null; personal_words?: number | null; id: string; session_id: string; title: string; questions: ExamQ[]; minutes: number; review: boolean; calculator?: boolean | null; in_order?: boolean | null; status: "open" | "closed"; created_at: string; ends_at: string; closed_at: string | null };
+type EntryRow = { exam_id: string; student_id: string; name: string; answers: Record<string, unknown>; flags: number; flag_log: { at: string; reason: string }[]; started_at: string; submitted_at: string | null; score: number | null; total: number | null; page_marks?: Record<string, number> | null; extra_ms?: number | null; extra_qs?: ExamQ[] | null };
+// This learner's questions: everyone's, then their own spelling words.
+const qsFor = (e: ExamRow, r: EntryRow | null) => (r?.extra_qs?.length ? [...e.questions, ...cleanExamQuestions(r.extra_qs)] : e.questions);
+const marksOf = (e: ExamRow, r: EntryRow) => cleanPageMarks(qsFor(e, r), r.page_marks);
+const extraOf = (r: EntryRow | null) => Math.max(0, Math.round(Number(r?.extra_ms) || 0));
+const deadline = (e: ExamRow, r: EntryRow | null) => new Date(e.ends_at).getTime() + extraOf(r);
+const timeUp = (e: ExamRow, r: EntryRow | null, now = Date.now()) => e.status === "closed" || now > deadline(e, r) + GRACE_MS;
+const NEEDS_EXTRA = "Extra time needs the latest supabase/migration-learner-tools.sql — run it in Supabase once.";
 const NEEDS_MARKS = "Marking pages needs the latest supabase/migration-learner-tools.sql — run it in Supabase once.";
 
+// The main time is over: nobody new can start.
 const over = (e: ExamRow, now = Date.now()) => e.status === "closed" || now > new Date(e.ends_at).getTime() + GRACE_MS;
 
 async function latestExam(sessionId: string): Promise<ExamRow | null> {
@@ -46,41 +62,71 @@ async function examById(id: string): Promise<ExamRow | null> {
   if (error) throw new Error(error.message);
   return data as ExamRow | null;
 }
-// Mark every unsubmitted paper when time is up or the teacher ends the exam.
+async function handIn(e: ExamRow, row: EntryRow) {
+  const m = markPaper(qsFor(e, row), row.answers ?? {}, marksOf(e, row));
+  await supabaseAdmin().from("board_exam_entries").update({ submitted_at: new Date().toISOString(), score: m.score, total: m.total }).eq("exam_id", e.id).eq("student_id", row.student_id);
+  return m;
+}
+// The teacher ends the exam (or starts another): every paper is handed in and marked.
 async function closeExam(e: ExamRow) {
   const admin = supabaseAdmin();
   if (e.status !== "closed") await admin.from("board_exams").update({ status: "closed", closed_at: new Date().toISOString() }).eq("id", e.id);
   const { data } = await admin.from("board_exam_entries").select("*").eq("exam_id", e.id).is("submitted_at", null);
-  for (const row of (data ?? []) as EntryRow[]) {
-    const m = markPaper(e.questions, row.answers ?? {}, marksOf(e, row));
-    await admin.from("board_exam_entries").update({ submitted_at: new Date().toISOString(), score: m.score, total: m.total }).eq("exam_id", e.id).eq("student_id", row.student_id);
-  }
+  for (const row of (data ?? []) as EntryRow[]) await handIn(e, row);
   e.status = "closed";
+}
+// Time's up: hand in each paper whose own time (with any extra time) is over;
+// the exam ends when nobody has time left.
+async function settle(e: ExamRow, now = Date.now()) {
+  if (e.status !== "open" || !over(e, now)) return;
+  const { data } = await supabaseAdmin().from("board_exam_entries").select("*").eq("exam_id", e.id).is("submitted_at", null);
+  let left = 0;
+  for (const row of (data ?? []) as EntryRow[]) {
+    if (timeUp(e, row, now)) await handIn(e, row); else left++;
+  }
+  if (!left) await closeExam(e);
 }
 
 export async function GET(req: Request) {
-  const sessionId = new URL(req.url).searchParams.get("sessionId") ?? "";
+  const params = new URL(req.url).searchParams;
+  const sessionId = params.get("sessionId") ?? "";
   const v = await sessionViewer(sessionId).catch(() => null);
   if (!v) return bad("Join the class first.", 403);
   try {
+    // The teacher's daily warm-ups (any class of theirs), for the tracker.
+    if (params.get("warmups") === "1") {
+      if (!v.host) return bad("Only the teacher can see this.", 403);
+      const admin = supabaseAdmin();
+      const { data: exams, error } = await admin.from("board_exams").select("id, title, created_at").eq("host_id", v.id).order("created_at", { ascending: false }).limit(200);
+      if (error) return dbFail(error.message);
+      const warm = (exams ?? []).filter((x: any) => isWarmUp(String(x.title ?? ""))).slice(0, 40);
+      if (!warm.length) return NextResponse.json({ rows: [] });
+      const { data: es } = await admin.from("board_exam_entries").select("exam_id, name, score, total, started_at, submitted_at").in("exam_id", warm.map((x: any) => x.id)).limit(5000);
+      const at = new Map(warm.map((x: any) => [x.id, String(x.created_at)]));
+      const rows = (es ?? []).filter((r: any) => r.submitted_at).map((r: any) => ({
+        at: at.get(r.exam_id) ?? "", name: String(r.name ?? ""), score: r.score, total: r.total,
+        secs: r.started_at ? Math.max(0, Math.round((Date.parse(r.submitted_at) - Date.parse(r.started_at)) / 1000)) : null,
+      }));
+      return NextResponse.json({ rows }, { headers: { "Cache-Control": "no-store" } });
+    }
     const e = await latestExam(sessionId);
     if (!e) return NextResponse.json({ exam: null });
-    if (e.status === "open" && over(e)) await closeExam(e);
+    await settle(e);
     const admin = supabaseAdmin();
-    const meta = { id: e.id, title: e.title, minutes: e.minutes, review: e.review, calculator: e.calculator !== false, inOrder: keepsOrder(e.questions, !!e.in_order), handMarked: isHandMarked(e.questions), status: e.status, endsAt: new Date(e.ends_at).getTime(), count: e.questions.length, total: e.questions.reduce((s, q) => s + q.marks, 0) };
+    const meta = { id: e.id, title: e.title, minutes: e.minutes, review: e.review, calculator: e.calculator !== false, inOrder: keepsOrder(e.questions, !!e.in_order), handMarked: isHandMarked(e.questions), personal: Math.max(0, Number(e.personal_words) || 0), spelling: e.questions.some((q) => q.kind === "spell"), status: e.status, endsAt: new Date(e.ends_at).getTime(), count: e.questions.length, total: e.questions.reduce((s, q) => s + q.marks, 0) };
     if (v.host) {
       const { data } = await admin.from("board_exam_entries").select("*").eq("exam_id", e.id).limit(500);
-      const hand = isHandMarked(e.questions);
+      const hand = needsMarking(e.questions);
       const entries = ((data ?? []) as EntryRow[]).map((r) => {
-        const marks = marksOf(e, r), m = markPaper(e.questions, r.answers ?? {}, marks);
+        const qs = qsFor(e, r), marks = marksOf(e, r), m = markPaper(qs, r.answers ?? {}, marks);
         return {
-          id: r.student_id, name: r.name,
-          answered: e.questions.filter((q, i) => { const v = (r.answers ?? {})[String(i)]; return q.kind === "page" ? pageDone(v) : v != null && v !== ""; }).length,
+          id: r.student_id, name: r.name, extraMs: extraOf(r), ...(r.extra_qs?.length ? { extraQs: qs.slice(e.questions.length) } : {}),
+          answered: qs.filter((q, i) => { const v = (r.answers ?? {})[String(i)]; return q.kind === "page" ? pageDone(v) : v != null && v !== ""; }).length,
           flags: r.flags, flagLog: (r.flag_log ?? []).slice(-10), submitted: !!r.submitted_at, score: r.submitted_at ? m.score : null, total: m.total,
           live: r.submitted_at ? null : m.score, // what they'd get now
-          answers: hand ? slimAnswers(e.questions, r.answers ?? {}) : r.answers ?? {}, // the writing on pages is fetched one page at a time
+          answers: hand ? slimAnswers(qs, r.answers ?? {}) : r.answers ?? {}, // the writing is fetched one page at a time
           startedAt: r.started_at ?? null, submittedAt: r.submitted_at ?? null, // for the teacher's reports
-          ...(hand ? { pageMarks: marks, toMark: pagesToMark(e.questions, r.answers ?? {}, marks, !!r.submitted_at) } : {}),
+          ...(hand ? { pageMarks: marks, toMark: pagesToMark(qs, r.answers ?? {}, marks, !!r.submitted_at) } : {}),
         };
       });
       const about = { className: v.session.title ?? "", teacher: v.fullName || v.name, createdAt: e.created_at ?? null };
@@ -91,33 +137,35 @@ export async function GET(req: Request) {
     // An exam that ended more than 2 hours ago and they never started: nothing to show.
     if (!entry && e.status === "closed") return NextResponse.json({ exam: null });
     const given0 = entry?.answers ?? {};
-    const hand = isHandMarked(e.questions);
+    const myQs = qsFor(e, entry);
+    const hand = needsMarking(myQs);
     const myMarks = entry ? marksOf(e, entry) : {};
     const out: any = { exam: meta, entry: entry ? {
-      started: true, submitted: !!entry.submitted_at, flags: entry.flags,
-      answers: hand ? slimAnswers(e.questions, given0, entry.submitted_at ? -1 : currentPage(e.questions, given0)) : given0,
-      score: entry.submitted_at ? markPaper(e.questions, given0, myMarks).score : entry.score, total: entry.total ?? markPaper(e.questions, given0).total,
-      // A paper marked by hand: how far the teacher has got.
-      ...(hand && entry.submitted_at ? { marking: { left: pagesToMark(e.questions, given0, myMarks, true).length, pages: e.questions.filter((q) => q.kind === "page").length } } : {}),
+      started: true, submitted: !!entry.submitted_at, flags: entry.flags, extraMs: extraOf(entry),
+      answers: isHandMarked(myQs) ? slimAnswers(myQs, given0, entry.submitted_at ? -1 : currentPage(myQs, given0)) : given0,
+      score: entry.submitted_at ? markPaper(myQs, given0, myMarks).score : entry.score, total: entry.total ?? markPaper(myQs, given0).total,
+      // Marked by hand (pages, method marks): how far the teacher has got.
+      ...(hand && entry.submitted_at ? { marking: { left: pagesToMark(myQs, given0, myMarks, true).length, pages: myQs.filter((q) => q.kind === "page").length } } : {}),
     } : null };
-    if (entry && !entry.submitted_at && e.status === "open") out.paper = learnerPaper(e.id, v.id, e.questions, !!e.in_order);
+    if (entry && !entry.submitted_at && e.status === "open") { out.paper = learnerPaper(e.id, v.id, myQs, !!e.in_order); out.personalFrom = e.questions.length; }
     // Once it's over: how they did, against the class — and (if the teacher
     // allows it) their answers against the right ones.
     if (entry && e.status === "closed") {
       const given = entry.answers ?? {};
-      const m = markPaper(e.questions, given, myMarks);
-      const blank = e.questions.filter((q, i) => (q.kind === "page" ? pageBlank(given[String(i)]) : given[String(i)] == null || given[String(i)] === "")).length;
+      const m = markPaper(myQs, given, myMarks);
+      const blank = myQs.filter((q, i) => (q.kind === "page" ? pageBlank(given[String(i)]) : given[String(i)] == null || given[String(i)] === "")).length;
       const { data: all } = await admin.from("board_exam_entries").select("score, total").eq("exam_id", e.id).not("submitted_at", "is", null).limit(500);
       const pcts = (all ?? []).filter((x: any) => x.total).map((x: any) => (x.score / x.total) * 100);
       const better = pcts.filter((p) => p > (m.score / Math.max(1, m.total)) * 100).length;
       out.analysis = {
-        score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((r, i) => !r && !(e.questions[i].kind === "page" ? pageBlank(given[String(i)]) : given[String(i)] == null || given[String(i)] === "")).length, blank,
+        score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((r, i) => !r && !(myQs[i].kind === "page" ? pageBlank(given[String(i)]) : given[String(i)] == null || given[String(i)] === "")).length, blank,
         average: pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null, best: pcts.length ? Math.round(Math.max(...pcts)) : null,
         takers: pcts.length, position: pcts.length ? better + 1 : null, flags: entry.flags,
       };
-      if (e.review) out.review = e.questions.map((q, i) => ({
+      if (e.review) out.review = myQs.map((q, i) => ({
         q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, right: m.right[i], marks: q.marks,
         given: q.kind === "page" ? (myMarks[String(i)] ?? (pageBlank(given[String(i)]) ? 0 : null)) : given[String(i)] ?? null, // a page: the teacher's mark
+        ...(q.method && myMarks[String(i)] != null ? { method: myMarks[String(i)] } : {}),
       }));
     }
     return NextResponse.json(out, { headers: { "Cache-Control": "no-store" } });
@@ -164,10 +212,15 @@ export async function POST(req: Request) {
         questions, minutes, review: body?.review !== false, status: "open", ends_at: new Date(Date.now() + minutes * 60_000).toISOString(),
       };
       const inOrder = body?.inOrder === true;
-      let { data, error } = await admin.from("board_exams").insert({ ...row, calculator, ...(inOrder ? { in_order: true } : {}) }).select("id").single();
+      const personal = questions.some((q) => q.kind === "spell") ? Math.max(0, Math.min(10, Math.round(Number(body?.personal) || 0))) : 0;
+      let { data, error } = await admin.from("board_exams").insert({ ...row, calculator, ...(inOrder ? { in_order: true } : {}), ...(personal ? { personal_words: personal } : {}) }).select("id").single();
+      let note: string | undefined;
+      if (error && /personal_words/i.test(error.message)) {
+        ({ data, error } = await admin.from("board_exams").insert({ ...row, calculator, ...(inOrder ? { in_order: true } : {}) }).select("id").single());
+        note = "The test started without each learner's own words — run supabase/migration-learner-tools.sql once to add them.";
+      }
       // Before migration-learner-tools.sql there are no calculator / in_order columns:
       // the calculator stays on, and only papers and spelling tests keep their order.
-      let note: string | undefined;
       if (error && /in_order/i.test(error.message)) {
         ({ data, error } = await admin.from("board_exams").insert({ ...row, calculator }).select("id").single());
         if (!keepsOrder(questions)) note = "The exam started, but each phone has its own question order — run supabase/migration-learner-tools.sql once to keep the same order for everyone.";
@@ -225,27 +278,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    if (action === "extra") {
+      if (!v.host) return bad("Only the teacher can give extra time.", 403);
+      if (e.status !== "open") return bad("This exam has ended.", 409);
+      const ms = body?.on === false ? 0 : Math.round(e.minutes * 0.25 * 60_000); // 25%, as in the national tests
+      const { error } = await admin.from("board_exam_entries").update({ extra_ms: ms }).eq("exam_id", e.id).eq("student_id", String(body?.studentId ?? ""));
+      if (error) return /extra_ms/i.test(error.message) ? bad(NEEDS_EXTRA, 501) : dbFail(error.message);
+      return NextResponse.json({ ok: true, extraMs: ms });
+    }
+
     if (action === "mark" || action === "page-view") {
       if (!v.host) return bad("Only the teacher can do that.", 403);
       const n = Math.round(Number(body?.n));
-      if (e.questions[n]?.kind !== "page") return bad("Which page?");
       const { data: row, error: rowErr } = await admin.from("board_exam_entries").select("*").eq("exam_id", e.id).eq("student_id", String(body?.studentId ?? "")).maybeSingle();
       if (rowErr) return dbFail(rowErr.message);
       const r = row as EntryRow | null;
       if (!r) return bad("That learner isn't taking this exam.", 404);
+      const qs = qsFor(e, r), q = qs[n];
+      if (!q || teacherMax(q) <= 0) return bad("Which question?");
       const marks = marksOf(e, r);
       if (action === "page-view") {
-        const p = cleanPageAnswer((r.answers ?? {})[String(n)]);
-        return NextResponse.json({ ink: p.ink, text: p.text, done: pageDone((r.answers ?? {})[String(n)]) || !!r.submitted_at, mark: marks[String(n)] ?? null }, { headers: { "Cache-Control": "no-store" } });
+        // A page: the writing on it; a method mark: their working and their answer.
+        const v0 = (r.answers ?? {})[q.kind === "page" ? String(n) : workingKey(n)];
+        const p = cleanPageAnswer(v0);
+        const text = q.kind === "page" ? p.text : String((r.answers ?? {})[String(n)] ?? "");
+        return NextResponse.json({ ink: p.ink, text, done: pageDone(v0) || !!r.submitted_at, mark: marks[String(n)] ?? null }, { headers: { "Cache-Control": "no-store" } });
       }
       if (!rateLimit(`exam-mark:${v.id}`, 300, 60_000)) return bad("Slow down a little.", 429);
       if (body?.mark == null) delete marks[String(n)];
       else {
         const m = Math.round(Number(body.mark));
-        if (!(m >= 0 && m <= e.questions[n].marks)) return bad(`A mark from 0 to ${e.questions[n].marks}.`);
+        if (!(m >= 0 && m <= teacherMax(q))) return bad(`A mark from 0 to ${teacherMax(q)}.`);
         marks[String(n)] = m;
       }
-      const score = markPaper(e.questions, r.answers ?? {}, marks).score;
+      const score = markPaper(qs, r.answers ?? {}, marks).score;
       const { error } = await admin.from("board_exam_entries").update({ page_marks: marks, ...(r.submitted_at ? { score } : {}) }).eq("exam_id", e.id).eq("student_id", r.student_id);
       if (error) return /page_marks/i.test(error.message) ? bad(NEEDS_MARKS, 501) : dbFail(error.message);
       return NextResponse.json({ ok: true, score, marks });
@@ -259,7 +325,11 @@ export async function POST(req: Request) {
     if (action === "start") {
       if (over(e)) return bad("This exam has ended.", 409);
       if (!entry) {
-        const { error } = await admin.from("board_exam_entries").insert({ exam_id: e.id, student_id: v.id, name: v.name.slice(0, 60) });
+        const row = { exam_id: e.id, student_id: v.id, name: v.name.slice(0, 60) };
+        const mine: ExamQ[] = await personalWords(e, v.name).catch(() => []);
+        const withWords: Record<string, unknown> = mine.length ? { ...row, extra_qs: mine } : row;
+        let { error } = await admin.from("board_exam_entries").insert(withWords as typeof row);
+        if (error && /extra_qs/i.test(error.message)) ({ error } = await admin.from("board_exam_entries").insert(row));
         if (error && !/duplicate/i.test(error.message)) return dbFail(error.message);
       }
       return NextResponse.json({ ok: true });
@@ -274,12 +344,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
     if (entry.submitted_at) return bad("You've already handed in this exam.", 409);
-    if (over(e)) { await closeExam(e); return bad("Time's up — your answers have been handed in.", 409); }
+    if (timeUp(e, entry)) { await handIn(e, entry); await settle(e); return bad("Time's up — your answers have been handed in.", 409); }
+    const myQs = qsFor(e, entry);
 
+    if (action === "working") {
+      const n = Math.round(Number(body?.n));
+      if (!myQs[n]?.method) return bad("That question doesn't need working.");
+      const answers = { ...(entry.answers ?? {}), [workingKey(n)]: { ink: cleanPageAnswer(body?.value).ink } };
+      const { error } = await admin.from("board_exam_entries").update({ answers }).eq("exam_id", e.id).eq("student_id", v.id);
+      if (error) return dbFail(error.message);
+      return NextResponse.json({ ok: true });
+    }
     if (action === "answer" || action === "page-done") {
       const n = Math.round(Number(body?.n));
-      if (!(n >= 0 && n < e.questions.length)) return bad("Which question?");
-      const q = e.questions[n], had = (entry.answers ?? {})[String(n)];
+      if (!(n >= 0 && n < myQs.length)) return bad("Which question?");
+      const q = myQs[n], had = (entry.answers ?? {})[String(n)];
       let value: unknown;
       if (q.kind === "page") {
         if (pageDone(had)) return bad("You've handed in that page.", 409);
@@ -294,11 +373,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
     if (action === "submit") {
-      const m = markPaper(e.questions, entry.answers ?? {}, marksOf(e, entry));
-      const { error } = await admin.from("board_exam_entries").update({ submitted_at: new Date().toISOString(), score: m.score, total: m.total }).eq("exam_id", e.id).eq("student_id", v.id);
-      if (error) return dbFail(error.message);
+      const m = await handIn(e, entry);
+      await settle(e);
       return NextResponse.json({ ok: true, score: m.score, total: m.total });
     }
     return bad("Unknown request.");
   } catch (err: any) { return dbFail(String(err?.message ?? err)); }
+}
+
+// The words this learner (matched by name) got wrong in this teacher's earlier
+// spelling tests and hasn't spelt right since: they go on the end of the test.
+async function personalWords(e: ExamRow, name: string): Promise<ExamQ[]> {
+  const max = Math.max(0, Math.min(10, Number(e.personal_words) || 0));
+  if (!max || !e.host_id || !e.questions.some((q) => q.kind === "spell")) return [];
+  const admin = supabaseAdmin();
+  const { data: exams } = await admin.from("board_exams").select("id, questions, created_at").eq("host_id", e.host_id).lt("created_at", e.created_at).order("created_at", { ascending: false }).limit(40);
+  const tests = ((exams ?? []) as { id: string; questions: ExamQ[] }[]).filter((x) => Array.isArray(x.questions) && x.questions.some((q) => q.kind === "spell")).slice(0, 15);
+  if (!tests.length) return [];
+  const { data: rows } = await admin.from("board_exam_entries").select("exam_id, name, answers, extra_qs").in("exam_id", tests.map((x) => x.id)).limit(3000);
+  const me = nameKey(name);
+  const history = tests.flatMap((t) => ((rows ?? []) as any[]).filter((r) => r.exam_id === t.id && nameKey(String(r.name ?? "")) === me)
+    .map((r) => ({ questions: [...t.questions, ...cleanExamQuestions(r.extra_qs ?? [])], answers: r.answers ?? {} })));
+  return missedSpellings(history, e.questions.filter((q) => q.kind === "spell").map((q) => String(q.answer)), max);
 }

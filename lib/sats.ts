@@ -5,7 +5,8 @@
 //   • Spelling tests like Paper 2 (spelling): 20 sentences, the word read out,
 //     learners write it in the gap. Two ready-made lists from the Year 5/6
 //     statutory word list, or the teacher's own.
-import type { ExamQ } from "@/lib/exams";
+import { isRight, type ExamQ } from "@/lib/exams";
+import { nameKey } from "@/lib/stars";
 
 type Rng = () => number;
 type Made = { q: string; answer: string; marks?: number };
@@ -75,7 +76,41 @@ export function satsArithmetic(r: Rng = Math.random): ExamQ[] {
   const made = KINDS.map((k) => k(r));
   const twos = made.filter((m) => m.marks === 2), ones = made.filter((m) => m.marks !== 2);
   [24, 28, 32, 35].forEach((at, i) => ones.splice(Math.min(at, ones.length), 0, twos[i]));
-  return ones.map((m) => ({ q: m.q, kind: "typed" as const, options: [], answer: m.answer, marks: m.marks ?? 1 }));
+  // The 2-mark ones have a method mark: learners show their working.
+  return ones.map((m) => ({ q: m.q, kind: "typed" as const, options: [], answer: m.answer, marks: m.marks ?? 1, ...(m.marks === 2 ? { method: true } : {}) }));
+}
+
+// ── The daily warm-up: 10 quick arithmetic questions, a different mix each day ──
+export const WARM_UP = { questions: 10, minutes: 10 } as const;
+export const warmUpTitle = (d = new Date()) => `Warm-up ${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
+export const isWarmUp = (title: string) => /^warm-up\b/i.test(title.trim());
+export function satsWarmUp(r: Rng = Math.random): ExamQ[] {
+  const quick = KINDS.map((k, i) => ({ k, i })).filter(({ k }) => k(() => 0.5).marks !== 2);
+  for (let i = quick.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [quick[i], quick[j]] = [quick[j], quick[i]]; }
+  return quick.slice(0, WARM_UP.questions).sort((a, b) => a.i - b.i).map(({ k }) => { const m = k(r); return { q: m.q, kind: "typed" as const, options: [], answer: m.answer, marks: 1 }; });
+}
+// Each learner's warm-ups over the weeks (matched by name): marks and how long they took.
+export type WarmUpRow = { at: string; name: string; score: number | null; total: number | null; secs: number | null };
+export type WarmUpLine = { name: string; tries: { at: string; pct: number; secs: number | null }[]; accuracy: number; speed: number | null; trend: number };
+export function warmUpTable(rows: WarmUpRow[]): WarmUpLine[] {
+  const by = new Map<string, { name: string; tries: WarmUpLine["tries"] }>();
+  for (const r of rows) {
+    const key = nameKey(r.name);
+    if (!key || r.score == null || !r.total) continue;
+    const line = by.get(key) ?? { name: r.name.trim(), tries: [] };
+    line.tries.push({ at: r.at, pct: Math.round((r.score / r.total) * 100), secs: r.secs });
+    by.set(key, line);
+  }
+  return [...by.values()].map((l) => {
+    const tries = l.tries.sort((a, b) => a.at.localeCompare(b.at));
+    const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
+    const recent = tries.slice(-3), before = tries.slice(-6, -3);
+    const secs = tries.map((t) => t.secs).filter((x): x is number => x != null);
+    return {
+      name: l.name, tries, accuracy: avg(tries.map((t) => t.pct)) ?? 0, speed: avg(secs),
+      trend: before.length ? (avg(recent.map((t) => t.pct)) ?? 0) - (avg(before.map((t) => t.pct)) ?? 0) : 0, // the last 3 against the 3 before
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // ── Spelling ──
@@ -99,6 +134,24 @@ export function parseSpellings(text: string, hear = true): ExamQ[] {
     if (out.length >= 60) break;
   }
   return out;
+}
+
+// ── Personal spelling lists ──
+// The words a learner got wrong in earlier spelling tests (newest first) and
+// hasn't spelt right since — they come back in their next test.
+export function missedSpellings(history: { questions: ExamQ[]; answers: Record<string, unknown> }[], skip: string[] = [], max = 5): ExamQ[] {
+  const seen = new Set(skip.map((w) => w.trim().toLowerCase()));
+  const out: ExamQ[] = [];
+  for (const h of history) {
+    h.questions.forEach((q, i) => {
+      if (q.kind !== "spell") return;
+      const key = String(q.answer).trim().toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key); // the most recent try decides
+      if (!isRight(q, h.answers?.[String(i)])) out.push({ q: q.q, kind: "spell", options: [], answer: String(q.answer), marks: 1, hear: true });
+    });
+  }
+  return out.slice(0, max);
 }
 
 export const SPELLING_LISTS: { id: string; title: string; lines: string[] }[] = [

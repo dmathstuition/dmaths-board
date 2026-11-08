@@ -5,7 +5,8 @@ import { markPaper, pageBlank, shownQ, type ExamQ } from "@/lib/exams";
 export type ReportEntry = {
   id: string; name: string; answers: Record<string, unknown>; flags: number; flagLog: { at: string; reason: string }[];
   startedAt: string | null; submittedAt: string | null;
-  pageMarks?: Record<string, number>; // a paper marked by hand: the teacher's marks, by page
+  pageMarks?: Record<string, number>; // the teacher's marks: pages, and method marks
+  extraQs?: ExamQ[];                    // this learner's own questions (personal spelling words)
 };
 export type ReportItem = { n: number; q: string; given: string; correct: string; right: boolean; blank: boolean; marks: number; classRight: number | null };
 export type LearnerReport = {
@@ -92,33 +93,36 @@ function remarkFor(pct: number, avg: number | null, blank: number, flags: number
 }
 
 export function examReports(questions: ExamQ[], entries: ReportEntry[], scheme: GradeScheme = GCSE): ClassReport {
-  const marked = entries.map((e) => ({ e, m: markPaper(questions, e.answers ?? {}, e.pageMarks ?? {}) }));
-  const total = questions.reduce((s, q) => s + q.marks, 0);
-  const pct = (score: number) => (total ? Math.round((score / total) * 100) : 0);
+  // Each learner's questions: everyone's, then any of their own.
+  const qsOf = (e: ReportEntry) => (e.extraQs?.length ? [...questions, ...e.extraQs] : questions);
+  const marked = entries.map((e) => ({ e, qs: qsOf(e), m: markPaper(qsOf(e), e.answers ?? {}, e.pageMarks ?? {}) }));
+  const pctOf = (score: number, out: number) => (out ? Math.round((score / out) * 100) : 0);
   const n = marked.length;
-  // How many of the class got each question right.
+  // How many of the class got each question right (the questions everyone had).
   const classRight = questions.map((_, i) => (n ? Math.round((marked.filter(({ m }) => m.right[i]).length / n) * 100) : null));
-  const scores = marked.map(({ m }) => m.score);
-  const average = n ? Math.round(scores.reduce((a, b) => a + pct(b), 0) / n) : null;
-  const best = n ? pct(Math.max(...scores)) : null, lowest = n ? pct(Math.min(...scores)) : null;
+  const pcts = marked.map(({ m }) => pctOf(m.score, m.total));
+  const average = n ? Math.round(pcts.reduce((a, b) => a + b, 0) / n) : null;
+  const best = n ? Math.max(...pcts) : null, lowest = n ? Math.min(...pcts) : null;
 
-  const learners: LearnerReport[] = marked.map(({ e, m }) => {
-    const items: ReportItem[] = questions.map((q, i) => {
+  const learners: LearnerReport[] = marked.map(({ e, qs, m }) => {
+    const items: ReportItem[] = qs.map((q, i) => {
       if (q.kind === "page") {
         const v = e.answers?.[String(i)], mark = e.pageMarks?.[String(i)], blank = pageBlank(v);
         const given = blank ? "" : mark != null ? `${mark} / ${q.marks} marks` : "Not marked yet";
-        return { n: i + 1, q: q.q, given, correct: "Marked by the teacher", right: m.right[i], blank, marks: q.marks, classRight: classRight[i] };
+        return { n: i + 1, q: q.q, given, correct: "Marked by the teacher", right: m.right[i], blank, marks: q.marks, classRight: classRight[i] ?? null };
       }
-      const given = answerText(q, e.answers?.[String(i)]);
-      return { n: i + 1, q: shownQ(q), given, correct: correctText(q), right: m.right[i], blank: !given, marks: q.marks, classRight: classRight[i] };
+      const raw = answerText(q, e.answers?.[String(i)]);
+      const method = q.method && !m.right[i] && e.pageMarks?.[String(i)] != null ? ` (method mark ${e.pageMarks[String(i)]})` : "";
+      const own = i >= questions.length ? " (their own word)" : "";
+      return { n: i + 1, q: shownQ(q) + own, given: raw ? raw + method : "", correct: correctText(q), right: m.right[i], blank: !raw, marks: q.marks, classRight: classRight[i] ?? null };
     });
     const right = items.filter((x) => x.right).length, blank = items.filter((x) => x.blank).length;
-    const p = pct(m.score);
+    const p = pctOf(m.score, m.total);
     const minutes = e.startedAt && e.submittedAt ? Math.max(0, Math.round((Date.parse(e.submittedAt) - Date.parse(e.startedAt)) / 60_000)) : null;
     // What to work on: the questions they got wrong that most of the class got right first.
     const focus = items.filter((x) => !x.right).sort((a, b) => (b.classRight ?? 0) - (a.classRight ?? 0)).slice(0, 3).map((x) => `Q${x.n}: ${x.q}`);
     return {
-      id: e.id, name: e.name || "Learner", scale: scheme.name, score: m.score, total, percent: p, grade: gradeOf(p, scheme), position: null, of: n, classAverage: average, best,
+      id: e.id, name: e.name || "Learner", scale: scheme.name, score: m.score, total: m.total, percent: p, grade: gradeOf(p, scheme), position: null, of: n, classAverage: average, best,
       right, wrong: items.length - right - blank, blank, minutes, flags: e.flags || 0, flagLog: (e.flagLog ?? []).slice(-10),
       submitted: !!e.submittedAt, items, remark: remarkFor(p, average, blank, e.flags || 0, scheme), focus,
       scaled: scheme.id === "ks2" ? ks2Scaled(p) : null,

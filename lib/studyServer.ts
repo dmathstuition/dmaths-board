@@ -5,7 +5,9 @@
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { learnerDetail } from "@/lib/learnerResults";
-import { markPaper, shownQ, type ExamQ } from "@/lib/exams";
+import { cleanExamQuestions, markPaper, shownQ, type ExamQ } from "@/lib/exams";
+import { missedSpellings } from "@/lib/sats";
+import { nameKey } from "@/lib/stars";
 import { aiChat, aiConfigured, extractJson } from "@/lib/ai";
 import { PRACTICE_SYSTEM, buildPractice, practicePrompt, MAX_MISSED, type Missed, type PracticeItem } from "@/lib/practice";
 import { FLASHCARD_SYSTEM, cleanCards, flashcardPrompt, questionCards, type Card, type LessonText } from "@/lib/flashcards";
@@ -126,4 +128,27 @@ export async function flashcardsFor(sessionId: string): Promise<{ title: string;
     } catch (e) { console.warn("flashcards ai failed", (e as Error)?.message); }
     return { data: { title: l.title, cards: base, ai: false }, keep: false };
   });
+}
+
+// A learner's own spelling list: words they got wrong in this teacher's
+// spelling tests (matched by name, so it follows them from class to class)
+// and haven't spelt right since — for look, cover, write, check.
+export async function spellingFor(sessionId: string, studentId: string): Promise<{ learner: string; words: { word: string; sentence: string }[] } | null> {
+  const admin = supabaseAdmin();
+  const [{ data: guest }, { data: session }] = await Promise.all([
+    admin.from("live_session_guests").select("name").eq("id", studentId).eq("session_id", sessionId).maybeSingle(),
+    admin.from("live_sessions").select("host_id").eq("id", sessionId).maybeSingle(),
+  ]);
+  if (!guest || !session?.host_id) return null;
+  const learner = String(guest.name ?? "");
+  const { data: exams, error } = await admin.from("board_exams").select("id, questions, created_at").eq("host_id", session.host_id).order("created_at", { ascending: false }).limit(60);
+  if (error) return { learner, words: [] };
+  const tests = ((exams ?? []) as { id: string; questions: ExamQ[] }[]).filter((x) => Array.isArray(x.questions) && x.questions.some((q) => q.kind === "spell")).slice(0, 20);
+  if (!tests.length) return { learner, words: [] };
+  let rows = await admin.from("board_exam_entries").select("exam_id, name, answers, extra_qs").in("exam_id", tests.map((x) => x.id)).limit(5000);
+  if (rows.error) rows = await admin.from("board_exam_entries").select("exam_id, name, answers").in("exam_id", tests.map((x) => x.id)).limit(5000) as typeof rows;
+  const me = nameKey(learner);
+  const history = tests.flatMap((t) => ((rows.data ?? []) as any[]).filter((r) => r.exam_id === t.id && nameKey(String(r.name ?? "")) === me)
+    .map((r) => ({ questions: [...t.questions, ...cleanExamQuestions(r.extra_qs ?? [])], answers: r.answers ?? {} })));
+  return { learner, words: missedSpellings(history, [], 30).map((q) => ({ word: String(q.answer), sentence: q.q })) };
 }

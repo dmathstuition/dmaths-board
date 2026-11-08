@@ -182,3 +182,33 @@ test("calculator on the learner's phone in class work, until the teacher switche
   await panel.getByLabel("🧮 Calculator").uncheck();
   await expect(learner.getByRole("button", { name: "🧮 Calculator" })).toHaveCount(0, { timeout: 15_000 });
 });
+
+test("my spellings: look, cover, write, check the words I got wrong", async ({ page }) => {
+  await page.route("**/api/study**", (r) => r.fulfill({ json: { learner: "Emmanuel Ade", words: [
+    { word: "rhythm", sentence: "The drummer kept a steady rhythm." },
+    { word: "queue", sentence: "We waited in a long queue for the bus." },
+  ] } }));
+  await page.goto(`/spelling?t=${encodeURIComponent(resultsToken())}`);
+  // Look…
+  await expect(page.getByText("Word 1 of 2")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByLabel("The word: rhythm")).toBeVisible();
+  await page.getByRole("button", { name: "Cover it and write →" }).click();
+  // …cover and write: the word is hidden.
+  await expect(page.getByLabel("The word: rhythm")).toHaveCount(0);
+  await page.getByLabel("Your spelling").fill("rythm");
+  await page.getByRole("button", { name: "Check ✓" }).click();
+  await expect(page.getByText("Not quite — compare them letter by letter.")).toBeVisible();
+  await page.screenshot({ path: "test-results/spelling-check.png", fullPage: true });
+  // Look again and get it right.
+  await page.getByRole("button", { name: "Look again and retry" }).click();
+  await page.getByRole("button", { name: "Cover it and write →" }).click();
+  await page.getByLabel("Your spelling").fill("rhythm");
+  await page.getByRole("button", { name: "Check ✓" }).click();
+  await expect(page.getByText("Spelt right!")).toBeVisible();
+  await page.getByRole("button", { name: "Next word →" }).click();
+  await page.getByRole("button", { name: "Cover it and write →" }).click();
+  await page.getByLabel("Your spelling").fill("Queue");
+  await page.getByRole("button", { name: "Check ✓" }).click();
+  await page.getByRole("button", { name: "Finish" }).click();
+  await expect(page.getByText("1 of 2 right first time")).toBeVisible();
+});

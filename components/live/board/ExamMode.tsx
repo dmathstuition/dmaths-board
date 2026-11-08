@@ -1,7 +1,8 @@
 "use client";
 import { ReadingButton, Speak } from "@/components/live/Reading";
 import { speak, stopSpeaking } from "@/lib/reading";
-import { SATS_ARITHMETIC, SPELLING_LISTS, parseSpellings, satsArithmetic } from "@/lib/sats";
+import { SATS_ARITHMETIC, SPELLING_LISTS, WARM_UP, parseSpellings, satsArithmetic, satsWarmUp, warmUpTable, warmUpTitle, type WarmUpRow } from "@/lib/sats";
+import { nameKey } from "@/lib/stars";
 import { PAPER_FIT, sendSlides } from "@/components/live/board/slides";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
@@ -10,8 +11,8 @@ import { useServerClock } from "@/lib/serverClock";
 import { UK_SETS } from "@/lib/ukPrimary";
 import { SCHEMES, gradeOf, schemeById, type GradeScheme } from "@/lib/examReport";
 import { CalculatorButton } from "@/components/live/PhoneCalculator";
-import { EXAM_MINUTES, EXAM_TOPICS, MAX_PAGE_MARKS, clockLeft, isHandMarked, keepsOrder, pageDone, spokenSpelling, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
-import { MarkingDesk, PageFlow } from "@/components/live/board/PaperPages";
+import { EXAM_MINUTES, EXAM_TOPICS, MAX_PAGE_MARKS, clockLeft, isHandMarked, keepsOrder, needsMarking, pageDone, workingKey, spokenSpelling, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
+import { MarkingDesk, PageFlow, WorkingPad } from "@/components/live/board/PaperPages";
 import type { Difficulty } from "@/lib/games/generators";
 
 // Exam mode: a timed test every learner takes on their own phone — questions
@@ -21,12 +22,14 @@ import type { Difficulty } from "@/lib/games/generators";
 // so phones check at once (they also check every few seconds); { examId, at }
 // when the teacher reads spelling number `at` out — phones go to it.
 
-type Meta = { id: string; title: string; minutes: number; review: boolean; calculator?: boolean; inOrder?: boolean; handMarked?: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number ; questions?: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
-type Entry = { pageMarks?: Record<string, number>; toMark?: number[]; id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null;
+type Meta = { id: string; title: string; minutes: number; review: boolean; calculator?: boolean; inOrder?: boolean; handMarked?: boolean; personal?: number; spelling?: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number ; questions?: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
+type Entry = { extraMs?: number; extraQs?: ExamQ[]; pageMarks?: Record<string, number>; toMark?: number[]; id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null;
   answers?: Record<string, unknown>; startedAt?: string | null; submittedAt?: string | null };
 type Analysis = { score: number; total: number; right: number; wrong: number; blank: number; average: number | null; best: number | null; takers: number; position: number | null; flags: number };
 type Review = { q: string; kind: ExamQ["kind"]; options: string[]; answer: number | string; given: unknown; right: boolean; marks: number };
 
+// Extra time in minutes, to one decimal place (25% of 10 minutes is 2.5).
+const extraMins = (ms = 0) => String(Math.round(ms / 6000) / 10);
 const api = (body: unknown) => fetch("/api/board/exams", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
   .then(async (r) => ({ ok: r.ok, j: await r.json().catch(() => ({})) })).catch(() => ({ ok: false, j: { error: "Check the internet and try again." } as any }));
 
@@ -84,6 +87,26 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   const [satsNote, setSatsNote] = useState<string | null>(null);
   const [paperPages, setPaperPages] = useState<(string | null)[]>([]);
   const [paperBusy, setPaperBusy] = useState(false);
+  // Extra time (25%, access arrangements): the learners who get it, remembered on
+  // this device — applied by itself when they start an exam.
+  const [extraNames, setExtraNames] = useState(() => { try { return localStorage.getItem("exam-extra-names") ?? ""; } catch { return ""; } });
+  const saveExtraNames = (v: string) => { setExtraNames(v); try { localStorage.setItem("exam-extra-names", v); } catch { /* storage blocked */ } };
+  const extraKeys = extraNames.split(/[,\n]/).map(nameKey).filter(Boolean);
+  const extraAsked = useRef<Set<string>>(new Set()), extraOff = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const ex: Meta | null = data?.exam ?? null;
+    if (!ex || ex.status !== "open" || !extraKeys.length) return;
+    for (const e of (data?.entries ?? []) as Entry[]) {
+      const k = `${ex.id}:${e.id}`;
+      if (e.submitted || e.extraMs || !extraKeys.includes(nameKey(e.name)) || extraAsked.current.has(k) || extraOff.current.has(k)) continue;
+      extraAsked.current.add(k);
+      api({ action: "extra", examId: ex.id, studentId: e.id, on: true }).then(({ ok, j }) => { if (!ok) setNote(j.error ?? "Couldn't give extra time."); reload(); });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, extraNames]);
+  // Personal spelling words: up to this many of each learner's earlier misses go on the end of their test.
+  const [personalN, setPersonalN] = useState(5);
+  const [tracker, setTracker] = useState(false);
   const [wiping, setWiping] = useState(false); // deleting a finished exam's paper
   const [wiped, setWiped] = useState<string | null>(null);
   // How an uploaded paper is marked: by the teacher, page by page (learners write
@@ -175,7 +198,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
     const empty = qs.findIndex((q) => q.kind !== "choice" && q.kind !== "page" && !String(q.answer).trim());
     if (empty >= 0) { setNote(`Question ${empty + 1} has no answer yet — type the answer (from the mark scheme), or remove it.`); return; }
     setBusy(true); setNote(null);
-    const { ok, j } = await api({ action: "create", sessionId, title, minutes, review, calculator: calcOk, inOrder: fixedOrder, questions: qs });
+    const { ok, j } = await api({ action: "create", sessionId, title, minutes, review, calculator: calcOk, inOrder: fixedOrder, questions: qs, personal: qs.some((q) => q.kind === "spell") ? personalN : 0 });
     setBusy(false);
     if (!ok) { setNote(j.error ?? "Couldn't start the exam."); return; }
     setBuilding(false); tell(j.id); await reload();
@@ -204,6 +227,20 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
     await fetch("/api/live-sessions/slides", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, urls }) }).catch(() => {});
   }
 
+  async function toggleExtra(e: Entry) {
+    if (!exam) return;
+    const on = !e.extraMs;
+    if (!on) extraOff.current.add(`${exam.id}:${e.id}`);
+    const { ok, j } = await api({ action: "extra", examId: exam.id, studentId: e.id, on });
+    if (!ok) setNote(j.error ?? "Couldn't change the extra time.");
+    await reload();
+  }
+  function useWarmUp() {
+    if (qs.length && !window.confirm(`Replace the ${qs.length} question${qs.length === 1 ? "" : "s"} below with today's warm-up?`)) return;
+    setQs(satsWarmUp()); ownTitle.current = false; setTitle(warmUpTitle()); setMinutes(WARM_UP.minutes); setCalcOk(false); setInOrder(true);
+    setSatsNote(`✓ Today's warm-up: ${WARM_UP.questions} quick questions, ${WARM_UP.minutes} minutes. Each learner's marks and speed go into the warm-up tracker (keep "Warm-up" at the start of the title).`);
+  }
+
   async function act(action: "close" | "extend", extra: object = {}) {
     if (!exam) return;
     if (action === "close" && !window.confirm("End the exam now? Every paper is handed in and marked.")) return;
@@ -217,7 +254,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
     setPdfBusy(only?.id ?? "all"); setNote(null);
     try {
       const [{ examReports }, { learnerPdf, classPdf, savePdf }] = await Promise.all([import("@/lib/examReport"), import("@/lib/examPdf")]);
-      const cr = examReports(exam.questions, entries.map((e) => ({ id: e.id, name: e.name, answers: e.answers ?? {}, flags: e.flags, flagLog: e.flagLog, startedAt: e.startedAt ?? null, submittedAt: e.submittedAt ?? null, pageMarks: e.pageMarks })), scheme);
+      const cr = examReports(exam.questions, entries.map((e) => ({ id: e.id, name: e.name, answers: e.answers ?? {}, flags: e.flags, flagLog: e.flagLog, startedAt: e.startedAt ?? null, submittedAt: e.submittedAt ?? null, pageMarks: e.pageMarks, extraQs: e.extraQs })), scheme);
       const meta = { className: exam.className || "Class", examTitle: exam.title, teacher: exam.teacher, date: new Date(exam.createdAt ?? Date.now()).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) };
       if (only) {
         const r = cr.learners.find((l) => l.id === only.id);
@@ -252,7 +289,12 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
             <p className="text-base font-black">Exam mode</p>
             <p className="truncate text-xs font-bold text-ink/55">{showBuilder ? "A timed test on every learner’s phone — marked for you" : `${exam!.title} · ${exam!.count} questions · ${exam!.total} marks`}</p>
           </div>
-          {running && !showBuilder && <span role="timer" className="rounded-xl bg-orange-50 px-3 py-2 text-sm font-black text-[#C2451C]">⏱ {clockLeft(exam!.endsAt - now)}</span>}
+          {running && !showBuilder && (() => {
+            const extraLeft = Math.max(0, ...entries.filter((e) => !e.submitted && e.extraMs).map((e) => exam!.endsAt + (e.extraMs ?? 0) - now));
+            return exam!.endsAt > now || !extraLeft
+              ? <span role="timer" className="rounded-xl bg-orange-50 px-3 py-2 text-sm font-black text-[#C2451C]">⏱ {clockLeft(exam!.endsAt - now)}</span>
+              : <span role="timer" className="rounded-xl bg-violet-100 px-3 py-2 text-sm font-black text-violet-800">⏱ Extra time · {clockLeft(extraLeft)}</span>;
+          })()}
           {running && !showBuilder && <button type="button" onClick={() => act("extend", { minutes: 5 })} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black">+5 min</button>}
           {running && !showBuilder && <button type="button" onClick={() => act("close")} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white">End exam</button>}
           {!running && exam && !showBuilder && <button type="button" onClick={() => { setBuilding(true); setQs([]); }} className="rounded-xl bg-[#C2451C] px-3 py-2 text-xs font-black text-white">New exam</button>}
@@ -267,6 +309,9 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
               <label className="text-xs font-black text-ink/60">Title<input value={title} maxLength={120} onChange={(e) => { ownTitle.current = true; setTitle(e.target.value); }} className={`${field} mt-1`} /></label>
               <label className="flex items-end gap-2 text-xs font-black text-ink/70"><input type="checkbox" checked={review} onChange={(e) => setReview(e.target.checked)} className="mb-3 h-4 w-4 accent-[#C2451C]" /><span className="mb-2.5">Learners see the right answers when it ends</span></label>
               <label className="flex items-end gap-2 text-xs font-black text-ink/70"><input type="checkbox" checked={calcOk} onChange={(e) => setCalcOk(e.target.checked)} className="mb-3 h-4 w-4 accent-[#C2451C]" /><span className="mb-2.5">🧮 Calculator allowed</span></label>
+              <label className="text-xs font-black text-ink/60 sm:col-span-2">⏱ Extra time (25%) for these learners — remembered for next time
+                <input value={extraNames} maxLength={600} onChange={(e) => saveExtraNames(e.target.value)} placeholder="Names, separated by commas (as they join the class)" className={`${field} mt-1`} />
+              </label>
               <label className="flex items-end gap-2 text-xs font-black text-ink/70" title={keepsOrder(qs) ? "Spelling tests and real papers always keep their order" : undefined}>
                 <input type="checkbox" checked={fixedOrder} disabled={keepsOrder(qs)} onChange={(e) => setInOrder(e.target.checked)} className="mb-3 h-4 w-4 accent-[#C2451C]" /><span className="mb-2.5">Same order for everyone (like the real paper)</span>
               </label>
@@ -278,6 +323,8 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
               <p className="text-xs font-black text-[#0A4F52]">📘 KS2 SATs practice</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <button type="button" onClick={useArithmetic} className="min-h-[40px] rounded-xl bg-[#0E6E72] px-3 text-xs font-black text-white">➗ Arithmetic paper (36 questions · 30 min)</button>
+                <button type="button" onClick={useWarmUp} className="min-h-[40px] rounded-xl bg-white px-3 text-xs font-black text-[#0A4F52] ring-1 ring-[#A9D6D3]">⚡ Daily warm-up (10 questions · 10 min)</button>
+                <button type="button" onClick={() => setTracker((v) => !v)} aria-expanded={tracker} className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 ${tracker ? "bg-[#0A4F52] text-white ring-[#0A4F52]" : "bg-white text-[#0A4F52] ring-[#A9D6D3]"}`}>📈 Warm-up tracker</button>
                 <button type="button" onClick={() => setSpellOpen((v) => !v)} aria-expanded={spellOpen} className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 ${spellOpen ? "bg-[#0A4F52] text-white ring-[#0A4F52]" : "bg-white text-[#0A4F52] ring-[#A9D6D3]"}`}>✏️ Spelling test (read aloud)</button>
                 <button type="button" onClick={() => paperInput.current?.click()} disabled={paperBusy} className="min-h-[40px] rounded-xl bg-white px-3 text-xs font-black text-[#0A4F52] ring-1 ring-[#A9D6D3] disabled:opacity-60">{paperBusy ? "Uploading the paper…" : "📄 A real paper (PDF) — e.g. reasoning"}</button>
                 <input ref={paperInput} type="file" accept=".pdf,application/pdf,image/*" multiple hidden aria-label="Upload a SATs paper" onChange={(e) => uploadPaper(e.target.files)} />
@@ -294,10 +341,16 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                     className={`${field} mt-2 resize-y font-mono text-xs`} />
                   <div className="mt-2 flex flex-wrap items-center gap-3">
                     <label className="flex items-center gap-2 text-xs font-black text-ink/70"><input type="checkbox" checked={spellHear} onChange={(e) => setSpellHear(e.target.checked)} className="h-4 w-4 accent-[#0E6E72]" />Learners can also hear each sentence on their phone (headphones)</label>
+                    <label className="flex items-center gap-2 text-xs font-black text-ink/70">⭐ Add each learner&apos;s own words they got wrong before:
+                      <select value={personalN} onChange={(e) => setPersonalN(Number(e.target.value))} aria-label="Each learner's own words" className="rounded-lg bg-white px-1 py-1 text-xs font-black ring-1 ring-slate-200">
+                        {[0, 3, 5, 8, 10].map((k) => <option key={k} value={k}>{k ? `up to ${k}` : "none"}</option>)}
+                      </select>
+                    </label>
                     <button type="button" onClick={addSpellings} disabled={!spellText.trim()} className="min-h-[40px] rounded-xl bg-[#0E6E72] px-4 text-xs font-black text-white disabled:opacity-40">Add {parseSpellings(spellText).length || ""} spellings</button>
                   </div>
                 </div>
               )}
+              {tracker && <WarmUpTracker sessionId={sessionId} />}
               {satsNote && <p role="status" className={`mt-2 text-xs font-bold ${satsNote.startsWith("✓") ? "text-[#0A4F52]" : "text-ink/70"}`}>{satsNote}</p>}
               {paperPages.length > 0 && (
                 <div className="mt-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="How is this paper marked?">
@@ -416,9 +469,17 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                       <button type="button" onClick={() => speak(spokenSpelling(q, i + 1))} className="rounded-lg bg-[#EEF7F6] px-2 py-1.5 text-xs font-black text-[#0A4F52] ring-1 ring-[#CDE7E5]">🔊 Hear it</button>
                     </div>
                   ) : (
-                    <label className="mt-2 flex items-center gap-2 pl-5 text-xs font-bold text-ink/60">Answer
-                      <input value={String(q.answer)} maxLength={120} onChange={(e) => setQ(i, { answer: e.target.value })} aria-label={`Answer to question ${i + 1}`} placeholder={q.img ? "From the mark scheme, e.g. 5  (or 0.5 | 1/2)" : "e.g. 12  (or 12 | twelve)"} className={`${field} max-w-xs`} />
-                    </label>
+                    <div className="mt-2 flex flex-wrap items-center gap-3 pl-5">
+                      <label className="flex items-center gap-2 text-xs font-bold text-ink/60">Answer
+                        <input value={String(q.answer)} maxLength={120} onChange={(e) => setQ(i, { answer: e.target.value })} aria-label={`Answer to question ${i + 1}`} placeholder={q.img ? "From the mark scheme, e.g. 5  (or 0.5 | 1/2)" : "e.g. 12  (or 12 | twelve)"} className={`${field} max-w-xs`} />
+                      </label>
+                      {q.marks >= 2 && (
+                        <label className="flex items-center gap-1.5 text-xs font-bold text-ink/65" title="Learners show their working; a wrong answer with working comes to you for a method mark">
+                          <input type="checkbox" checked={!!q.method} onChange={(e) => setQ(i, { method: e.target.checked || undefined })} aria-label={`Method mark for question ${i + 1}`} className="h-4 w-4 accent-[#C2451C]" />
+                          Method mark ({q.marks - 1}) — learners show working
+                        </label>
+                      )}
+                    </div>
                   )}
                 </li>
               ))}
@@ -436,8 +497,8 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            {running && exam?.questions?.some((q) => q.kind === "spell") && <ReadAloud qs={exam.questions} onRead={(n) => tell(exam.id, n)} />}
-            {exam?.questions && isHandMarked(exam.questions) && <MarkingDesk examId={exam.id} questions={exam.questions} entries={entries} api={api} reload={reload} running={running} />}
+            {running && exam?.questions?.some((q) => q.kind === "spell") && <ReadAloud qs={exam.questions} personal={exam.personal ?? 0} onRead={(n) => tell(exam.id, n)} />}
+            {exam?.questions && needsMarking(exam.questions) && <MarkingDesk examId={exam.id} questions={exam.questions} entries={entries} api={api} reload={reload} running={running} />}
             <div className="mb-3 grid gap-2 sm:grid-cols-4">
               {[["Taking it", entries.length], ["Handed in", marked.length], ["Left the page", entries.filter((e) => e.flags > 0).length], ["Average", avg == null ? "—" : `${avg}%`]].map(([l, v]) => (
                 <div key={String(l)} className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200"><p className="text-[11px] font-black uppercase tracking-wider text-ink/50">{l}</p><p className="text-2xl font-black">{v}</p></div>
@@ -450,11 +511,20 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                 <tbody>
                   {[...entries].sort((a, b) => (b.score ?? b.live ?? 0) - (a.score ?? a.live ?? 0)).map((e) => (
                     <tr key={e.id} className="border-t border-line">
-                      <td className="p-2 font-black">{e.name}</td>
+                      <td className="p-2 font-black">
+                        {e.name}
+                        {(running || !!e.extraMs) && (
+                          <button type="button" onClick={() => toggleExtra(e)} disabled={!running || e.submitted} aria-pressed={!!e.extraMs} aria-label={`Extra time for ${e.name}`}
+                            title={e.extraMs ? `${extraMins(e.extraMs)} minutes extra (25%)` : "Give 25% extra time"}
+                            className={`ml-2 rounded-md px-1.5 py-0.5 text-[11px] font-black disabled:opacity-60 ${e.extraMs ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-ink/50"}`}>
+                            ⏱ {e.extraMs ? `+${extraMins(e.extraMs)} min` : "+25%"}
+                          </button>
+                        )}
+                      </td>
                       <td className="p-2">{e.answered} / {exam!.count}</td>
                       <td className="p-2">{e.flags ? <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-black text-red-700" title={e.flagLog.map((f) => `${new Date(f.at).toLocaleTimeString()} — ${f.reason}`).join("\n")}>⚠ {e.flags}×</span> : <span className="text-xs font-bold text-emerald-700">No</span>}</td>
                       <td className="p-2 text-xs font-black">{e.submitted ? <span className="text-emerald-700">Handed in</span> : <span className="text-ink/55">Writing…</span>}</td>
-                      <td className="p-2 text-right font-black">{e.submitted ? `${e.score} / ${e.total}` : e.toMark ? `${e.live ?? 0} / ${e.total} so far` : running ? "—" : ""}{e.toMark?.length ? <span className="block text-[11px] font-bold text-amber-700">{e.toMark.length} page{e.toMark.length === 1 ? "" : "s"} to mark</span> : null}</td>
+                      <td className="p-2 text-right font-black">{e.submitted ? `${e.score} / ${e.total}` : e.toMark ? `${e.live ?? 0} / ${e.total} so far` : running ? "—" : ""}{e.toMark?.length ? <span className="block text-[11px] font-bold text-amber-700">{e.toMark.length} to mark</span> : null}</td>
                       <td className="p-2 text-right">{e.submitted && e.total ? (() => { const p = Math.round(((e.score ?? 0) / e.total) * 100); return <span className={`rounded-md px-2 py-0.5 text-xs font-black ${p >= scheme.pass ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>{gradeOf(p, scheme)}</span>; })() : ""}</td>
                       <td className="p-2 text-right">
                         <button type="button" onClick={() => reports(e)} disabled={!!pdfBusy} aria-label={`Download ${e.name}'s report (PDF)`}
@@ -495,7 +565,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
 
 // The teacher reads a spelling test out, as in the national test: the word,
 // the sentence, the word. Reading one sends every phone to that word.
-function ReadAloud({ qs, onRead }: { qs: ExamQ[]; onRead: (n: number) => void }) {
+function ReadAloud({ qs, personal = 0, onRead }: { qs: ExamQ[]; personal?: number; onRead: (n: number) => void }) {
   const words = qs.map((q, n) => ({ q, n })).filter((x) => x.q.kind === "spell");
   const [k, setK] = useState(0);
   const [read, setRead] = useState<Set<number>>(new Set());
@@ -511,7 +581,7 @@ function ReadAloud({ qs, onRead }: { qs: ExamQ[]; onRead: (n: number) => void })
     <section aria-label="Read the spellings" className="mb-3 rounded-2xl bg-[#EEF7F6] p-3 ring-1 ring-[#CDE7E5]">
       <div className="flex flex-wrap items-center gap-2">
         <p className="mr-auto text-xs font-black uppercase tracking-wider text-[#0A4F52]">📢 Read the spellings · {k + 1} of {words.length}</p>
-        <p className="text-[11px] font-bold text-ink/55">Phones go to the word you read.</p>
+        <p className="text-[11px] font-bold text-ink/55">Phones go to the word you read.{personal ? ` After these, each learner has up to ${personal} of their own words — they hear those on their phone.` : ""}</p>
       </div>
       <p className="mt-2 font-display text-3xl font-black text-[#0A4F52]">{String(cur.q.answer)}</p>
       <p className="mt-1 text-sm font-semibold text-ink/75">{cur.q.q}</p>
@@ -638,7 +708,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
     return () => { if (away) clearTimeout(away); document.removeEventListener("visibilitychange", vis); window.removeEventListener("blur", blur); window.removeEventListener("focus", back); };
   }, [taking, exam]);
   // Time's up: hand it in.
-  const left = exam ? exam.endsAt - now : 0;
+  const left = exam ? exam.endsAt + (entry?.extraMs ?? 0) - now : 0; // with any extra time
   const submitted = useRef(false);
   useEffect(() => { if (taking && left <= 0 && !submitted.current) { submitted.current = true; submit(true); } });
 
@@ -700,6 +770,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
         <p className="min-w-0 flex-1 truncate text-sm font-black">{exam.title}</p>
         <span className="text-xs font-bold text-ink/60">{done}/{paper.length} {hand ? "handed in" : "answered"}</span>
         {exam.calculator !== false ? <CalculatorButton /> : <span className="rounded-lg bg-white px-2 py-1 text-[11px] font-black text-ink/55 ring-1 ring-orange-200" title="Your teacher switched the calculator off for this exam">🚫🧮 No calculator</span>}
+        {entry?.extraMs ? <span className="rounded-lg bg-violet-100 px-2 py-1 text-[11px] font-black text-violet-800" title="Your teacher gave you extra time">+ extra time</span> : null}
         <span role="timer" className={`rounded-xl px-3 py-1.5 text-sm font-black ${left < 60_000 ? "bg-red-600 text-white" : "bg-white text-[#C2451C] ring-1 ring-orange-200"}`}>⏱ {clockLeft(left)}</span>
       </div>
       {warned > 0 && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-black text-red-700 ring-1 ring-red-200">⚠️ You left the exam page{warned > 1 ? ` ${warned} times` : ""}. Your teacher has been told.</p>}
@@ -709,7 +780,8 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
         </div>
       ) : (<>
       <div className="select-none rounded-2xl bg-white p-4 shadow ring-1 ring-orange-200">
-        <p className="text-xs font-black uppercase tracking-wider text-[#C2451C]">Question {at + 1} of {paper.length} · {q.marks} mark{q.marks === 1 ? "" : "s"}</p>
+        <p className="text-xs font-black uppercase tracking-wider text-[#C2451C]">Question {at + 1} of {paper.length} · {q.marks} mark{q.marks === 1 ? "" : "s"}
+          {data?.personalFrom != null && q.n >= data.personalFrom && <span className="ml-2 rounded-md bg-amber-100 px-1.5 py-0.5 normal-case tracking-normal text-amber-900">⭐ Your own word — listen on your phone</span>}</p>
         {q.img && <PaperPage key={q.img} src={q.img} label={`The page for ${q.q}`} />}
         <div className="mt-2 flex items-start gap-2">
           <p className="flex-1 whitespace-pre-wrap text-xl font-black leading-snug">{q.q}</p>
@@ -736,6 +808,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
               className="mt-1 w-full rounded-xl bg-white px-4 py-3 text-xl font-black text-ink ring-2 ring-orange-200 focus:outline-none focus:ring-[#C2451C]" />
           </label>
         )}
+        {q.method && <WorkingPad key={q.n} examId={exam.id} n={q.n} myId="learner" saved={answers[workingKey(q.n)]} api={api} onInk={(ink) => setAnswers((a) => ({ ...a, [workingKey(q.n)]: { ink } }))} />}
         <div className="mt-4 flex gap-2">
           <button type="button" disabled={at === 0} onClick={() => setAt(at - 1)} className="min-h-[48px] flex-1 rounded-xl bg-orange-50 text-sm font-black text-[#C2451C] disabled:opacity-40">← Back</button>
           {at < paper.length - 1
@@ -776,6 +849,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
         {exam.status === "open" && <p className="mt-3 text-sm font-semibold text-ink/60">{exam.review ? "You can see the right answers when the exam ends." : "Wait for your teacher."}</p>}
         {over && analysis && <ExamAnalysis a={analysis} />}
         {over && analysis && analysis.score < analysis.total && <FixMistakes sessionId={sessionId} />}
+        {over && analysis && analysis.score < analysis.total && exam.spelling && <FixMistakes sessionId={sessionId} page="spelling" label="✏️ Practise my spellings" />}
         <button type="button" onClick={() => { if (over) markSeen(exam.id); else setHidden(true); }} className="mt-4 min-h-[44px] rounded-xl bg-[#C2451C] px-5 text-sm font-black text-white">{over ? "Done — back to the class" : "Back to the class"}</button>
       </div>
       {review && (
@@ -826,7 +900,8 @@ function ExamAnalysis({ a }: { a: Analysis }) {
 }
 
 // Opens "Fix my mistakes" (practice from this class's wrong answers) with the learner's own results link.
-function FixMistakes({ sessionId }: { sessionId: string }) {
+// page "spelling": their own spelling list, look-cover-write-check (/spelling).
+function FixMistakes({ sessionId, page = "practice", label = "🔁 Fix my mistakes" }: { sessionId: string; page?: "practice" | "spelling"; label?: string }) {
   const [busy, setBusy] = useState(false);
   async function go() {
     setBusy(true);
@@ -834,12 +909,59 @@ function FixMistakes({ sessionId }: { sessionId: string }) {
     const r = await fetch(`/api/live-sessions/my-results?id=${encodeURIComponent(sessionId)}`, { cache: "no-store" }).catch(() => null);
     const j = r ? await r.json().catch(() => ({})) : {};
     setBusy(false);
-    const url = r?.ok && j.link ? String(j.link).replace("/report?", "/practice?") : null;
+    const url = r?.ok && j.link ? String(j.link).replace("/report?", `/${page}?`) : null;
     if (url && tab) tab.location.href = url; else if (url) window.location.assign(url); else tab?.close();
   }
   return (
     <button type="button" onClick={go} disabled={busy} className="mt-4 mr-2 min-h-[44px] rounded-xl bg-[#0E6E72] px-5 text-sm font-black text-white disabled:opacity-60">
-      {busy ? "Opening…" : "🔁 Fix my mistakes"}
+      {busy ? "Opening…" : label}
     </button>
+  );
+}
+
+// Each learner's daily warm-ups over the weeks: marks and speed (matched by name).
+function WarmUpTracker({ sessionId }: { sessionId: string }) {
+  const [rows, setRows] = useState<WarmUpRow[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    fetch(`/api/board/exams?sessionId=${encodeURIComponent(sessionId)}&warmups=1`, { cache: "no-store" })
+      .then(async (r) => { const j = await r.json().catch(() => ({})); if (r.ok) setRows(j.rows ?? []); else setErr(j.error ?? "Couldn't load the warm-ups."); })
+      .catch(() => setErr("Couldn't load the warm-ups — check the internet."));
+  }, [sessionId]);
+  const lines = rows ? warmUpTable(rows) : [];
+  const time = (s: number | null) => (s == null ? "—" : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
+  return (
+    <section aria-label="Warm-up tracker" className="mt-3 rounded-xl bg-white p-3 ring-1 ring-[#CDE7E5]">
+      <p className="text-xs font-black text-[#0A4F52]">📈 Warm-up tracker — each learner&apos;s last warm-ups (marks and time)</p>
+      {err && <p role="alert" className="mt-2 text-xs font-bold text-red-700">{err}</p>}
+      {!rows && !err && <p className="mt-2 text-xs font-bold text-ink/50">Loading…</p>}
+      {rows && !lines.length && <p className="mt-2 text-xs font-bold text-ink/55">No warm-ups yet. Start one with “⚡ Daily warm-up” — each one is added here.</p>}
+      {lines.length > 0 && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[560px] text-left text-xs">
+            <thead><tr className="text-[10px] uppercase tracking-wider text-ink/50"><th className="p-1.5">Learner</th><th className="p-1.5">Last warm-ups (oldest → newest)</th><th className="p-1.5 text-right">Average</th><th className="p-1.5 text-right">Usual time</th><th className="p-1.5 text-right">Trend</th></tr></thead>
+            <tbody>
+              {lines.map((l) => (
+                <tr key={l.name} className="border-t border-line">
+                  <td className="p-1.5 font-black">{l.name}</td>
+                  <td className="p-1.5">
+                    <span className="flex flex-wrap gap-1">
+                      {l.tries.slice(-8).map((t, i) => (
+                        <span key={i} title={`${new Date(t.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}: ${t.pct}% in ${time(t.secs)}`}
+                          className={`rounded px-1.5 py-0.5 font-black ${t.pct >= 80 ? "bg-emerald-100 text-emerald-800" : t.pct >= 50 ? "bg-amber-100 text-amber-900" : "bg-red-100 text-red-700"}`}>{Math.round(t.pct / 10)}</span>
+                      ))}
+                    </span>
+                  </td>
+                  <td className="p-1.5 text-right font-black">{l.accuracy}%</td>
+                  <td className="p-1.5 text-right">{time(l.speed)}</td>
+                  <td className="p-1.5 text-right font-black">{l.tries.length < 4 ? <span className="text-ink/40">—</span> : l.trend >= 5 ? <span className="text-emerald-700">▲ {l.trend}</span> : l.trend <= -5 ? <span className="text-red-700">▼ {-l.trend}</span> : <span className="text-ink/55">steady</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-1 text-[10px] font-semibold text-ink/50">Each box is a warm-up: marks out of 10. Trend: the last 3 against the 3 before, in percentage points.</p>
+        </div>
+      )}
+    </section>
   );
 }

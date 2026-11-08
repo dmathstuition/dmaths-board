@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { readReport } from "@/lib/classReportLink";
 import { rateLimit } from "@/lib/ratelimit";
-import { flashcardsFor, practiceFor } from "@/lib/studyServer";
+import { flashcardsFor, practiceFor, spellingFor } from "@/lib/studyServer";
 import { practiceStars } from "@/lib/practice";
 
 // A learner's study tools, opened with their signed results link (?t=, the
 // same as /report — it works at home, after the class has ended):
 //   GET  ?t=&what=practice  → "Fix my mistakes": { learner, title, missed, items, ai }
 //   GET  ?t=&what=cards     → revision flashcards: { title, cards, ai }
+//   GET  ?t=&what=spelling  → their own spelling list: { learner, words: [{ word, sentence }] }
 //   POST { t, right, total } → stars for a finished practice round (up to 3 rounds a class)
 export const dynamic = "force-dynamic";
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
@@ -17,13 +18,18 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const link = readReport(url.searchParams.get("t"));
   if (!link) return bad("This link isn't valid — open it again from your results.", 403);
-  const what = url.searchParams.get("what") === "cards" ? "cards" : "practice";
+  const asked = url.searchParams.get("what");
+  const what = asked === "cards" || asked === "spelling" ? asked : "practice";
   if (!rateLimit(`study:${link.s}:${link.g}:${what}`, 20, 60 * 60_000)) return bad("You've opened this a lot — try again in a while.", 429);
   if (what === "cards") {
     const r = await flashcardsFor(link.s).catch(() => null);
     return r ? NextResponse.json(r, { headers: { "Cache-Control": "no-store" } }) : bad("This class can't be found.", 404);
   }
   if (!link.g) return bad("Open this from your own results link.", 403);
+  if (what === "spelling") {
+    const r = await spellingFor(link.s, link.g).catch(() => null);
+    return r ? NextResponse.json(r, { headers: { "Cache-Control": "no-store" } }) : bad("Your results can't be found.", 404);
+  }
   const r = await practiceFor(link.s, link.g).catch(() => null);
   return r ? NextResponse.json(r, { headers: { "Cache-Control": "no-store" } }) : bad("Your results can't be found.", 404);
 }

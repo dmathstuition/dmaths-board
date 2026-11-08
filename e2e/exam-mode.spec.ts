@@ -1,36 +1,45 @@
 import { readFile } from "fs/promises";
 import { test, expect, type Browser, type BrowserContext } from "@playwright/test";
 import { SID, agree, classServer, realtimeHub } from "./helpers";
-import { cleanExamQuestions, cleanPageAnswer, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, pageDone, pagesToMark, shownQ, slimAnswers, type ExamQ } from "../lib/exams";
+import { cleanExamQuestions, cleanPageAnswer, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageDone, pagesToMark, shownQ, slimAnswers, workingKey, type ExamQ } from "../lib/exams";
 
 // Exam mode with a stand-in for /api/board/exams that keeps the exam in memory
 // and marks with the real marking code.
+const OWN_WORD: ExamQ = { q: "It is necessary to wear a helmet.", kind: "spell", options: [], answer: "necessary", marks: 1, hear: true };
 function examServer() {
-  let exam: { id: string; title: string; minutes: number; review: boolean; calculator: boolean; inOrder: boolean; status: "open" | "closed"; endsAt: number; questions: ExamQ[] } | null = null;
-  const entries = new Map<string, { name: string; answers: Record<string, unknown>; flags: number; submitted: boolean; score: number | null; total: number | null; marks?: Record<string, number> }>();
-  const meta = () => exam && { id: exam.id, title: exam.title, minutes: exam.minutes, review: exam.review, calculator: exam.calculator, inOrder: keepsOrder(exam.questions, exam.inOrder), handMarked: isHandMarked(exam.questions), status: exam.status, endsAt: exam.endsAt, count: exam.questions.length, total: exam.questions.reduce((s, q) => s + q.marks, 0) };
-  const close = () => { if (!exam) return; exam.status = "closed"; for (const e of entries.values()) if (!e.submitted) { const m = markPaper(exam.questions, e.answers); Object.assign(e, { submitted: true, score: m.score, total: m.total }); } };
+  let exam: { id: string; title: string; minutes: number; review: boolean; calculator: boolean; inOrder: boolean; personal: number; status: "open" | "closed"; endsAt: number; questions: ExamQ[] } | null = null;
+  type E = { name: string; answers: Record<string, unknown>; flags: number; submitted: boolean; score: number | null; total: number | null; marks?: Record<string, number>; extraMs: number; extraQs: ExamQ[] };
+  const entries = new Map<string, E>();
+  const qsOf = (e: E) => [...exam!.questions, ...e.extraQs];
+  const meta = () => exam && { id: exam.id, title: exam.title, minutes: exam.minutes, review: exam.review, calculator: exam.calculator, inOrder: keepsOrder(exam.questions, exam.inOrder), handMarked: isHandMarked(exam.questions), personal: exam.personal, spelling: exam.questions.some((q) => q.kind === "spell"), status: exam.status, endsAt: exam.endsAt, count: exam.questions.length, total: exam.questions.reduce((s, q) => s + q.marks, 0) };
+  const close = () => { if (!exam) return; exam.status = "closed"; for (const e of entries.values()) if (!e.submitted) { const m = markPaper(qsOf(e), e.answers, e.marks ?? {}); Object.assign(e, { submitted: true, score: m.score, total: m.total }); } };
   return async (ctx: BrowserContext, who: "teacher" | "learner", me = { id: "33333333-3333-4333-8333-333333333333", name: "Emmanuel" }) => {
     await ctx.route("**/api/board/exams**", async (r) => {
       if (r.request().method() === "GET") {
+        if (new URL(r.request().url()).searchParams.get("warmups") === "1") return r.fulfill({ json: { rows: [
+          { at: "2026-11-02T09:00:00Z", name: "Emmanuel", score: 5, total: 10, secs: 540 }, { at: "2026-11-03T09:00:00Z", name: "Emmanuel", score: 6, total: 10, secs: 500 },
+          { at: "2026-11-04T09:00:00Z", name: "Emmanuel", score: 6, total: 10, secs: 470 }, { at: "2026-11-05T09:00:00Z", name: "Emmanuel", score: 9, total: 10, secs: 400 },
+          { at: "2026-11-02T09:00:00Z", name: "Grace", score: 8, total: 10, secs: 300 },
+        ] } });
         if (!exam) return r.fulfill({ json: { exam: null } });
-        const hand = isHandMarked(exam.questions);
+        const hand = needsMarking(exam.questions);
         if (who === "teacher") return r.fulfill({ json: { exam: { ...meta(), questions: exam.questions }, entries: [...entries].map(([id, e]) => {
-          const m = markPaper(exam!.questions, e.answers, e.marks ?? {});
-          return { id, name: e.name, answered: Object.keys(e.answers).length, flags: e.flags, flagLog: [], submitted: e.submitted, score: hand && e.submitted ? m.score : e.score, total: m.total, live: e.submitted ? null : m.score,
-            answers: hand ? slimAnswers(exam!.questions, e.answers) : e.answers, startedAt: new Date(Date.now() - 300_000).toISOString(), submittedAt: e.submitted ? new Date().toISOString() : null,
-            ...(hand ? { pageMarks: e.marks ?? {}, toMark: pagesToMark(exam!.questions, e.answers, e.marks ?? {}, e.submitted) } : {}) };
+          const qs = qsOf(e), m = markPaper(qs, e.answers, e.marks ?? {});
+          return { id, name: e.name, extraMs: e.extraMs, ...(e.extraQs.length ? { extraQs: e.extraQs } : {}), answered: Object.keys(e.answers).filter((k) => /^\d+$/.test(k)).length, flags: e.flags, flagLog: [], submitted: e.submitted, score: e.submitted ? m.score : null, total: m.total, live: e.submitted ? null : m.score,
+            answers: hand ? slimAnswers(qs, e.answers) : e.answers, startedAt: new Date(Date.now() - 300_000).toISOString(), submittedAt: e.submitted ? new Date().toISOString() : null,
+            ...(hand ? { pageMarks: e.marks ?? {}, toMark: pagesToMark(qs, e.answers, e.marks ?? {}, e.submitted) } : {}) };
         }) } });
         const e = entries.get(me.id);
+        const qs = e ? qsOf(e) : exam.questions;
         const out: any = { exam: meta(), entry: e ? {
-          started: true, submitted: e.submitted, flags: e.flags, total: e.total ?? markPaper(exam.questions, e.answers).total,
-          answers: hand ? slimAnswers(exam.questions, e.answers, e.submitted ? -1 : currentPage(exam.questions, e.answers)) : e.answers,
-          score: hand && e.submitted ? markPaper(exam.questions, e.answers, e.marks ?? {}).score : e.score,
-          ...(hand && e.submitted ? { marking: { left: pagesToMark(exam.questions, e.answers, e.marks ?? {}, true).length, pages: exam.questions.length } } : {}),
+          started: true, submitted: e.submitted, flags: e.flags, extraMs: e.extraMs, total: markPaper(qs, e.answers).total,
+          answers: isHandMarked(qs) ? slimAnswers(qs, e.answers, e.submitted ? -1 : currentPage(qs, e.answers)) : e.answers,
+          score: e.submitted ? markPaper(qs, e.answers, e.marks ?? {}).score : null,
+          ...(hand && e.submitted ? { marking: { left: pagesToMark(qs, e.answers, e.marks ?? {}, true).length, pages: qs.filter((q) => q.kind === "page").length } } : {}),
         } : null };
-        if (e && !e.submitted && exam.status === "open") out.paper = learnerPaper(exam.id, me.id, exam.questions, exam.inOrder);
-        if (e && exam.status === "closed") { const m = markPaper(exam.questions, e.answers);
-          out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = exam.questions.map((q, i) => ({ q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks })); }
+        if (e && !e.submitted && exam.status === "open") { out.paper = learnerPaper(exam.id, me.id, qs, exam.inOrder); out.personalFrom = exam.questions.length; }
+        if (e && exam.status === "closed") { const m = markPaper(qs, e.answers, e.marks ?? {});
+          out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = qs.map((q, i) => ({ q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks })); }
         return r.fulfill({ json: out });
       }
       const b = JSON.parse(r.request().postData() ?? "{}");
@@ -38,30 +47,35 @@ function examServer() {
         { q: `${b.topic}: which gas do plants take in?`, kind: "choice", options: ["Oxygen", "Carbon dioxide", "Nitrogen", "Helium"], answer: 1, marks: 1 },
         { q: `${b.topic}: what colour is chlorophyll?`, kind: "typed", options: [], answer: "green", marks: 1 },
       ].slice(0, b.count) } });
-      if (b.action === "create") { exam = { id: "exam-1", title: b.title, minutes: b.minutes, review: b.review, calculator: b.calculator !== false, inOrder: b.inOrder === true, status: "open", endsAt: Date.now() + b.minutes * 60_000, questions: cleanExamQuestions(b.questions) }; return r.fulfill({ json: { id: exam.id } }); }
+      if (b.action === "create") { const questions = cleanExamQuestions(b.questions); exam = { id: "exam-1", title: b.title, minutes: b.minutes, review: b.review, calculator: b.calculator !== false, inOrder: b.inOrder === true, personal: questions.some((q) => q.kind === "spell") ? Number(b.personal) || 0 : 0, status: "open", endsAt: Date.now() + b.minutes * 60_000, questions }; return r.fulfill({ json: { id: exam.id } }); }
       if (b.action === "close") { close(); return r.fulfill({ json: { ok: true } }); }
       if (b.action === "wipe-paper") {
         const n = exam!.questions.filter((q) => q.img).length;
         exam!.questions = exam!.questions.map(({ img: _img, ...q }) => q);
         return r.fulfill({ json: { ok: true, removed: n, kept: 0 } });
       }
+      if (b.action === "extra") { const t = entries.get(b.studentId)!; t.extraMs = b.on === false ? 0 : Math.round(exam!.minutes * 0.25 * 60_000); return r.fulfill({ json: { ok: true, extraMs: t.extraMs } }); }
       if (b.action === "page-view" || b.action === "mark") {
-        const t = entries.get(b.studentId)!;
-        if (b.action === "page-view") { const pa = cleanPageAnswer(t.answers[String(b.n)]); return r.fulfill({ json: { ...pa, done: true, mark: t.marks?.[String(b.n)] ?? null } }); }
+        const t = entries.get(b.studentId)!, q = qsOf(t)[b.n];
+        if (b.action === "page-view") {
+          const pa = cleanPageAnswer(t.answers[q.kind === "page" ? String(b.n) : workingKey(b.n)]);
+          return r.fulfill({ json: { ink: pa.ink, text: q.kind === "page" ? pa.text : String(t.answers[String(b.n)] ?? ""), done: true, mark: t.marks?.[String(b.n)] ?? null } });
+        }
         t.marks = { ...(t.marks ?? {}), [String(b.n)]: b.mark };
         return r.fulfill({ json: { ok: true } });
       }
-      if (b.action === "start") { entries.set(me.id, { name: me.name, answers: {}, flags: 0, submitted: false, score: null, total: null }); return r.fulfill({ json: { ok: true } }); }
+      if (b.action === "start") { entries.set(me.id, { name: me.name, answers: {}, flags: 0, submitted: false, score: null, total: null, extraMs: 0, extraQs: exam!.personal ? [OWN_WORD] : [] }); return r.fulfill({ json: { ok: true } }); }
       const e = entries.get(me.id)!;
+      if (b.action === "working") { e.answers[workingKey(b.n)] = { ink: cleanPageAnswer(b.value).ink }; return r.fulfill({ json: { ok: true } }); }
       if (b.action === "answer" || b.action === "page-done") {
-        if (exam!.questions[b.n]?.kind === "page") {
+        if (qsOf(e)[b.n]?.kind === "page") {
           if (pageDone(e.answers[String(b.n)])) return r.fulfill({ status: 409, json: { error: "You've handed in that page." } });
           e.answers[String(b.n)] = { ...cleanPageAnswer(b.value), ...(b.action === "page-done" ? { done: new Date().toISOString() } : {}) };
         } else e.answers[String(b.n)] = b.value;
         return r.fulfill({ json: { ok: true } });
       }
       if (b.action === "flag") { e.flags++; return r.fulfill({ json: { ok: true } }); }
-      if (b.action === "submit") { const m = markPaper(exam!.questions, e.answers); Object.assign(e, { submitted: true, score: m.score, total: m.total }); return r.fulfill({ json: { ok: true, score: m.score, total: m.total } }); }
+      if (b.action === "submit") { const m = markPaper(qsOf(e), e.answers, e.marks ?? {}); Object.assign(e, { submitted: true, score: m.score, total: m.total }); return r.fulfill({ json: { ok: true, score: m.score, total: m.total } }); }
       return r.fulfill({ json: {} });
     });
   };
@@ -236,18 +250,98 @@ test("KS2 SATs: a spelling test read aloud, phones following the teacher, graded
   await learner.screenshot({ path: "test-results/sats-spelling-learner.png" });
   await exam.getByRole("button", { name: "Question 2" }).click();
   await exam.getByLabel("The missing word").fill("confusion");
+  // After the class's words: one they got wrong before, heard on their own phone.
+  await exam.getByRole("button", { name: "Question 4" }).click();
+  await expect(exam.getByText("⭐ Your own word — listen on your phone")).toBeVisible();
+  await expect(exam.getByText("It is ________ to wear a helmet.")).toBeVisible();
+  await expect(exam.getByRole("button", { name: "🔊 Hear the sentence" })).toBeVisible();
+  await exam.getByLabel("The missing word").fill("necessary");
   await learner.waitForTimeout(900);
-  await exam.getByRole("button", { name: "Hand in my exam" }).click();
+  await exam.getByRole("button", { name: "Hand in", exact: true }).click();
   await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
-  await expect(exam.getByText("2 / 3")).toBeVisible({ timeout: 15_000 });
+  await expect(exam.getByText("3 / 4")).toBeVisible({ timeout: 15_000 });
 
-  // Graded the SATs way: 67% is the expected standard.
-  await expect(panel.getByRole("cell", { name: "2 / 3" })).toBeVisible({ timeout: 15_000 });
+  // Graded the SATs way: 75% is the expected standard.
+  await expect(panel.getByRole("cell", { name: "3 / 4" })).toBeVisible({ timeout: 15_000 });
   await panel.getByLabel("Grading").selectOption("ks2");
   await expect(panel.getByRole("cell", { name: "EXS" })).toBeVisible();
   await panel.getByRole("button", { name: "End exam" }).click();
   await expect(exam.getByText(/✗ 3\. Bats are ________ animals\./)).toBeVisible({ timeout: 20_000 });
   await expect(exam.getByText("Answer: nocturnal")).toBeVisible();
+  await expect(exam.getByRole("button", { name: "✏️ Practise my spellings" })).toBeVisible();
+});
+
+test("extra time for one learner, and a method mark for working on a long multiplication", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const { teacher, learner } = await openClass(browser);
+  await teacher.getByRole("button", { name: "Exam mode" }).click();
+  const panel = teacher.getByRole("dialog", { name: "Exam mode" });
+  // Extra time for this learner is remembered and given when they start.
+  await panel.getByPlaceholder(/Names, separated by commas/).fill("Grace, emmanuel");
+  await panel.getByLabel("Title").fill("Long multiplication");
+  await panel.getByRole("button", { name: "10 min", exact: true }).click();
+  await panel.getByRole("button", { name: "+ Typed-answer question" }).click();
+  await panel.getByLabel("Question 1", { exact: true }).fill("2,416 × 37 =");
+  await panel.getByLabel("Answer to question 1").fill("89392");
+  await panel.getByLabel("Marks for question 1").selectOption("2");
+  await panel.getByLabel("Method mark for question 1").check();
+  await panel.getByRole("button", { name: "+ Typed-answer question" }).click();
+  await panel.getByLabel("Question 2", { exact: true }).fill("9 × 8 =");
+  await panel.getByLabel("Answer to question 2").fill("72");
+  await panel.getByRole("button", { name: /Start the exam \(2 questions, 10 min\)/ }).click();
+
+  const exam = learner.getByRole("dialog", { name: "Exam: Long multiplication" });
+  await expect(exam.getByRole("button", { name: "Start the exam" })).toBeVisible({ timeout: 20_000 });
+  await exam.getByRole("button", { name: "Start the exam" }).click();
+  await expect(panel.getByRole("button", { name: "Extra time for Emmanuel" })).toHaveText("⏱ +2.5 min", { timeout: 15_000 });
+  await expect(exam.getByText("+ extra time")).toBeVisible({ timeout: 15_000 });
+  await expect(exam.getByRole("timer")).toContainText(/1[12]:\d\d/);
+  // A wrong answer, with working shown.
+  for (let i = 0; i < 2; i++) {
+    if (await exam.getByText("2,416 × 37 =").isVisible()) {
+      await exam.getByLabel("Your answer").fill("89000");
+      const pad = exam.getByRole("img", { name: "Write on the page" });
+      const box = (await pad.boundingBox())!;
+      await learner.mouse.move(box.x + 30, box.y + 30); await learner.mouse.down();
+      for (let k = 1; k <= 6; k++) await learner.mouse.move(box.x + 30 + k * 20, box.y + 40);
+      await learner.mouse.up();
+      await expect(exam.getByText("✓ Saved")).toBeVisible({ timeout: 10_000 });
+    } else await exam.getByLabel("Your answer").fill("72");
+    if (i === 0) await exam.getByRole("button", { name: "Next →" }).click();
+  }
+  await learner.waitForTimeout(900);
+  await exam.getByRole("button", { name: "Hand in", exact: true }).click();
+  await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
+  await expect(exam.getByText("1 / 3")).toBeVisible({ timeout: 15_000 });
+  await expect(exam.getByText(/1 page still to mark|still to mark/)).toBeVisible();
+
+  // The teacher sees the working and gives the method mark.
+  const desk = panel.getByRole("region", { name: "Marking" });
+  await expect(desk.getByText("Method mark for the working:")).toBeVisible({ timeout: 15_000 });
+  await expect(desk.getByText("89000")).toBeVisible();
+  await expect(desk.getByRole("img", { name: "Their writing" })).toBeVisible();
+  await teacher.screenshot({ path: "test-results/method-mark-teacher.png" });
+  await desk.getByRole("button", { name: "1 mark", exact: true }).click();
+  await expect(desk.getByText("✍️ Marking · nothing waiting")).toBeVisible({ timeout: 10_000 });
+  await expect(panel.getByRole("cell", { name: /2 \/ 3/ })).toBeVisible({ timeout: 15_000 });
+  await expect(exam.getByText("2 / 3")).toBeVisible({ timeout: 20_000 });
+});
+
+test("the daily warm-up, and the tracker of each learner's warm-ups", async ({ browser }) => {
+  const { teacher } = await openClass(browser);
+  await teacher.getByRole("button", { name: "Exam mode" }).click();
+  const panel = teacher.getByRole("dialog", { name: "Exam mode" });
+  const sats = panel.getByRole("region", { name: "KS2 SATs" });
+  await sats.getByRole("button", { name: /Daily warm-up/ }).click();
+  await expect(panel.getByRole("button", { name: /Start the exam \(10 questions, 10 min\)/ })).toBeVisible();
+  await expect(panel.getByLabel("Title")).toHaveValue(/^Warm-up \d{1,2} [A-Z][a-z]{2}$/);
+  await sats.getByRole("button", { name: "📈 Warm-up tracker" }).click();
+  const tracker = sats.getByRole("region", { name: "Warm-up tracker" });
+  const row = tracker.getByRole("row", { name: /Emmanuel/ });
+  await expect(row).toContainText("65%");
+  await expect(row).toContainText("▲");
+  await expect(row.getByTitle(/90% in 6:40/)).toHaveText("9");
+  await expect(tracker.getByRole("row", { name: /Grace/ })).toContainText("80%");
 });
 
 test("KS2 SATs: an arithmetic paper, and a real paper uploaded as a PDF with its pages on the phone", async ({ browser }) => {

@@ -14,7 +14,9 @@ import { cleanAnswerStrokes } from "@/lib/answerBoards";
 // like a slide) shown with the question.
 // kind "page": a whole page of an uploaded paper that learners write on and the
 // teacher marks by hand (marks = the most the page can earn).
-export type ExamQ = { q: string; kind: "choice" | "typed" | "spell" | "page"; options: string[]; answer: number | string; marks: number; img?: string; hear?: boolean };
+// method (typed, 2+ marks): learners show their working; a wrong answer with
+// working goes to the teacher, who can give the method marks (all but one).
+export type ExamQ = { q: string; kind: "choice" | "typed" | "spell" | "page"; options: string[]; answer: number | string; marks: number; img?: string; hear?: boolean; method?: boolean };
 export const MAX_EXAM_QUESTIONS = 60;
 export const MAX_PAGE_MARKS = 20;
 export const EXAM_MINUTES = [5, 10, 15, 20, 30, 40, 45, 60, 90] as const;
@@ -43,7 +45,7 @@ export function cleanExamQuestions(v: unknown): ExamQ[] {
     }
     if (x?.kind === "typed") {
       const answer = str(x?.answer, 120).trim();
-      if (answer) out.push({ q, kind: "typed", options: [], answer, marks, ...img });
+      if (answer) out.push({ q, kind: "typed", options: [], answer, marks, ...img, ...(x?.method === true && marks >= 2 ? { method: true } : {}) });
       continue;
     }
     const options = (Array.isArray(x?.options) ? x.options : []).map((o: unknown) => str(o, 160).trim()).filter(Boolean).slice(0, 6);
@@ -87,14 +89,14 @@ export const shownQ = (q: ExamQ) => (q.kind === "spell" ? gapped(q) : q.q);
 
 // What a learner's phone gets while the exam is open: no answers (a spelling
 // word only goes to the phone when the teacher lets learners hear it there).
-export type LearnerQ = { n: number; q: string; kind: ExamQ["kind"]; options: { i: number; text: string }[]; marks: number; img?: string; say?: string };
+export type LearnerQ = { n: number; q: string; kind: ExamQ["kind"]; options: { i: number; text: string }[]; marks: number; img?: string; say?: string; method?: boolean };
 export function learnerPaper(examId: string, studentId: string, qs: ExamQ[], inOrder = false): LearnerQ[] {
   const { order, opts } = learnerOrder(examId, studentId, qs, keepsOrder(qs, inOrder));
   return order.map((n) => {
     const x = qs[n];
     return {
       n, q: shownQ(x), kind: x.kind, marks: x.marks, options: opts[n].map((i) => ({ i, text: x.options[i] })),
-      ...(x.img ? { img: x.img } : {}), ...(x.kind === "spell" && x.hear ? { say: spokenSpelling(x, n + 1) } : {}),
+      ...(x.img ? { img: x.img } : {}), ...(x.kind === "spell" && x.hear ? { say: spokenSpelling(x, n + 1) } : {}), ...(x.method ? { method: true } : {}),
     };
   });
 }
@@ -143,6 +145,13 @@ const asPage = (v: unknown) => (v && typeof v === "object" ? (v as Partial<PageA
 export const pageDone = (v: unknown) => !!asPage(v)?.done;
 export const pageBlank = (v: unknown) => { const p = asPage(v) as any; if (!p) return true; if (typeof p.blank === "boolean") return p.blank; return !(p.ink ?? []).some((s: Stroke) => !s.erase) && !String(p.text ?? "").trim(); };
 export const isHandMarked = (qs: Pick<ExamQ, "kind">[]) => qs.some((q) => q.kind === "page");
+// Questions the teacher marks: pages, and method marks.
+export const needsMarking = (qs: Pick<ExamQ, "kind" | "method">[]) => qs.some((q) => q.kind === "page" || q.method);
+// The most the teacher can give: a whole page, or a method mark (all but one of the marks).
+export const teacherMax = (q: ExamQ) => (q.kind === "page" ? q.marks : q.method ? q.marks - 1 : 0);
+// Where a learner's working for question n is kept, next to their answer.
+export const workingKey = (n: number) => `w${n}`;
+export const workingBlank = (v: unknown) => { const p = asPage(v) as any; if (!p) return true; if (typeof p.blank === "boolean") return p.blank; return !(p.ink ?? []).some((s: Stroke) => !s.erase); };
 // The teacher's marks, by question number: only whole numbers a page can earn.
 export function cleanPageMarks(qs: ExamQ[], v: unknown): Record<string, number> {
   const out: Record<string, number> = {};
@@ -150,7 +159,7 @@ export function cleanPageMarks(qs: ExamQ[], v: unknown): Record<string, number> 
   for (const [k, m] of Object.entries(v as Record<string, unknown>)) {
     const q = qs[Number(k)];
     const n = Math.round(Number(m));
-    if (q?.kind === "page" && m != null && Number.isFinite(n) && n >= 0) out[k] = Math.min(q.marks, n);
+    if (q && teacherMax(q) > 0 && m != null && Number.isFinite(n) && n >= 0) out[k] = Math.min(teacherMax(q), n);
   }
   return out;
 }
@@ -159,6 +168,7 @@ export function cleanPageMarks(qs: ExamQ[], v: unknown): Record<string, number> 
 export function slimAnswers(qs: ExamQ[], answers: Record<string, unknown>, keep = -1): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(answers ?? {})) {
+    if (k.startsWith("w")) { out[k] = { blank: workingBlank(v) }; continue; } // working for a method mark
     const q = qs[Number(k)];
     if (q?.kind !== "page" || Number(k) === keep) { out[k] = v; continue; }
     const p = asPage(v);
@@ -169,8 +179,14 @@ export function slimAnswers(qs: ExamQ[], answers: Record<string, unknown>, keep 
 // The page a learner is on: the first one they haven't handed in.
 export const currentPage = (qs: ExamQ[], answers: Record<string, unknown>) => qs.findIndex((q, i) => q.kind === "page" && !pageDone(answers?.[String(i)]));
 // Pages handed in with something on them and no mark yet (blank pages earn 0 by themselves).
+// …and method marks to give: once handed in, a wrong answer with working.
 export function pagesToMark(qs: ExamQ[], answers: Record<string, unknown>, marks: Record<string, number>, submitted = false): number[] {
-  return qs.map((_, i) => i).filter((i) => qs[i].kind === "page" && (submitted || pageDone(answers?.[String(i)])) && !pageBlank(answers?.[String(i)]) && marks[String(i)] == null);
+  return qs.map((_, i) => i).filter((i) => {
+    const q = qs[i], v = answers?.[String(i)];
+    if (marks[String(i)] != null) return false;
+    if (q.kind === "page") return (submitted || pageDone(v)) && !pageBlank(v);
+    return !!q.method && submitted && !isRight(q, v) && !workingBlank(answers?.[workingKey(i)]);
+  });
 }
 
 // Spelling: letter for letter (capitals, spaces round it and a full stop don't matter).
@@ -185,7 +201,8 @@ export function isRight(q: ExamQ, given: unknown): boolean {
 }
 // pageMarks: the teacher's marks for pages (added up with everything marked automatically).
 export function markPaper(qs: ExamQ[], answers: Record<string, unknown>, pageMarks: Record<string, number> = {}): { score: number; total: number; right: boolean[] } {
-  const got = qs.map((q, i) => (q.kind === "page" ? Math.max(0, Math.min(q.marks, Math.round(Number(pageMarks?.[String(i)]) || 0))) : isRight(q, answers?.[String(i)]) ? q.marks : 0));
+  const given = (q: ExamQ, i: number) => Math.max(0, Math.min(teacherMax(q), Math.round(Number(pageMarks?.[String(i)]) || 0)));
+  const got = qs.map((q, i) => (q.kind === "page" ? given(q, i) : isRight(q, answers?.[String(i)]) ? q.marks : q.method ? given(q, i) : 0));
   return { score: got.reduce((a, b) => a + b, 0), total: qs.reduce((s, q) => s + q.marks, 0), right: qs.map((q, i) => q.marks > 0 && got[i] === q.marks) };
 }
 
