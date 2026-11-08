@@ -18,9 +18,12 @@ export async function removeSlidePictures(urls: unknown[], folder: string, skip:
     if (skip.sessionId) boards = boards.neq("id", skip.sessionId);
     let exams = admin.from("board_exams").select("id").contains("questions", [{ img: u }]).limit(1);
     if (skip.examId) exams = exams.neq("id", skip.examId);
-    const [a, b, c] = await Promise.all([lessons, boards, exams]);
-    // If we can't tell, keep it (a missing exams table just means no exams).
-    const examUse = c.error ? !MISSING.test(c.error.message) : !!c.data?.length;
+    let booklets = admin.from("board_exams").select("id").contains("booklet", [u]).limit(1);
+    if (skip.examId) booklets = booklets.neq("id", skip.examId);
+    const [a, b, c, d] = await Promise.all([lessons, boards, exams, booklets]);
+    // If we can't tell, keep it (a missing exams table or booklet column just means none).
+    const used = (r: { error: { message: string } | null; data: unknown[] | null }) => (r.error ? !MISSING.test(r.error.message) : !!r.data?.length);
+    const examUse = used(c) || used(d);
     return !!(a.error || b.error || a.data?.length || b.data?.length || examUse);
   }));
   const paths = mine.filter((_, i) => !inUse[i]).map(pathOf);

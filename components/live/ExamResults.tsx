@@ -10,7 +10,7 @@ import { MarkingDesk, type MarkEntry } from "@/components/live/board/PaperPages"
 // grade, PDF reports and a spreadsheet, marking still to do, and deleting an
 // uploaded paper once it's marked.
 type ListItem = { id: string; title: string; status: "open" | "closed"; createdAt: string; count: number };
-type Exam = { id: string; title: string; status: "open" | "closed"; endsAt: number; total: number; count: number; questions: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
+type Exam = { booklet?: string[]; id: string; title: string; status: "open" | "closed"; endsAt: number; total: number; count: number; questions: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
 type Entry = DownloadEntry & MarkEntry & { extraMs?: number };
 
 const api = (body: unknown) => fetch("/api/board/exams", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
@@ -55,7 +55,7 @@ export default function ExamResults({ sessionId, onChange }: { sessionId: string
   }
   async function wipe() {
     if (!exam) return;
-    const pages = exam.questions.filter((q) => q.img).length;
+    const pages = exam.questions.filter((q) => q.img).length + (exam.booklet?.length ?? 0);
     const left = entries.reduce((a, e) => a + (e.toMark?.length ?? 0), 0);
     if (!window.confirm(`${left ? `⚠ ${left} still not marked — you won't be able to see ${left === 1 ? "it" : "them"} after this.\n\n` : ""}Delete this paper's ${pages} page${pages === 1 ? "" : "s"} for good? Marks, scores and reports stay.`)) return;
     setBusy("wipe");
@@ -119,7 +119,7 @@ export default function ExamResults({ sessionId, onChange }: { sessionId: string
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" onClick={() => reports()} disabled={!!busy || !entries.length} className="rounded-xl bg-[#0E6E72] px-3 py-2 text-xs font-black text-white disabled:opacity-50">{busy === "all" ? "Making the reports…" : "📄 Download all exam reports (PDF)"}</button>
             <button type="button" onClick={() => downloadExamCsv(exam, entries, scheme)} disabled={!entries.length} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black disabled:opacity-50">Exam results (spreadsheet)</button>
-            {!open && exam.questions.some((q) => q.img) && <button type="button" onClick={wipe} disabled={busy === "wipe"} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50">{busy === "wipe" ? "Deleting…" : `🗑 Delete the paper (${exam.questions.filter((q) => q.img).length} pages)`}</button>}
+            {!open && (exam.questions.some((q) => q.img) || !!exam.booklet?.length) && <button type="button" onClick={wipe} disabled={busy === "wipe"} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50">{busy === "wipe" ? "Deleting…" : `🗑 Delete the paper (${exam.questions.filter((q) => q.img).length + (exam.booklet?.length ?? 0)} pages)`}</button>}
           </div>
         </>
       )}

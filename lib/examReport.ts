@@ -72,7 +72,7 @@ const answerText = (q: ExamQ, v: unknown): string => {
   if (q.kind === "choice") { const i = Number(v); return Number.isInteger(i) && q.options[i] != null ? q.options[i] : ""; }
   return String(v).slice(0, 200);
 };
-const correctText = (q: ExamQ) => (q.kind === "page" ? "Marked by the teacher" : q.kind === "choice" ? q.options[Number(q.answer)] ?? "" : String(q.answer));
+const correctText = (q: ExamQ) => (q.kind === "page" || q.kind === "written" ? "Marked by the teacher" : q.kind === "choice" ? q.options[Number(q.answer)] ?? "" : String(q.answer));
 
 function remarkFor(pct: number, avg: number | null, blank: number, flags: number, scheme: GradeScheme): string {
   const g = gradeOf(pct, scheme), named = scheme.id === "gcse" ? `grade ${g}` : g;
@@ -110,6 +110,11 @@ export function examReports(questions: ExamQ[], entries: ReportEntry[], scheme: 
         const v = e.answers?.[String(i)], mark = e.pageMarks?.[String(i)], blank = pageBlank(v);
         const given = blank ? "" : mark != null ? `${mark} / ${q.marks} marks` : "Not marked yet";
         return { n: i + 1, q: q.q, given, correct: "Marked by the teacher", right: m.right[i], blank, marks: q.marks, classRight: classRight[i] ?? null };
+      }
+      if (q.kind === "written") {
+        const v = String(e.answers?.[String(i)] ?? "").trim(), mark = e.pageMarks?.[String(i)];
+        const given = v ? `${v.slice(0, 200)}${mark != null ? ` (${mark} / ${q.marks} marks)` : " (not marked yet)"}` : "";
+        return { n: i + 1, q: q.q, given, correct: "Marked by the teacher", right: m.right[i], blank: !v, marks: q.marks, classRight: classRight[i] ?? null };
       }
       const raw = answerText(q, e.answers?.[String(i)]);
       const method = q.method && !m.right[i] && e.pageMarks?.[String(i)] != null ? ` (method mark ${e.pageMarks[String(i)]})` : "";

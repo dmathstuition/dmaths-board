@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { drawStrokes, roundPt, type Stroke } from "@/lib/whiteboard";
 import { localPoint } from "@/components/live/board/rotation";
-import { MAX_PAGE_TEXT, isRight, pageBlank, pageDone, teacherMax, workingBlank, workingKey, type ExamQ, type LearnerQ, type PageAnswer } from "@/lib/exams";
+import { MAX_PAGE_TEXT, isRight, pageBlank, pageDone, teacherMax, workingBlank, workingKey, writtenBlank, type ExamQ, type LearnerQ, type PageAnswer } from "@/lib/exams";
 
 const PENS = ["#0B1220", "#1657C9", "#DC2626"];
 const PEN_W = 6, RUBBER_W = 14;
@@ -249,7 +249,12 @@ export function MarkingDesk({ examId, questions, entries, api, reload, running }
       ) : (
         <div className="mt-2 grid gap-3 lg:grid-cols-[1fr_260px]">
           <div className="max-h-[70vh] overflow-auto rounded-xl bg-white ring-1 ring-orange-200">
-            {view?.k === curKey && q!.method ? <PageCanvas ink={view.ink} zoom={zoom} label={`${who?.name ?? "Learner"}'s working`} />
+            {view?.k === curKey && q!.kind === "written" ? (
+              <div className="p-4">
+                <p className="text-sm font-black text-ink/70">{q!.q}</p>
+                <p className="mt-3 whitespace-pre-wrap rounded-xl bg-[#FFF7ED] p-3 font-semibold leading-relaxed text-ink ring-1 ring-orange-100" style={{ fontSize: `${zoom}rem` }} aria-label={`${who?.name ?? "Learner"}'s answer`}>{view.text.trim() || "(no answer)"}</p>
+              </div>
+            ) : view?.k === curKey && q!.method ? <PageCanvas ink={view.ink} zoom={zoom} label={`${who?.name ?? "Learner"}'s working`} />
               : view?.k === curKey && !q!.img ? <p className="p-6 text-center text-sm font-bold text-ink/55">The paper&apos;s pages were deleted — only what was typed is left.</p>
               : view?.k === curKey ? <PageCanvas src={q!.img!} ink={view.ink} zoom={zoom} label={`${who?.name ?? "Learner"}'s ${q!.q}`} />
               : <p className="p-6 text-center text-sm font-bold text-ink/50">Opening the page…</p>}
@@ -257,10 +262,11 @@ export function MarkingDesk({ examId, questions, entries, api, reload, running }
           <div className="grid content-start gap-2">
             <div>
               <p className="text-lg font-black text-ink">{who?.name ?? "Learner"}</p>
-              <p className="text-xs font-bold text-ink/60">{q!.method ? `Q${cur.n + 1}: ${q!.q} · method mark, out of ${teacherMax(q!)}` : `${q!.q} of the paper · out of ${q!.marks} mark${q!.marks === 1 ? "" : "s"}`}</p>
+              <p className="text-xs font-bold text-ink/60">{q!.kind === "written" ? `Q${cur.n + 1} · written answer, out of ${q!.marks} mark${q!.marks === 1 ? "" : "s"}` : q!.method ? `Q${cur.n + 1}: ${q!.q} · method mark, out of ${teacherMax(q!)}` : `${q!.q} of the paper · out of ${q!.marks} mark${q!.marks === 1 ? "" : "s"}`}</p>
             </div>
             {view?.k === curKey && q!.method && <p className="rounded-lg bg-white p-2 text-sm font-bold text-ink ring-1 ring-orange-100"><span className="block text-[10px] font-black uppercase text-ink/45">Their answer</span>{view.text.trim() || "(none)"} <span className="text-red-700">✗</span> <span className="text-xs text-emerald-800">· right answer: {String(q!.answer).split("|")[0].trim()}</span></p>}
-            {view?.k === curKey && !q!.method && view.text.trim() && <p className="whitespace-pre-wrap rounded-lg bg-white p-2 text-sm font-bold text-ink ring-1 ring-orange-100"><span className="block text-[10px] font-black uppercase text-ink/45">Typed</span>{view.text}</p>}
+            {q!.kind === "written" && String(q!.answer ?? "").trim() && <p className="whitespace-pre-wrap rounded-lg bg-emerald-50 p-2 text-xs font-bold text-emerald-900 ring-1 ring-emerald-200"><span className="block text-[10px] font-black uppercase text-emerald-800/70">Your mark scheme</span>{String(q!.answer)}</p>}
+            {view?.k === curKey && !q!.method && q!.kind !== "written" && view.text.trim() && <p className="whitespace-pre-wrap rounded-lg bg-white p-2 text-sm font-bold text-ink ring-1 ring-orange-100"><span className="block text-[10px] font-black uppercase text-ink/45">Typed</span>{view.text}</p>}
             <div className="flex gap-1" role="group" aria-label="Zoom the page">
               {[1, 1.5, 2].map((z) => <button key={z} type="button" onClick={() => setZoom(z)} aria-pressed={zoom === z} className={`h-8 rounded-lg px-2 text-xs font-black ${zoom === z ? "bg-ink text-white" : "bg-white ring-1 ring-orange-200"}`}>{z}×</button>)}
             </div>
@@ -292,7 +298,7 @@ export function MarkingDesk({ examId, questions, entries, api, reload, running }
                     const q = questions[n], v = e.answers?.[String(n)], m = marks[String(n)];
                     const done = q.kind === "page" ? pageDone(v) || e.submitted : e.submitted;
                     const auto = !!q.method && done && isRight(q, v); // right answer: full marks without the teacher
-                    const blank = done && !auto && m == null && (q.kind === "page" ? pageBlank(v) : workingBlank(e.answers?.[workingKey(n)]));
+                    const blank = done && !auto && m == null && (q.kind === "page" ? pageBlank(v) : q.kind === "written" ? writtenBlank(v) : workingBlank(e.answers?.[workingKey(n)]));
                     const what = q.kind === "page" ? `page ${i + 1}` : `Q${n + 1}`;
                     const state = !done ? "waiting for them" : auto ? "right, full marks" : blank ? "blank" : m == null ? "to mark" : `${m} of ${teacherMax(q)}`;
                     return (
@@ -311,5 +317,41 @@ export function MarkingDesk({ examId, questions, entries, api, reload, running }
         </details>
       )}
     </section>
+  );
+}
+
+// ── A reading paper: the booklet beside the questions ──
+// Side by side on a tablet or computer; on a phone, two tabs (each keeps its place).
+export function BookletLayout({ pages, children }: { pages: string[]; children: React.ReactNode }) {
+  const [tab, setTab] = useState<"booklet" | "questions">("questions");
+  const [zoom, setZoom] = useState(1);
+  const tabBtn = (k: "booklet" | "questions", label: string) => (
+    <button type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+      className={`min-h-[44px] flex-1 rounded-xl text-sm font-black ${tab === k ? "bg-[#C2451C] text-white" : "bg-white text-[#C2451C] ring-1 ring-orange-200"}`}>{label}</button>
+  );
+  return (
+    <div className="grid gap-3 md:grid-cols-2 md:items-start">
+      <div role="tablist" aria-label="Booklet or questions" className="flex gap-2 md:hidden">
+        {tabBtn("booklet", "📖 Reading booklet")}{tabBtn("questions", "✍️ Questions")}
+      </div>
+      <section aria-label="Reading booklet" className={`${tab === "booklet" ? "" : "hidden"} md:sticky md:top-14 md:block`}>
+        <div className="mb-1.5 flex items-center gap-1.5">
+          <p className="mr-auto text-xs font-black uppercase tracking-wider text-[#C2451C]">📖 Reading booklet · {pages.length} page{pages.length === 1 ? "" : "s"}</p>
+          {[1, 1.5, 2].map((z) => <button key={z} type="button" onClick={() => setZoom(z)} aria-pressed={zoom === z} aria-label={`Booklet zoom ${z}×`} className={`h-8 rounded-lg px-2 text-xs font-black ${zoom === z ? "bg-ink text-white" : "bg-white ring-1 ring-orange-200"}`}>{z}×</button>)}
+        </div>
+        <div className="max-h-[calc(100dvh-170px)] overflow-auto rounded-xl bg-white ring-1 ring-orange-200 md:max-h-[calc(100dvh-110px)]">
+          <div style={{ width: `${zoom * 100}%` }}>
+            {pages.map((u, i) => (
+              <figure key={u} className="border-b border-orange-100 last:border-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={u} alt={`Reading booklet, page ${i + 1}`} loading={i < 2 ? "eager" : "lazy"} className="block w-full select-none" draggable={false} />
+                <figcaption className="px-2 py-1 text-right text-[11px] font-bold text-ink/45">Page {i + 1}</figcaption>
+              </figure>
+            ))}
+          </div>
+        </div>
+      </section>
+      <div className={`${tab === "questions" ? "" : "hidden"} grid gap-3 md:block md:space-y-3`}>{children}</div>
+    </div>
   );
 }

@@ -7,11 +7,11 @@ import { cleanExamQuestions, cleanPageAnswer, currentPage, isHandMarked, keepsOr
 // and marks with the real marking code.
 const OWN_WORD: ExamQ = { q: "It is necessary to wear a helmet.", kind: "spell", options: [], answer: "necessary", marks: 1, hear: true };
 function examServer() {
-  let exam: { id: string; title: string; minutes: number; review: boolean; calculator: boolean; inOrder: boolean; personal: number; status: "open" | "closed"; endsAt: number; questions: ExamQ[] } | null = null;
+  let exam: { booklet: string[]; id: string; title: string; minutes: number; review: boolean; calculator: boolean; inOrder: boolean; personal: number; status: "open" | "closed"; endsAt: number; questions: ExamQ[] } | null = null;
   type E = { name: string; answers: Record<string, unknown>; flags: number; submitted: boolean; score: number | null; total: number | null; marks?: Record<string, number>; extraMs: number; extraQs: ExamQ[] };
   const entries = new Map<string, E>();
   const qsOf = (e: E) => [...exam!.questions, ...e.extraQs];
-  const meta = () => exam && { id: exam.id, title: exam.title, minutes: exam.minutes, review: exam.review, calculator: exam.calculator, inOrder: keepsOrder(exam.questions, exam.inOrder), handMarked: isHandMarked(exam.questions), personal: exam.personal, spelling: exam.questions.some((q) => q.kind === "spell"), status: exam.status, endsAt: exam.endsAt, count: exam.questions.length, total: exam.questions.reduce((s, q) => s + q.marks, 0) };
+  const meta = () => exam && { booklet: exam.booklet, id: exam.id, title: exam.title, minutes: exam.minutes, review: exam.review, calculator: exam.calculator, inOrder: keepsOrder(exam.questions, exam.inOrder), handMarked: isHandMarked(exam.questions), personal: exam.personal, spelling: exam.questions.some((q) => q.kind === "spell"), status: exam.status, endsAt: exam.endsAt, count: exam.questions.length, total: exam.questions.reduce((s, q) => s + q.marks, 0) };
   const close = () => { if (!exam) return; exam.status = "closed"; for (const e of entries.values()) if (!e.submitted) { const m = markPaper(qsOf(e), e.answers, e.marks ?? {}); Object.assign(e, { submitted: true, score: m.score, total: m.total }); } };
   return async (ctx: BrowserContext, who: "teacher" | "learner", me = { id: "33333333-3333-4333-8333-333333333333", name: "Emmanuel" }) => {
     await ctx.route("**/api/board/exams**", async (r) => {
@@ -47,7 +47,7 @@ function examServer() {
         { q: `${b.topic}: which gas do plants take in?`, kind: "choice", options: ["Oxygen", "Carbon dioxide", "Nitrogen", "Helium"], answer: 1, marks: 1 },
         { q: `${b.topic}: what colour is chlorophyll?`, kind: "typed", options: [], answer: "green", marks: 1 },
       ].slice(0, b.count) } });
-      if (b.action === "create") { const questions = cleanExamQuestions(b.questions); exam = { id: "exam-1", title: b.title, minutes: b.minutes, review: b.review, calculator: b.calculator !== false, inOrder: b.inOrder === true, personal: questions.some((q) => q.kind === "spell") ? Number(b.personal) || 0 : 0, status: "open", endsAt: Date.now() + b.minutes * 60_000, questions }; return r.fulfill({ json: { id: exam.id } }); }
+      if (b.action === "create") { const questions = cleanExamQuestions(b.questions); exam = { booklet: Array.isArray(b.booklet) ? b.booklet : [], id: "exam-1", title: b.title, minutes: b.minutes, review: b.review, calculator: b.calculator !== false, inOrder: b.inOrder === true, personal: questions.some((q) => q.kind === "spell") ? Number(b.personal) || 0 : 0, status: "open", endsAt: Date.now() + b.minutes * 60_000, questions }; return r.fulfill({ json: { id: exam.id } }); }
       if (b.action === "close") { close(); return r.fulfill({ json: { ok: true } }); }
       if (b.action === "wipe-paper") {
         const n = exam!.questions.filter((q) => q.img).length;
@@ -480,4 +480,65 @@ test("a paper the teacher marks by hand: learners write page by page, each page 
   await expect(panel.getByRole("cell", { name: /5 \/ 5/ })).toBeVisible();
   await desk.getByRole("button", { name: "Emmanuel, page 2: 3 of 3" }).click();
   await expect(desk.getByText(/pages were deleted — only what was typed is left/)).toBeVisible();
+});
+
+test("a reading paper: the booklet beside the questions (tabs on a phone), written answers marked on the desk", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const maker = await browser.newPage();
+  await maker.setContent(["The Lost Key — a story", "Sam looked under the mat…"].map((t, i) =>
+    `<section style="height:1000px;${i === 0 ? "page-break-after:always;" : ""}font:40px serif;padding:40px">${t}</section>`).join(""));
+  const pdf = await maker.pdf({ format: "A4" });
+  await maker.close();
+  const { teacher, learner } = await openClass(browser);
+  await teacher.getByRole("button", { name: "Exam mode" }).click();
+  const panel = teacher.getByRole("dialog", { name: "Exam mode" });
+  const sats = panel.getByRole("region", { name: "KS2 SATs" });
+  await sats.getByLabel("Upload the reading booklet").setInputFiles({ name: "reading booklet.pdf", mimeType: "application/pdf", buffer: pdf });
+  await expect(sats.getByText(/✓ Reading booklet ready \(\d pages\)/)).toBeVisible({ timeout: 60_000 });
+  await expect(panel.getByLabel("Title")).toHaveValue("Reading paper");
+  // A 3-mark written answer with the teacher's notes, and a tick-one question.
+  await panel.getByRole("button", { name: "+ Written answer (you mark it)" }).click();
+  await panel.getByLabel("Question 1", { exact: true }).fill("Why did Sam hide the key? Give two reasons from the text.");
+  await panel.getByLabel("Marks for question 1").selectOption("3");
+  await panel.getByLabel("Mark scheme notes for question 1").fill("1 mark per reason; 1 for using the text");
+  await panel.getByRole("button", { name: "+ Multiple-choice question" }).click();
+  await panel.getByLabel("Question 2", { exact: true }).fill("Where was the key?");
+  for (const [k, v] of ["Under the mat", "In a drawer"].entries()) await panel.getByLabel(`Question 2, option ${k + 1}`).fill(v);
+  for (const k of [3, 4]) await panel.getByLabel(`Question 2, option ${k}`).fill(`Option ${k}`);
+  await panel.getByLabel("Option 1 is the answer").check();
+  await panel.getByRole("button", { name: /Start the exam \(2 questions, 60 min\)/ }).click();
+
+  // On a phone: a tab for the booklet, one for the questions.
+  const exam = learner.getByRole("dialog", { name: "Exam: Reading paper" });
+  await expect(exam.getByRole("button", { name: "Start the exam" })).toBeVisible({ timeout: 20_000 });
+  await exam.getByRole("button", { name: "Start the exam" }).click();
+  await exam.getByRole("tab", { name: "📖 Reading booklet" }).click();
+  await expect(exam.getByRole("img", { name: "Reading booklet, page 1" })).toBeVisible();
+  await expect(exam.getByText("Why did Sam hide the key?", { exact: false })).toBeHidden();
+  await learner.screenshot({ path: "test-results/reading-phone-booklet.png" });
+  await exam.getByRole("tab", { name: "✍️ Questions" }).click();
+  await expect(exam.getByText(/Why did Sam hide the key\?/)).toBeVisible();
+  await exam.getByLabel(/Your answer \(3 marks/).fill("She was scared the dog would find it, and the text says she wanted to keep it safe.");
+  // On a tablet: side by side.
+  await learner.setViewportSize({ width: 1100, height: 800 });
+  await expect(exam.getByRole("img", { name: "Reading booklet, page 1" })).toBeVisible();
+  await expect(exam.getByText(/Why did Sam hide the key\?/)).toBeVisible();
+  await expect(exam.getByRole("tab", { name: "📖 Reading booklet" })).toBeHidden();
+  await learner.screenshot({ path: "test-results/reading-tablet.png" });
+  await learner.waitForTimeout(900);
+  await exam.getByRole("button", { name: "Next →" }).click();
+  await exam.getByRole("radio", { name: /Under the mat/ }).click();
+  await exam.getByRole("button", { name: "Hand in", exact: true }).click();
+  await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
+  await expect(exam.getByText("1 / 4")).toBeVisible({ timeout: 15_000 });
+
+  // The teacher marks the written answer with their notes beside it.
+  const desk = panel.getByRole("region", { name: "Marking" });
+  await expect(desk.getByText("Q1 · written answer, out of 3 marks")).toBeVisible({ timeout: 15_000 });
+  await expect(desk.getByLabel("Emmanuel's answer")).toContainText("scared the dog would find it");
+  await expect(desk.getByText("1 mark per reason; 1 for using the text")).toBeVisible();
+  await teacher.screenshot({ path: "test-results/reading-marking.png" });
+  await desk.getByRole("button", { name: "2 marks" }).click();
+  await expect(panel.getByRole("cell", { name: /3 \/ 4/ })).toBeVisible({ timeout: 15_000 });
+  await expect(exam.getByText("3 / 4")).toBeVisible({ timeout: 20_000 });
 });

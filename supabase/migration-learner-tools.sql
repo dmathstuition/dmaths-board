@@ -25,5 +25,7 @@ do $$ begin
     -- A spelling test: each learner's own words from earlier tests, added to their paper.
     alter table public.board_exam_entries add column if not exists extra_qs jsonb;
     alter table public.board_exams add column if not exists personal_words smallint not null default 0;
+    -- A reading paper: the booklet's pages, shown beside the questions.
+    alter table public.board_exams add column if not exists booklet jsonb;
   end if;
 end $$;

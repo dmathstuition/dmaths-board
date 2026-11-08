@@ -12,8 +12,8 @@ import { UK_SETS } from "@/lib/ukPrimary";
 import { SCHEMES, gradeOf, schemeById, type GradeScheme } from "@/lib/examReport";
 import { CalculatorButton } from "@/components/live/PhoneCalculator";
 import { downloadExamCsv, downloadExamReports } from "@/lib/examDownloads";
-import { EXAM_MINUTES, EXAM_TOPICS, MAX_PAGE_MARKS, clockLeft, isHandMarked, keepsOrder, needsMarking, pageDone, workingKey, spokenSpelling, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
-import { MarkingDesk, PageFlow, WorkingPad } from "@/components/live/board/PaperPages";
+import { EXAM_MINUTES, EXAM_TOPICS, MAX_PAGE_MARKS, MAX_WRITTEN, clockLeft, isHandMarked, keepsOrder, needsMarking, pageDone, workingKey, spokenSpelling, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
+import { BookletLayout, MarkingDesk, PageFlow, WorkingPad } from "@/components/live/board/PaperPages";
 import type { Difficulty } from "@/lib/games/generators";
 
 // Exam mode: a timed test every learner takes on their own phone — questions
@@ -23,11 +23,11 @@ import type { Difficulty } from "@/lib/games/generators";
 // so phones check at once (they also check every few seconds); { examId, at }
 // when the teacher reads spelling number `at` out — phones go to it.
 
-type Meta = { id: string; title: string; minutes: number; review: boolean; calculator?: boolean; inOrder?: boolean; handMarked?: boolean; personal?: number; spelling?: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number ; questions?: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
+type Meta = { booklet?: string[]; id: string; title: string; minutes: number; review: boolean; calculator?: boolean; inOrder?: boolean; handMarked?: boolean; personal?: number; spelling?: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number ; questions?: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
 type Entry = { extraMs?: number; extraQs?: ExamQ[]; pageMarks?: Record<string, number>; toMark?: number[]; id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null;
   answers?: Record<string, unknown>; startedAt?: string | null; submittedAt?: string | null };
 type Analysis = { score: number; total: number; right: number; wrong: number; blank: number; average: number | null; best: number | null; takers: number; position: number | null; flags: number };
-type Review = { q: string; kind: ExamQ["kind"]; options: string[]; answer: number | string; given: unknown; right: boolean; marks: number };
+type Review = { q: string; kind: ExamQ["kind"]; options: string[]; answer: number | string; given: unknown; right: boolean; marks: number; mark?: number | null };
 
 // Extra time in minutes, to one decimal place (25% of 10 minutes is 2.5).
 const extraMins = (ms = 0) => String(Math.round(ms / 6000) / 10);
@@ -88,6 +88,10 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   const [satsNote, setSatsNote] = useState<string | null>(null);
   const [paperPages, setPaperPages] = useState<(string | null)[]>([]);
   const [paperBusy, setPaperBusy] = useState(false);
+  // A reading paper: the booklet (the texts), shown to learners beside the questions.
+  const [bookletPages, setBookletPages] = useState<string[]>([]);
+  const [bookletBusy, setBookletBusy] = useState(false);
+  const bookletInput = useRef<HTMLInputElement>(null);
   // Extra time (25%, access arrangements): the learners who get it, remembered on
   // this device — applied by itself when they start an exam.
   const [extraNames, setExtraNames] = useState(() => { try { return localStorage.getItem("exam-extra-names") ?? ""; } catch { return ""; } });
@@ -160,6 +164,27 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
       setSatsNote(`Couldn't read the paper${err instanceof Error && err.message ? ` (${err.message})` : ""} — save it as a PDF and try again.`);
     } finally { setPaperBusy(false); }
   }
+  async function uploadBooklet(list: FileList | null) {
+    const files = Array.from(list ?? []);
+    if (bookletInput.current) bookletInput.current.value = "";
+    if (!files.length) return;
+    setBookletBusy(true); setSatsNote(null);
+    try {
+      const urls = (await sendSlides({ sessionId }, files, 40, (m) => setSatsNote(m.replace(/slides?/g, (w) => (w === "slide" ? "page" : "pages"))), PAPER_FIT)).filter((u): u is string => !!u);
+      if (!urls.length) { setSatsNote("Couldn't upload the booklet — check the internet and try again."); return; }
+      setBookletPages(urls);
+      satsSetup("Reading paper", 60); pickScale("ks2");
+      setSatsNote(`✓ Reading booklet ready (${urls.length} page${urls.length === 1 ? "" : "s"}) — learners see it beside the questions. Now add the questions: “+ Written answer” (you mark it) and multiple choice below — or upload the answer booklet with “📄 A real paper” to mark it page by page.`);
+    } catch (err) {
+      setSatsNote(`Couldn't read the booklet${err instanceof Error && err.message ? ` (${err.message})` : ""} — save it as a PDF and try again.`);
+    } finally { setBookletBusy(false); }
+  }
+  function dropBooklet() {
+    if (!bookletPages.length || !window.confirm("Remove the reading booklet?")) return;
+    const urls = bookletPages;
+    setBookletPages([]); setSatsNote("Reading booklet removed.");
+    fetch("/api/live-sessions/slides", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, urls }) }).catch(() => {});
+  }
   const addPaperQ = (url: string) => setQs((cur) => [...cur, { q: `Question ${cur.filter((x) => x.img).length + 1}`, kind: "typed" as const, options: [], answer: "", marks: 1, img: url }].slice(0, 60));
   const [topic, setTopic] = useState(EXAM_TOPICS[0]?.id ?? "");
   const [level, setLevel] = useState<Difficulty>("medium");
@@ -196,19 +221,21 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   const setQ = (i: number, q: Partial<ExamQ>) => setQs((cur) => cur.map((x, k) => (k === i ? { ...x, ...q } : x)));
   async function start() {
     if (isHandMarked(qs) && qs.some((q) => q.kind !== "page")) { setNote("A paper you mark by hand can only have its pages — clear the other questions, or switch the paper to answer boxes."); return; }
-    const empty = qs.findIndex((q) => q.kind !== "choice" && q.kind !== "page" && !String(q.answer).trim());
+    const empty = qs.findIndex((q) => q.kind !== "choice" && q.kind !== "page" && q.kind !== "written" && !String(q.answer).trim());
+    const noText = qs.findIndex((q) => q.kind === "written" && !q.q.trim());
+    if (noText >= 0) { setNote(`Question ${noText + 1} has no question written yet.`); return; }
     if (empty >= 0) { setNote(`Question ${empty + 1} has no answer yet — type the answer (from the mark scheme), or remove it.`); return; }
     setBusy(true); setNote(null);
-    const { ok, j } = await api({ action: "create", sessionId, title, minutes, review, calculator: calcOk, inOrder: fixedOrder, questions: qs, personal: qs.some((q) => q.kind === "spell") ? personalN : 0 });
+    const { ok, j } = await api({ action: "create", sessionId, title, minutes, review, calculator: calcOk, inOrder: fixedOrder || bookletPages.length > 0, questions: qs, personal: qs.some((q) => q.kind === "spell") ? personalN : 0, booklet: bookletPages });
     setBusy(false);
     if (!ok) { setNote(j.error ?? "Couldn't start the exam."); return; }
-    setBuilding(false); tell(j.id); await reload();
+    setBuilding(false); setBookletPages([]); tell(j.id); await reload();
     if (j.note) setNote(j.note);
   }
   // Once it's over (and marked): delete the uploaded paper's pages. Marks and scores stay.
   async function wipePaper() {
     if (!exam?.questions) return;
-    const pages = exam.questions.filter((q) => q.img).length;
+    const pages = exam.questions.filter((q) => q.img).length + (exam.booklet?.length ?? 0);
     const left = entries.reduce((a, e) => a + (e.toMark?.length ?? 0), 0);
     if (!window.confirm(`${left ? `⚠ ${left} page${left === 1 ? " is" : "s are"} still not marked — you won't be able to see ${left === 1 ? "it" : "them"} after this.\n\n` : ""}Delete this paper's ${pages} page${pages === 1 ? "" : "s"} for good? What learners wrote on them goes too. Their marks, scores and reports stay.`)) return;
     setWiping(true); setNote(null);
@@ -312,6 +339,8 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                 <button type="button" onClick={() => setSpellOpen((v) => !v)} aria-expanded={spellOpen} className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 ${spellOpen ? "bg-[#0A4F52] text-white ring-[#0A4F52]" : "bg-white text-[#0A4F52] ring-[#A9D6D3]"}`}>✏️ Spelling test (read aloud)</button>
                 <button type="button" onClick={() => paperInput.current?.click()} disabled={paperBusy} className="min-h-[40px] rounded-xl bg-white px-3 text-xs font-black text-[#0A4F52] ring-1 ring-[#A9D6D3] disabled:opacity-60">{paperBusy ? "Uploading the paper…" : "📄 A real paper (PDF) — e.g. reasoning"}</button>
                 <input ref={paperInput} type="file" accept=".pdf,application/pdf,image/*" multiple hidden aria-label="Upload a SATs paper" onChange={(e) => uploadPaper(e.target.files)} />
+                <button type="button" onClick={() => bookletInput.current?.click()} disabled={bookletBusy} className="min-h-[40px] rounded-xl bg-white px-3 text-xs font-black text-[#0A4F52] ring-1 ring-[#A9D6D3] disabled:opacity-60">{bookletBusy ? "Uploading the booklet…" : "📖 Reading paper — upload the booklet"}</button>
+                <input ref={bookletInput} type="file" accept=".pdf,application/pdf,image/*" multiple hidden aria-label="Upload the reading booklet" onChange={(e) => uploadBooklet(e.target.files)} />
               </div>
               {spellOpen && (
                 <div className="mt-3 rounded-xl bg-white p-3 ring-1 ring-[#CDE7E5]">
@@ -332,6 +361,13 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                     </label>
                     <button type="button" onClick={addSpellings} disabled={!spellText.trim()} className="min-h-[40px] rounded-xl bg-[#0E6E72] px-4 text-xs font-black text-white disabled:opacity-40">Add {parseSpellings(spellText).length || ""} spellings</button>
                   </div>
+                </div>
+              )}
+              {bookletPages.length > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-white p-2 ring-1 ring-[#CDE7E5]" aria-label="Reading booklet">
+                  <span className="text-xs font-black text-[#0A4F52]">📖 Reading booklet · {bookletPages.length} pages</span>
+                  <span className="flex gap-1 overflow-x-auto">{bookletPages.slice(0, 8).map((u, i) => <img key={u} src={u} alt={`Booklet page ${i + 1}`} loading="lazy" className="h-14 w-10 shrink-0 rounded object-cover ring-1 ring-slate-200" />)}</span>
+                  <button type="button" onClick={dropBooklet} className="ml-auto rounded-lg px-2 py-1 text-xs font-black text-red-700 hover:bg-red-50">Remove booklet</button>
                 </div>
               )}
               {tracker && <WarmUpTracker sessionId={sessionId} />}
@@ -445,6 +481,10 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                     </div>
                   ) : q.kind === "page" ? (
                     <p className="mt-2 pl-5 text-xs font-bold text-ink/60">✍️ Learners write on this page and hand it in — you mark it.</p>
+                  ) : q.kind === "written" ? (
+                    <label className="mt-2 flex items-center gap-2 pl-5 text-xs font-bold text-ink/60">✍️ You mark it · Mark scheme notes
+                      <input value={String(q.answer)} maxLength={400} onChange={(e) => setQ(i, { answer: e.target.value })} aria-label={`Mark scheme notes for question ${i + 1}`} placeholder="What earns the marks (only you see this until the exam ends) — optional" className={`${field} min-w-0 flex-1`} />
+                    </label>
                   ) : q.kind === "spell" ? (
                     <div className="mt-2 flex flex-wrap items-center gap-2 pl-5 text-xs font-bold text-ink/60">
                       <label className="flex items-center gap-2">Word
@@ -471,6 +511,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
             <div className="mt-2 flex flex-wrap gap-2">
               <button type="button" onClick={() => setQs((cur) => [...cur, { q: "", kind: "choice", options: ["", "", "", ""], answer: 0, marks: 1 }])} className="min-h-[40px] rounded-xl bg-slate-100 px-3 text-xs font-black">+ Multiple-choice question</button>
               <button type="button" onClick={() => setQs((cur) => [...cur, { q: "", kind: "typed", options: [], answer: "", marks: 1 }])} className="min-h-[40px] rounded-xl bg-slate-100 px-3 text-xs font-black">+ Typed-answer question</button>
+              <button type="button" onClick={() => setQs((cur) => [...cur, { q: "", kind: "written", options: [], answer: "", marks: 1 }])} className="min-h-[40px] rounded-xl bg-slate-100 px-3 text-xs font-black" title="A written answer you mark (e.g. a reading question worth 1, 2 or 3 marks)">+ Written answer (you mark it)</button>
               {qs.length > 1 && <button type="button" onClick={() => { if (window.confirm(`Remove all ${qs.length} questions?`)) setQs([]); }} className="min-h-[40px] rounded-xl px-3 text-xs font-black text-red-700 hover:bg-red-50">Clear all questions</button>}
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-3">
@@ -532,11 +573,11 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
               </div>
             )}
             {wiped && <p role="status" className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{wiped}</p>}
-            {!running && exam?.questions?.some((q) => q.img) && (
+            {!running && exam?.questions && (exam.questions.some((q) => q.img) || !!exam.booklet?.length) && (
               <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
                 <p className="mr-auto text-xs font-bold text-ink/65">Finished marking? Delete the uploaded paper — the marks, scores and reports stay.</p>
                 <button type="button" onClick={wipePaper} disabled={wiping} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50">
-                  {wiping ? "Deleting…" : `🗑 Delete the paper (${exam.questions.filter((q) => q.img).length} pages)`}
+                  {wiping ? "Deleting…" : `🗑 Delete the paper (${exam.questions.filter((q) => q.img).length + (exam.booklet?.length ?? 0)} pages)`}
                 </button>
               </div>
             )}
@@ -718,9 +759,10 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
   }
 
   if (!exam) return null;
-  const shell = (children: React.ReactNode) => (
+  const booklet = exam.booklet ?? []; // a reading paper: the booklet beside the questions
+  const shell = (children: React.ReactNode, wide = false) => (
     <div role="dialog" aria-modal="true" aria-label={`Exam: ${exam.title}`} className="fixed inset-0 z-[120] overflow-y-auto bg-[#FFF7ED] text-ink" onCopy={(e) => e.preventDefault()}>
-      <div className="mx-auto flex min-h-full max-w-2xl flex-col gap-3 p-3 sm:p-6"><div className="flex justify-end"><ReadingButton /></div>{children}</div>
+      <div className={`mx-auto flex min-h-full flex-col gap-3 p-3 sm:p-6 ${wide ? "max-w-6xl" : "max-w-2xl"}`}><div className="flex justify-end"><ReadingButton /></div>{children}</div>
       {askBox}
     </div>
   );
@@ -748,6 +790,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
   if (taking && paper) {
     const q = paper[Math.min(at, paper.length - 1)];
     const hand = paper.some((x) => x.kind === "page"); // a paper the teacher marks, page by page
+    const withBooklet = (body: React.ReactNode) => (booklet.length ? <BookletLayout pages={booklet}>{body}</BookletLayout> : body);
     const done = paper.filter((x) => (x.kind === "page" ? pageDone(answers[String(x.n)]) : answers[String(x.n)] != null && answers[String(x.n)] !== "")).length;
     return shell(<>
       <div className="sticky top-0 z-10 -mx-3 flex items-center gap-2 bg-[#FFF7ED]/95 px-3 py-2 backdrop-blur sm:-mx-6 sm:px-6">
@@ -758,7 +801,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
         <span role="timer" className={`rounded-xl px-3 py-1.5 text-sm font-black ${left < 60_000 ? "bg-red-600 text-white" : "bg-white text-[#C2451C] ring-1 ring-orange-200"}`}>⏱ {clockLeft(left)}</span>
       </div>
       {warned > 0 && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-black text-red-700 ring-1 ring-red-200">⚠️ You left the exam page{warned > 1 ? ` ${warned} times` : ""}. Your teacher has been told.</p>}
-      {hand ? (
+      {withBooklet(hand ? (
         <div className="rounded-2xl bg-white p-3 shadow ring-1 ring-orange-200">
           <PageFlow examId={exam.id} myId={entry?.id ?? "learner"} paper={paper} answers={answers} setAnswers={setAnswers} api={api} ask={ask} onFinished={() => { submitted.current = true; submit(true); }} />
         </div>
@@ -786,6 +829,11 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
               );
             })}
           </div>
+        ) : q.kind === "written" ? (
+          <label className="mt-4 block text-sm font-bold text-ink/60">Your answer <span className="font-semibold text-ink/45">({q.marks} mark{q.marks === 1 ? "" : "s"}{q.marks >= 2 ? " — explain, and use the text" : ""})</span>
+            <textarea value={String(answers[String(q.n)] ?? "")} maxLength={MAX_WRITTEN} rows={q.marks >= 3 ? 7 : q.marks === 2 ? 5 : 3} onChange={(e) => answer(q.n, e.target.value, true)}
+              className="mt-1 w-full resize-y rounded-xl bg-white px-4 py-3 text-base font-semibold leading-relaxed text-ink ring-2 ring-orange-200 focus:outline-none focus:ring-[#C2451C]" />
+          </label>
         ) : (
           <label className="mt-4 block text-sm font-bold text-ink/60">{q.kind === "spell" ? "The missing word" : "Your answer"}
             <input value={String(answers[String(q.n)] ?? "")} maxLength={120} onChange={(e) => answer(q.n, e.target.value, true)} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
@@ -807,10 +855,10 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
             className={`h-10 w-10 rounded-lg text-sm font-black ${i === at ? "ring-2 ring-[#C2451C]" : ""} ${a ? "bg-[#C2451C] text-white" : "bg-white text-ink/60 ring-1 ring-orange-200"}`}>{i + 1}</button>;
         })}
       </nav>
-      <button type="button" onClick={() => submit()} className="min-h-[48px] rounded-xl bg-emerald-600 text-sm font-black text-white">Hand in my exam</button>
-      </>)}
+      <button type="button" onClick={() => submit()} className="min-h-[48px] w-full rounded-xl bg-emerald-600 text-sm font-black text-white">Hand in my exam</button>
+      </>))}
       {note && <p role="alert" className="text-sm font-bold text-red-700">{note}</p>}
-    </>);
+    </>, booklet.length > 0);
   }
   // Handed in (or time's up).
   if (entry?.submitted || result) {
@@ -843,8 +891,8 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
             <li key={i} className={`rounded-xl p-3 ring-1 ${r.right ? "bg-emerald-50 ring-emerald-200" : "bg-red-50 ring-red-200"}`}>
               <p className="text-sm font-black">{r.right ? "✓" : "✗"} {i + 1}. {r.q}</p>
               <p className="mt-0.5 text-xs font-semibold text-ink/70">
-                {r.kind === "page" ? (r.given == null ? "Not marked yet" : `Your teacher's mark: ${r.given} / ${r.marks}`) : <>You: {r.given == null || r.given === "" ? "no answer" : r.kind === "choice" ? r.options[Number(r.given)] : String(r.given)}</>}
-                {!r.right && r.kind !== "page" && <> · <span className="font-black text-emerald-800">Answer: {r.kind === "choice" ? r.options[Number(r.answer)] : String(r.answer).split("|")[0].trim()}</span></>}
+                {r.kind === "written" ? <>You wrote: {String(r.given ?? "").trim() || "no answer"} · <b>{r.mark == null ? "not marked yet" : `${r.mark} / ${r.marks}`}</b>{!!String(r.answer ?? "").trim() && r.mark !== r.marks && <span className="block text-emerald-800">A full answer includes: {String(r.answer)}</span>}</> : r.kind === "page" ? (r.given == null ? "Not marked yet" : `Your teacher's mark: ${r.given} / ${r.marks}`) : <>You: {r.given == null || r.given === "" ? "no answer" : r.kind === "choice" ? r.options[Number(r.given)] : String(r.given)}</>}
+                {!r.right && r.kind !== "page" && r.kind !== "written" && <> · <span className="font-black text-emerald-800">Answer: {r.kind === "choice" ? r.options[Number(r.answer)] : String(r.answer).split("|")[0].trim()}</span></>}
               </p>
             </li>
           ))}

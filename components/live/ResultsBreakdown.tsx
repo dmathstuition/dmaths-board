@@ -79,6 +79,8 @@ export default function ResultsBreakdown({ d }: { d: LearnerDetail }) {
                             <p className="mt-0.5 text-xs font-semibold text-ink/70">
                               {it.kind === "page"
                                 ? (it.pending ? "Not marked yet" : it.given ? `Your teacher's mark: ${it.got} / ${it.marks}` : `Left blank · 0 / ${it.marks}`)
+                                : it.kind === "written"
+                                ? <>You wrote: {it.given || "no answer"} · <b>{it.pending ? "not marked yet" : `${it.got} / ${it.marks}`}</b>{it.answer && !it.right && <span className="mt-0.5 block text-emerald-800">A full answer includes: {it.answer}</span>}</>
                                 : <>You: {it.given || "no answer"}{!it.right && it.answer && <> · <span className="font-black text-emerald-800">Answer: {it.answer}</span></>}{it.got > 0 && !it.right ? ` · ${it.got} / ${it.marks} for your working` : ""}{it.pending ? " · your working is being marked" : ""}</>}
                             </p>
                           </li>

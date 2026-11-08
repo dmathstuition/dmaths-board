@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanExamQuestions, cleanPageAnswer, cleanPageMarks, currentPage, isHandMarked, learnerPaper, markPaper, pageBlank, pageDone, pagesToMark, slimAnswers, type ExamQ } from "@/lib/exams";
+import { cleanExamQuestions, cleanPageAnswer, cleanPageMarks, currentPage, isHandMarked, learnerPaper, markPaper, pageBlank, pageDone, pagesToMark, reviewItems, slimAnswers, type ExamQ } from "@/lib/exams";
 import { examReports, GCSE } from "@/lib/examReport";
 
 const img = (n: number) => `https://x.supabase.co/storage/v1/object/public/materials/slides/abc/p${n}.jpg`;
@@ -75,5 +75,44 @@ describe("a paper the teacher marks page by page", () => {
     expect(ada.items.map((x) => x.given)).toEqual(["2 / 2 marks", "2 / 3 marks", ""]);
     expect(ada.items[2].blank).toBe(true);
     expect(ada.items[0]).toMatchObject({ right: true, correct: "Marked by the teacher" });
+  });
+});
+
+describe("a reading paper's written answers (marked by the teacher)", () => {
+  const w = (marks: number, notes = ""): ExamQ => ({ q: "Why did Sam hide the key? Explain.", kind: "written", options: [], answer: notes, marks });
+  const qs: ExamQ[] = [w(3, "Award 1 for each reason from the text"), w(1), { q: "Tick one", kind: "choice", options: ["a", "b"], answer: 0, marks: 1 }];
+
+  it("are kept with their mark-scheme notes, which learners don't get while it's on", () => {
+    const got = cleanExamQuestions([...qs, { q: "", kind: "written", marks: 2 }]);
+    expect(got.map((q) => q.kind)).toEqual(["written", "written", "choice"]);
+    expect(got[0]).toMatchObject({ marks: 3, answer: "Award 1 for each reason from the text" });
+    expect(JSON.stringify(learnerPaper("e", "s", got))).not.toContain("Award 1");
+  });
+
+  it("wait for the teacher once handed in — a blank one is just 0", () => {
+    const answers = { 0: "Because she was scared of the dog.", 1: "  ", 2: 0 };
+    expect(pagesToMark(qs, answers, {}, false)).toEqual([]);
+    expect(pagesToMark(qs, answers, {}, true)).toEqual([0]);
+    expect(markPaper(qs, answers, {}).score).toBe(1); // just the tick-one
+    expect(markPaper(qs, answers, { 0: 2 }).score).toBe(3);
+    expect(cleanPageMarks(qs, { 0: 9, 2: 1 })).toEqual({ 0: 3 }); // never more than the question's marks; never on a tick-one
+  });
+
+  it("are cut short in the teacher's lists, whole for the learner and on the marking desk", () => {
+    const long = "x".repeat(300);
+    expect(String(slimAnswers(qs, { 0: long }, -1, true)[0])).toHaveLength(121);
+    expect(slimAnswers(qs, { 0: long })[0]).toBe(long);
+    expect(pagesToMark(qs, slimAnswers(qs, { 0: long }, -1, true), {}, true)).toEqual([0]);
+  });
+
+  it("show in reports and in the learner's look back", () => {
+    const cr = examReports(qs, [{ id: "a", name: "Ada", answers: { 0: "Because she was scared.", 2: 0 }, pageMarks: { 0: 2 }, flags: 0, flagLog: [], startedAt: null, submittedAt: "t" }], GCSE);
+    expect(cr.learners[0].items[0]).toMatchObject({ given: "Because she was scared. (2 / 3 marks)", correct: "Marked by the teacher", right: false });
+    expect(cr.learners[0].score).toBe(3);
+    const items = reviewItems(qs, { 0: "Because she was scared.", 1: "" }, { 0: 2 });
+    expect(items[0]).toMatchObject({ kind: "written", given: "Because she was scared.", answer: "Award 1 for each reason from the text", got: 2 });
+    expect(items[0].pending).toBeUndefined();
+    expect(reviewItems(qs, { 0: "An answer" }, {})[0].pending).toBe(true);
+    expect(items[1]).toMatchObject({ given: "", got: 0 });
   });
 });
