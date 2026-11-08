@@ -338,7 +338,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
                   )}
                   {a?.type === "wait" && (
                     <button type="button" onClick={startWait} disabled={busy} className="min-h-[48px] rounded-xl bg-[#0E6E72] px-5 text-sm font-black text-white disabled:opacity-70">
-                      {busy ? (a.minutes >= 1 ? `⏩ ${a.minutes} minutes passing…` : "⏱ Timing…") : `▶ ${a.label}`}
+                      {busy ? (a.minutes >= 1 ? `⏩ ${a.minutes} minute${a.minutes === 1 ? "" : "s"} passing…` : "⏱ Timing…") : `▶ ${a.label}`}
                     </button>
                   )}
                   {a?.type === "record" && (
