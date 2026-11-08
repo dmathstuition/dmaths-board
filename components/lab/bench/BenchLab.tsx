@@ -7,9 +7,9 @@
 // (lib/lab/bench/practicals.ts).
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { Field, Graph, ItemView, Practical, Step } from "@/lib/lab/bench/types";
-import { checkField, doStep } from "@/lib/lab/bench/run";
+import { checkField, doStep, targetOf } from "@/lib/lab/bench/run";
 import { SUBJECTS } from "@/lib/lab/catalog";
-import { Apparatus, BURETTE, BenchDefs, Front, Magnifier, Room, W, buretteY, dims, hasShadow, mouth } from "@/components/lab/bench/Apparatus";
+import { Apparatus, BenchDefs, Front, Lens, Room, W, closeup, dims, hasFront, hasShadow, mouth } from "@/components/lab/bench/Apparatus";
 
 type Run = { s: any; step: number; values: Record<string, string>; notes: Record<number, string>; shown: string[] };
 type Move = { id: string; x: number; y: number; tilt: number; instant?: boolean };
@@ -47,7 +47,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
   useEffect(() => {
     setHint(null); setPicked(false);
     const a = p.steps[run.step]?.action;
-    setSetVal(a?.type === "set" ? lastSet.current[a.item] ?? a.min : null);
+    setSetVal(a?.type === "set" ? lastSet.current[a.item] ?? a.start ?? a.min : null);
     if (run.step >= p.steps.length) setTab("results");
   }, [run.step, p.steps]);
 
@@ -159,6 +159,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
   function startWait() {
     if (busy || a?.type !== "wait") return;
     setBusy(true);
+    if (step?.apply) setRun({ ...runRef.current, s: step.apply(runRef.current.s) });
     let last = performance.now();
     const loop = (now: number) => {
       if (!alive.current) return;
@@ -175,8 +176,8 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
 
   function setDone(v = setVal) {
     if (a?.type !== "set" || v == null) return;
-    if (Math.abs(v - a.target) <= a.tolerance + 1e-9) { lastSet.current[a.item] = v; finish(step!.apply ? step!.apply(runRef.current.s, v) : runRef.current.s); }
-    else setHint(`It's on ${v} ${a.unit} — turn it to ${a.target} ${a.unit}.`);
+    if (Math.abs(v - targetOf(a, runRef.current.s)) <= a.tolerance + 1e-9) { lastSet.current[a.item] = v; finish(step!.apply ? step!.apply(runRef.current.s, v) : runRef.current.s); }
+    else setHint(a.hint ?? `It's on ${v} ${a.unit} — turn it to ${a.target} ${a.unit}.`);
   }
   function tapIt() { if (a?.type === "tap" && !busy) finish(step!.apply ? step!.apply(runRef.current.s) : runRef.current.s); }
 
@@ -186,7 +187,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
     const r = runRef.current;
     if (a?.type === "drag") return void act();
     if (a?.type === "wait") return startWait();
-    if (a?.type === "set") { setSetVal(a.target); return setDone(a.target); }
+    if (a?.type === "set") { const t = targetOf(a, r.s); setSetVal(t); return setDone(t); }
     const out = doStep(step, r.s, r.values);
     finish(out.s, out.values, a?.type === "record" ? a.fields.map((f) => f.key) : []);
   }
@@ -203,7 +204,8 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
   const target = a?.type === "drag" ? byId(a.onto) : undefined;
   const actor = a && "item" in a ? byId(a.item) : undefined;
   const mag = step?.magnify ? byId(step.magnify) : undefined;
-  const magLevel = mag?.props?.level as number | null | undefined;
+  const zoom = mag ? closeup(mag) : null;
+  const zoomAt = step?.magnifyAt ?? (mag ? { x: Math.max(170, Math.min(1230, mag.x + (mag.x < 700 ? 330 : -330))), y: 175 } : null);
   const lastNote = run.notes[run.step - 1];
   const place = (it: ItemView) => (move?.id === it.id ? move : { x: it.x, y: it.y, tilt: it.tilt ?? 0, instant: false });
   const drawItem = (it: ItemView) => {
@@ -270,7 +272,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
               <BenchDefs />
               <Room />
               {order.filter((x) => move?.id !== x.id).map(drawItem)}
-              {order.filter((x) => x.kind === "water-bath").map((x) => <g key={`front-${x.id}`} transform={`translate(${x.x},${x.y})`} pointerEvents="none"><Front it={x} /></g>)}
+              {order.filter((x) => hasFront(x.kind)).map((x) => <g key={`front-${x.id}`} transform={`translate(${x.x},${x.y})`} pointerEvents="none"><Front it={x} /></g>)}
               {order.filter((x) => x.label && move?.id !== x.id).map((x) => (
                 <g key={`tag-${x.id}`} transform={`translate(${x.x},${x.y + 26})`} pointerEvents="none">
                   <rect x={-(x.label!.length * 3.9 + 10)} y={-13} width={x.label!.length * 7.8 + 20} height={22} rx={11} fill="#0B1220" fillOpacity=".72" />
@@ -283,7 +285,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
               {pour && (pour.drops
                 ? [0, 0.15, 0.3, 0.45].map((d) => <circle key={d} className="elab-drip" cx={pour.x} cy={pour.y} r={4} fill={pour.colour} style={{ animationDelay: `${d}s`, animationIterationCount: "infinite" }} />)
                 : <path d={`M${pour.x},${pour.y} Q${pour.x + 2},${pour.y + 25} ${pour.x},${pour.y + 60}`} className="elab-flow" fill="none" stroke={pour.colour} strokeWidth={6} strokeLinecap="round" strokeDasharray="14 4" />)}
-              {mag && magLevel != null && <Magnifier level={magLevel} liquid={String(mag.props?.liquid ?? "#BFDBFE")} at={{ x: mag.x + BURETTE.x, y: mag.y + buretteY(magLevel) }} />}
+              {zoom && zoomAt && <Lens c={zoom} at={zoomAt} />}
             </svg>
           </div>
 
@@ -336,7 +338,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
                   )}
                   {a?.type === "wait" && (
                     <button type="button" onClick={startWait} disabled={busy} className="min-h-[48px] rounded-xl bg-[#0E6E72] px-5 text-sm font-black text-white disabled:opacity-70">
-                      {busy ? `⏩ ${a.minutes} minutes passing…` : `▶ ${a.label}`}
+                      {busy ? (a.minutes >= 1 ? `⏩ ${a.minutes} minutes passing…` : "⏱ Timing…") : `▶ ${a.label}`}
                     </button>
                   )}
                   {a?.type === "record" && (

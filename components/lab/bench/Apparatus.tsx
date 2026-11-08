@@ -1,7 +1,10 @@
 // The lab room and every piece of apparatus, drawn in SVG. Each piece is drawn
 // with the middle of its base at (0, 0), going up (negative y); BenchLab moves
 // it into place. Bench: 1400 × 800, shelf top at y = 300, bench top at y = 640.
+import type { ReactNode } from "react";
 import type { ItemView } from "@/lib/lab/bench/types";
+import { FRONTS, MORE_SIZE, More, MoreFront, moreCloseup, moreShadow } from "@/components/lab/bench/ApparatusMore";
+import { ScaleZoom } from "@/components/lab/bench/kit/parts";
 
 export const W = 1400, H = 800, SHELF_Y = 300, BENCH_Y = 640;
 
@@ -13,14 +16,15 @@ const SIZE: Record<string, [number, number]> = {
   wires: [0, 0], potato: [140, 68], borer: [48, 110], balance: [180, 60], towel: [180, 20], cylinders: [120, 30],
 };
 export function dims(it: ItemView): { w: number; h: number } {
-  let [w, h] = SIZE[it.kind] ?? [100, 100];
+  let [w, h] = SIZE[it.kind] ?? MORE_SIZE[it.kind] ?? [100, 100];
   if (it.kind === "rack") w = ((it.props?.tubes as unknown[] | undefined)?.length ?? 4) * 46 + 30;
   if (it.kind === "tile" && it.props?.long) w = 260;
   return { w: Number(it.props?.w ?? w), h: Number(it.props?.h ?? h) };
 }
 // The point liquid is poured into (the mouth of the target).
 export const mouth = (it: ItemView) => ({ x: it.x, y: it.y - dims(it).h });
-export const hasShadow = (kind: string) => !["wires", "hotspot", "slot", "cylinders", "towel"].includes(kind);
+export const hasFront = (kind: string) => kind === "water-bath" || FRONTS.includes(kind);
+export const hasShadow = (kind: string) => !["wires", "hotspot", "slot", "cylinders", "towel"].includes(kind) && moreShadow(kind);
 
 export function BenchDefs() {
   return (
@@ -313,13 +317,13 @@ export function Apparatus({ it, flowing }: { it: ItemView; flowing?: boolean }) 
         ))}
       </g>
     );
-    default: return <rect x={-40} y={-60} width={80} height={60} rx={8} fill="#94A3B8" />;
+    default: return <More it={it} flowing={flowing} />;
   }
 }
 
 // What stands in front of the things put inside it (the water bath's front).
 export function Front({ it }: { it: ItemView }) {
-  if (it.kind !== "water-bath") return null;
+  if (it.kind !== "water-bath") return <MoreFront it={it} />;
   const t = Number(it.props?.temp ?? 20);
   return (
     <g>
@@ -394,33 +398,36 @@ function Wires({ p }: { p: Record<string, any> }) {
   );
 }
 
-// A close-up of the burette scale around the liquid level, for reading it.
-export function Magnifier({ level, liquid, at }: { level: number; liquid: string; at: { x: number; y: number } }) {
-  const cx = 1020, cy = 175, r = 115, k = 44; // 44 px per cm³ (six times the burette)
-  const y = (v: number) => cy + (v - level) * k;
-  const marks: number[] = [];
-  for (let t = Math.max(0, Math.ceil((level - 3) * 10)); t <= Math.min(500, Math.floor((level + 3) * 10)); t++) marks.push(t / 10);
-  const x0 = cx - 34, x1 = cx + 34, ly = y(level);
+// ── Close-ups: a magnifying lens over part of an item, for reading a scale ──
+export type Zoom = { anchor: { x: number; y: number }; title: string; draw: (cx: number, cy: number, r: number) => ReactNode };
+export function closeup(it: ItemView): Zoom | null {
+  const p = it.props ?? {};
+  if (it.kind === "stand") {
+    const level = p.level as number | null;
+    if (level == null) return null;
+    return { anchor: { x: it.x + BURETTE.x, y: it.y + buretteY(level) }, title: "Close-up · read the bottom of the meniscus",
+      draw: (cx, cy, r) => <ScaleZoom cx={cx} cy={cy} r={r} value={level} perUnit={44} minor={0.1} label={1} lo={0} hi={50} liquid={String(p.liquid ?? "#BFDBFE")} down /> };
+  }
+  return moreCloseup(it);
+}
+
+// A lens: a round close-up joined by a line to the place it shows.
+export function Lens({ c, at }: { c: Zoom; at: { x: number; y: number } }) {
+  const r = 115, { x: cx, y: cy } = at;
+  const ang = Math.atan2(c.anchor.y - cy, c.anchor.x - cx);
   return (
-    <g aria-label={`Close-up of the burette`}>
-      <line x1={cx - r * 0.95} y1={cy + r * 0.3} x2={at.x} y2={at.y} stroke="#fff" strokeOpacity=".35" strokeWidth={2} strokeDasharray="5 5" />
-      <circle cx={at.x} cy={at.y} r={12} fill="none" stroke="#fff" strokeOpacity=".6" strokeWidth={2} />
-      <clipPath id="bl-mag"><circle cx={cx} cy={cy} r={r} /></clipPath>
+    <g aria-label={c.title} pointerEvents="none">
+      <line x1={cx + Math.cos(ang) * (r + 6)} y1={cy + Math.sin(ang) * (r + 6)} x2={c.anchor.x} y2={c.anchor.y} stroke="#fff" strokeOpacity=".4" strokeWidth={2} strokeDasharray="5 5" />
+      <circle cx={c.anchor.x} cy={c.anchor.y} r={12} fill="none" stroke="#fff" strokeOpacity=".65" strokeWidth={2} />
+      <clipPath id={`bl-lens-${Math.round(cx)}-${Math.round(cy)}`}><circle cx={cx} cy={cy} r={r} /></clipPath>
       <circle cx={cx} cy={cy} r={r + 6} fill="#0B1220" stroke="#E2E8F0" strokeWidth={4} />
-      <g clipPath="url(#bl-mag)">
+      <g clipPath={`url(#bl-lens-${Math.round(cx)}-${Math.round(cy)})`}>
         <rect x={cx - r} y={cy - r} width={2 * r} height={2 * r} fill="#22355F" />
-        <path d={`M${x0},${ly - 12} Q${cx},${ly + 12} ${x1},${ly - 12} V${cy + r} H${x0} Z`} fill={liquid} fillOpacity=".85" />
-        <path d={`M${x0},${ly - 12} Q${cx},${ly + 12} ${x1},${ly - 12}`} fill="none" stroke="#1E3A8A" strokeWidth={2.5} />
-        <rect x={x0} y={cy - r} width={x1 - x0} height={2 * r} fill="url(#bl-glass)" stroke="#fff" strokeOpacity=".9" strokeWidth={2} />
-        {marks.map((v) => {
-          const whole = Math.abs(v - Math.round(v)) < 1e-6, half = Math.abs(v * 2 - Math.round(v * 2)) < 1e-6;
-          return <g key={v}>
-            <line x1={x0} y1={y(v)} x2={x0 + (whole ? 30 : half ? 20 : 11)} y2={y(v)} stroke="#fff" strokeWidth={whole ? 2 : 1.2} />
-            {whole && <text x={x0 - 8} y={y(v) + 6} textAnchor="end" fontSize={17} fontWeight={800} fill="#fff">{Math.round(v)}</text>}
-          </g>;
-        })}
+        {c.draw(cx, cy, r)}
       </g>
-      <text x={cx} y={cy - r - 14} textAnchor="middle" fontSize={14} fontWeight={800} fill="#fff">Close-up · read the bottom of the meniscus</text>
+      <rect x={cx - c.title.length * 3.6 - 10} y={cy - r - 34} width={c.title.length * 7.2 + 20} height={22} rx={11} fill="#0B1220" fillOpacity=".8" />
+      <text x={cx} y={cy - r - 18} textAnchor="middle" fontSize={13} fontWeight={800} fill="#fff">{c.title}</text>
     </g>
   );
 }
+

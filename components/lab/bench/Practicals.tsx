@@ -1,9 +1,12 @@
 "use client";
-// The virtual practicals as lab experiments (components/lab/experimentRegistry.tsx).
+// A practical on the lab bench, as a lab experiment (components/lab/experimentRegistry.tsx).
+import type { ComponentType } from "react";
 import BenchLab from "@/components/lab/bench/BenchLab";
-import { foodTests, ohmsLaw, osmosis, titration } from "@/lib/lab/bench/practicals";
+import { practicalFor } from "@/lib/lab/bench/all";
 
-export const TitrationPractical = () => <BenchLab practical={titration} />;
-export const FoodTestsPractical = () => <BenchLab practical={foodTests} />;
-export const OhmsLawPractical = () => <BenchLab practical={ohmsLaw} />;
-export const OsmosisPractical = () => <BenchLab practical={osmosis} />;
+export function practicalComponent(slug: string): ComponentType {
+  const p = practicalFor(slug);
+  const Bench = () => (p ? <BenchLab practical={p} /> : null);
+  Bench.displayName = `Practical(${slug})`;
+  return Bench;
+}

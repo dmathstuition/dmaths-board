@@ -13,7 +13,7 @@ export function doStep<S>(step: Step<S>, s: S, values: Record<string, string>): 
     for (const f of a.fields) v[f.key] = f.answer(s, v);
     return { s, values: v };
   }
-  if (a.type === "set") return { s: step.apply ? step.apply(s, a.target) : s, values };
+  if (a.type === "set") { const t = targetOf(a, s); return { s: step.apply ? step.apply(s, t) : s, values }; }
   if (a.type === "hold" || a.type === "wait") {
     let x = step.apply ? step.apply(s) : s;
     const by = a.type === "hold" ? a.drop : 0.1; // a hold goes drop by drop, so it stops right at the end point
@@ -51,3 +51,6 @@ export function seeded(seed: number): Rand {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+// The right setting for a dial.
+export const targetOf = (a: { target: number; targetOf?: (s: any) => number }, s: unknown) => (a.targetOf ? a.targetOf(s) : a.target);

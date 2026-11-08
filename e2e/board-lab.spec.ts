@@ -27,12 +27,12 @@ test("an experiment goes on the board and learners can try it", async ({ browser
   const lab = teacher.getByRole("dialog", { name: "Laboratory" });
   await lab.getByPlaceholder(/Search/).fill("pendulum");
   await lab.getByRole("button", { name: /Simple Pendulum/ }).click();
-  await expect(lab.getByText("Apparatus", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(lab.getByRole("group", { name: /Lab bench/ })).toBeVisible({ timeout: 30_000 });
 
   // Learners can open it on their own phones.
   await lab.getByLabel("Let learners try it").check();
   await expect(learner.getByRole("dialog", { name: /Experiment: Simple Pendulum/ })).toBeVisible({ timeout: 20_000 });
-  await expect(learner.getByText("Apparatus", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(learner.getByRole("group", { name: /Lab bench/ })).toBeVisible({ timeout: 30_000 });
   await learner.getByRole("button", { name: "Back to the class board" }).click();
   await expect(learner.getByRole("button", { name: /Try Simple Pendulum/ })).toBeVisible();
 
@@ -70,16 +70,16 @@ for (const device of [
 
   await lab.getByPlaceholder(/Search/).fill("pendulum");
   await lab.getByRole("button", { name: /Simple Pendulum/ }).click();
-  // Its controls work: move the length slider and the reading changes.
-  const slider = lab.locator('input[type="range"]').first();
+  // Its controls work: turn the length dial and the reading changes.
+  const slider = lab.getByLabel("Length of the pendulum");
   await slider.scrollIntoViewIfNeeded();
-  await expect(lab.getByText(/^1\.00 m$/)).toBeVisible();
+  await expect(lab.locator("output").filter({ hasText: /^0\.3 m$/ })).toBeVisible();
   await slider.focus();
   await p.keyboard.press("ArrowRight");
   await p.keyboard.press("ArrowRight");
-  await expect(lab.getByText(/^1\.00 m$/)).toBeHidden();
-  await lab.getByRole("radio", { name: /Moon/ }).click();
-  await expect(lab.getByText("1.62").first()).toBeVisible();
+  await expect(lab.locator("output").filter({ hasText: /^0\.4 m$/ })).toBeVisible();
+  await lab.getByRole("button", { name: "Done" }).click();
+  await expect(lab.getByRole("heading", { name: "Release it and time 10 swings" })).toBeVisible();
   // Hide keeps it running; End removes it completely.
   await lab.getByRole("button", { name: "Hide the lab" }).click();
   await expect(lab).toBeHidden();
@@ -106,7 +106,7 @@ test("a bench practical: Ohm's law done step by step", async ({ browser }) => {
   await p.getByRole("button", { name: "Laboratory" }).click();
   const lab = p.getByRole("dialog", { name: "Laboratory" });
   await expect(lab.getByRole("region", { name: "Virtual practicals" })).toBeVisible();
-  await lab.getByRole("button", { name: /^Ohm's Law \(Bench/ }).click();
+  await lab.getByRole("button", { name: "Ohm's Law", exact: true }).click();
   const bench = lab.getByRole("group", { name: /Lab bench/ });
   await expect(bench).toBeVisible({ timeout: 30_000 });
 

@@ -22,6 +22,6 @@ describe("/api/lab-tutor", () => {
     const { system } = (aiChat.mock.calls[0] as any)[0];
     expect(system).toContain("Simple Pendulum");
     expect(system).toContain("The learner is on step 3.");
-    expect(system).toContain("Time 10 swings");
+    expect(system).toContain("Time ten complete swings");
   });
 });

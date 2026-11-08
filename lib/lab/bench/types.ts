@@ -29,7 +29,8 @@ export type Action =
   | { type: "drag"; item: string; onto: string; pour?: boolean } // move one thing onto another
   | { type: "tap"; item: string; label: string }                 // a switch or a button on the apparatus
   | { type: "hold"; item: string; label: string; rate: number; drop: number } // hold to run (a burette tap); "drop" per tap
-  | { type: "set"; item: string; label: string; min: number; max: number; step: number; unit: string; target: number; tolerance: number }
+  | { type: "set"; item: string; label: string; min: number; max: number; step: number; unit: string; target: number; tolerance: number;
+      hint?: string; targetOf?: (s: any) => number; start?: number }              // targetOf: when the right setting depends on the samples                                              // "hint": adjust until it looks right (the target isn't given away)
   | { type: "wait"; label: string; minutes: number }               // time passing (fast-forwarded)
   | { type: "record"; fields: Field[] };                           // write readings in the notebook
 
@@ -44,6 +45,7 @@ export type Step<S> = {
   finished?: (s: S) => boolean;             // a hold step ends when this is true
   note?: (s: S) => string | null;           // what you see afterwards
   magnify?: string;                         // show a close-up of this item (reading a scale)
+  magnifyAt?: { x: number; y: number };     // where the close-up goes (default: beside the item)
 };
 
 export type Table = { title: string; columns: string[]; rows: (string | number)[][] };
@@ -74,3 +76,8 @@ export function fitLine(pts: [number, number][], origin = false): { m: number; c
   const m = sxx ? sxy / sxx : 0;
   return { m, c: my - m * mx };
 }
+
+// Shared by the practicals: where the shelf and bench tops are, and a random value in a range.
+export const SHELF = 300, BENCH = 640;
+export const between = (r: Rand, a: number, b: number, dp = 2) => round(a + r() * (b - a), dp);
+export const deg = (x: number) => (x * Math.PI) / 180;

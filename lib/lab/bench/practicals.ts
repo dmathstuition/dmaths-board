@@ -15,7 +15,7 @@ const NAOH = 0.1, ALIQUOT = 25;
 const veq = (s: Titr) => (NAOH * ALIQUOT) / s.c; // cm³ of acid to neutralise
 const pinkness = (s: Titr) => (!s.indicator || !s.flask ? 0 : s.added >= veq(s) ? 0 : Math.min(1, Math.max(0.12, (veq(s) - s.added) / 1.2)));
 export const titration: Practical<Titr> = {
-  slug: "practical-titration", title: "Acid–alkali titration", subject: "chemistry",
+  slug: "titration", title: "Acid–alkali titration", subject: "chemistry",
   aim: "Find the concentration of a solution of hydrochloric acid by titrating it against 25.0 cm³ of 0.100 mol/dm³ sodium hydroxide.",
   safety: ["Wear eye protection — the acid and the alkali are irritants.", "Fill the burette below eye level, using a funnel; remove the funnel before you start.", "Use a pipette filler — never pipette by mouth."],
   init: (r) => ({ c: between(r, 0.08, 0.12, 3), r0: Math.round(between(r, 0.4, 1.6, 2) * 20) / 20, filled: false, pipette: "empty", flask: 0, indicator: false, onTile: false, added: 0 }),
@@ -78,7 +78,7 @@ const SAMPLES = ["A: glucose", "B: starch", "C: egg white", "D: milk"];
 const SAMPLE_COLOURS = ["#F1F5F9", "#F1F5F9", "#FEF9C3", "#FFFFFF"];
 const HAS = { sugar: [true, false, false, true], starch: [false, true, false, false], protein: [false, false, true, true] };
 export const foodTests: Practical<Food> = {
-  slug: "practical-food-tests", title: "Food tests", subject: "biology",
+  slug: "food-tests", title: "Food tests", subject: "biology",
   aim: "Test four foods for reducing sugar (Benedict's), starch (iodine) and protein (biuret), and find what food D contains.",
   safety: ["Wear eye protection.", "Benedict's and biuret reagents are irritants; iodine stains.", "Heat with a water bath, never a naked flame."],
   init: () => ({ benedict: false, inBath: false, temp: 20, heat: 0, iodine: false, biuret: 0 }),
@@ -157,7 +157,7 @@ const ohmSteps: Step<Ohm>[] = [
       check: (v, s: Ohm) => (near(v, s.R, s.R * 0.05) ? true : "R = V ÷ I, e.g. 6.0 V ÷ the current at 6.0 V."), answer: (s: Ohm) => fix(s.R, 1) }] } },
 ];
 export const ohmsLaw: Practical<Ohm> = {
-  slug: "practical-ohms-law", title: "Ohm's law: current and p.d.", subject: "physics",
+  slug: "circuits", title: "Ohm's law: current and p.d.", subject: "physics",
   aim: "Investigate how the current through a resistor depends on the potential difference across it, and find its resistance.",
   safety: ["Keep the p.d. at 6 V or less.", "Switch off between readings so the resistor doesn't get hot.", "Check the circuit before switching on."],
   init: (r) => ({ R: between(r, 8, 15, 1), ammeter: false, voltmeter: false, on: false, volts: 0 }),
@@ -189,7 +189,7 @@ type Osm = { iso: number; cut: boolean; m0: number[]; m1: number[]; weighed: boo
 const CONCS = [0, 0.2, 0.4, 0.6, 0.8];
 const pct = (s: Osm, i: number) => ((s.m1[i] - s.m0[i]) / s.m0[i]) * 100;
 export const osmosis: Practical<Osm> = {
-  slug: "practical-osmosis", title: "Osmosis in potato", subject: "biology",
+  slug: "osmosis", title: "Osmosis in potato", subject: "biology",
   aim: "Find the concentration of sucrose solution that has the same water potential as potato cells, from the change in mass of potato cylinders.",
   safety: ["Take care with the cork borer and the scalpel — cut onto a tile, away from you."],
   init: (r) => {

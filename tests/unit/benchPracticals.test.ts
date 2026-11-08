@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { PRACTICALS, foodTests, ohmsLaw, osmosis, practicalBySlug, titration } from "@/lib/lab/bench/practicals";
-import { checkField, doStep, runAll, seeded } from "@/lib/lab/bench/run";
+import { foodTests, ohmsLaw, osmosis, titration } from "@/lib/lab/bench/practicals";
+import { ALL_PRACTICALS as PRACTICALS, practicalFor as practicalBySlug } from "@/lib/lab/bench/all";
+import { checkField, doStep, runAll, seeded, targetOf } from "@/lib/lab/bench/run";
 import { fitLine } from "@/lib/lab/bench/types";
 import { LAB } from "@/lib/lab/catalog";
 import { guideFor } from "@/lib/lab/guides";
@@ -23,6 +24,7 @@ describe("virtual practicals on the lab bench", () => {
             expect(items.find((x) => x.id === a.item)!.hidden, `${p.slug} ${step.id}`).toBeFalsy();
           }
           if (a.type === "tap" || a.type === "hold" || a.type === "set") expect(ids).toContain(a.item);
+          if (a.type === "set") { const t = targetOf(a, s); expect(t, `${p.slug} ${step.id}`).toBeGreaterThanOrEqual(a.min); expect(t, `${p.slug} ${step.id}`).toBeLessThanOrEqual(a.max); }
           if (step.magnify) expect(ids).toContain(step.magnify);
           if (a.type === "record") {
             const right = doStep(step, s, values).values;
@@ -68,6 +70,8 @@ describe("virtual practicals on the lab bench", () => {
       expect(practicalBySlug(p.slug)).toBe(p);
     }
     expect(new Set(PRACTICALS.map((p) => p.subject))).toEqual(new Set(["physics", "chemistry", "biology"]));
+    // Every experiment marked as a bench practical has one.
+    for (const e of LAB.filter((x) => x.practical)) expect(practicalBySlug(e.slug), e.slug).not.toBeNull();
   });
 
   it("titration: the flask stays pink until the end point, and going past it is pointed out", () => {
