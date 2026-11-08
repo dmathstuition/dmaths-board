@@ -76,14 +76,14 @@ export function PhysicsKit({ it }: { it: ItemView }): ReactNode | null {
       </g>
     );
     case "measuring-cylinder": {
-      const vol = Number(p.vol ?? 0), ly = CYL.zero - vol * CYL.per;
+      const sc = Number(p.scale ?? 1), vol = Number(p.vol ?? 0), ly = CYL.zero - (vol / sc) * CYL.per;
       return (
         <g>
           <path d="M-40,0 L-34,-10 H34 L40,0 Z" fill="#CBD5E1" fillOpacity=".7" />
           {vol > 0 && <><rect x={-21} y={ly} width={42} height={-10 - ly} fill={p.liquid ?? "#BFDBFE"} fillOpacity=".75" /><path d={`M-21,${ly - 3} Q0,${ly + 4} 21,${ly - 3}`} fill="none" stroke="#1E3A8A" strokeOpacity=".5" strokeWidth={1.5} /></>}
           {p.stone && <path d="M-14,-12 L-16,-26 L-4,-36 L10,-32 L16,-18 L8,-11 Z" fill="#6B7280" stroke="#374151" />}
           <path d="M-24,-10 V-338 Q-24,-344 -30,-346 H24 V-10" fill="url(#bl-glass)" stroke="#fff" strokeOpacity=".85" strokeWidth={2} />
-          {Array.from({ length: 101 }, (_, v) => { const y = CYL.zero - v * CYL.per; return <g key={v}><line x1={-24} y1={y} x2={-24 + (v % 10 ? (v % 5 ? 5 : 8) : 13)} y2={y} stroke="#fff" strokeOpacity=".75" strokeWidth={v % 10 ? 0.8 : 1.4} />{v % 10 === 0 && v > 0 && <text x={-8} y={y + 3} fontSize={8} fontWeight={700} fill="#fff">{v}</text>}</g>; })}
+          {Array.from({ length: 101 }, (_, v) => { const y = CYL.zero - v * CYL.per; return <g key={v}><line x1={-24} y1={y} x2={-24 + (v % 10 ? (v % 5 ? 5 : 8) : 13)} y2={y} stroke="#fff" strokeOpacity=".75" strokeWidth={v % 10 ? 0.8 : 1.4} />{v % 10 === 0 && v > 0 && <text x={-8} y={y + 3} fontSize={8} fontWeight={700} fill="#fff">{v * sc}</text>}</g>; })}
           <text x={0} y={-330} textAnchor="middle" fontSize={8} fontWeight={800} fill="#fff" fillOpacity=".8">cm³</text>
         </g>
       );
@@ -306,10 +306,10 @@ export function physicsCloseup(it: ItemView): Zoom | null {
         draw: (cx, cy, r) => <ScaleZoom cx={cx} cy={cy} r={r} value={pos} perUnit={40} minor={0.1} label={1} lo={0} hi={45} down pointer="#DC2626" unit="cm" /> };
     }
     case "measuring-cylinder": {
-      const vol = Number(p.vol ?? 0);
+      const vol = Number(p.vol ?? 0), sc = Number(p.scale ?? 1);
       if (!vol) return null;
-      return { anchor: { x: it.x, y: it.y + CYL.zero - vol * CYL.per }, title: "Close-up · read the bottom of the meniscus",
-        draw: (cx, cy, r) => <ScaleZoom cx={cx} cy={cy} r={r} value={vol} perUnit={14} minor={1} label={10} lo={0} hi={100} liquid={String(p.liquid ?? "#BFDBFE")} unit="cm³" /> };
+      return { anchor: { x: it.x, y: it.y + CYL.zero - (vol / sc) * CYL.per }, title: "Close-up · read the bottom of the meniscus",
+        draw: (cx, cy, r) => <ScaleZoom cx={cx} cy={cy} r={r} value={vol} perUnit={14 / sc} minor={sc} label={10 * sc} lo={0} hi={100 * sc} liquid={String(p.liquid ?? "#BFDBFE")} unit="cm³" /> };
     }
     case "heating": {
       const T = Number(p.T ?? 0);

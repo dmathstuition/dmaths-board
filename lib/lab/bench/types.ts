@@ -52,7 +52,7 @@ export type Table = { title: string; columns: string[]; rows: (string | number)[
 export type Graph = { title: string; x: string; y: string; points: [number, number][]; line?: [number, number][] };
 
 export type Practical<S = any> = {
-  slug: string; title: string; subject: "physics" | "chemistry" | "biology";
+  slug: string; title: string; subject: "maths" | "physics" | "chemistry" | "biology";
   aim: string;
   safety: string[];
   init: (rand: Rand) => S;
@@ -63,7 +63,11 @@ export type Practical<S = any> = {
   conclusion: (s: S, values: Record<string, string>) => string;
 };
 
-export const num = (v: string) => { const n = Number(String(v).replace(/,/g, "").trim()); return Number.isFinite(n) && String(v).trim() !== "" ? n : null; };
+export const num = (v: string) => {
+  const t = String(v ?? "").replace(/,/g, "").trim(), f = t.match(/^(-?\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/); // "3/4" is a number too
+  if (f) return Number(f[2]) ? Number(f[1]) / Number(f[2]) : null;
+  const n = Number(t); return Number.isFinite(n) && t !== "" ? n : null;
+};
 export const near = (v: string, want: number, tol: number) => { const n = num(v); return n != null && Math.abs(n - want) <= tol + 1e-9; };
 export const round = (x: number, dp = 2) => Math.round(x * 10 ** dp) / 10 ** dp;
 export const fix = (x: number, dp = 2) => (Math.round(x * 10 ** dp) / 10 ** dp).toFixed(dp);

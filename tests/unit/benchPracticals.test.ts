@@ -69,7 +69,7 @@ describe("virtual practicals on the lab bench", () => {
       expect(guideFor(p.slug)).not.toBeNull();
       expect(practicalBySlug(p.slug)).toBe(p);
     }
-    expect(new Set(PRACTICALS.map((p) => p.subject))).toEqual(new Set(["physics", "chemistry", "biology"]));
+    expect(new Set(PRACTICALS.map((p) => p.subject))).toEqual(new Set(["maths", "physics", "chemistry", "biology"]));
     // Every experiment marked as a bench practical has one.
     for (const e of LAB.filter((x) => x.practical)) expect(practicalBySlug(e.slug), e.slug).not.toBeNull();
   });

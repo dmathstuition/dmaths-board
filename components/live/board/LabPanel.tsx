@@ -245,22 +245,27 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
             </div>
             {practicals.length > 0 && (
               <section className="mt-4" aria-label="Virtual practicals">
-                <p className="text-sm font-black">Virtual practicals <span className="font-semibold text-white/50">· real apparatus on a lab bench, done step by step</span></p>
-                <ul className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {practicals.map((e) => (
-                    <li key={e.slug}>
-                      <button type="button" onClick={() => setSlug(e.slug)} aria-label={e.title}
-                        className="flex h-full w-full flex-col overflow-hidden rounded-2xl bg-white/5 text-left ring-1 ring-white/15 transition hover:bg-white/10 hover:ring-white/40">
-                        <PracticalThumb slug={e.slug} />
-                        <span className="block p-3">
-                          <span className="block text-sm font-black">{e.title.replace(" (Bench Practical)", "")}</span>
-                          <span className="block text-[11px] font-bold" style={{ color: SUBJECTS[e.subject].color }}>{SUBJECTS[e.subject].label} · {e.level}</span>
-                          <span className="mt-0.5 line-clamp-2 block text-xs text-white/55">{e.blurb}</span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <p className="text-sm font-black">Virtual practicals <span className="font-semibold text-white/50">· real equipment, done step by step</span></p>
+                {(Object.keys(SUBJECTS) as LabSubject[]).filter((sub) => practicals.some((e) => e.subject === sub)).map((sub) => (
+                  <div key={sub} className="mt-3">
+                    <p className="text-xs font-black uppercase tracking-wide" style={{ color: SUBJECTS[sub].color }}>{SUBJECTS[sub].label}</p>
+                    <ul className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      {practicals.filter((e) => e.subject === sub).map((e) => (
+                        <li key={e.slug}>
+                          <button type="button" onClick={() => setSlug(e.slug)} aria-label={e.title}
+                            className="flex h-full w-full flex-col overflow-hidden rounded-2xl bg-white/5 text-left ring-1 ring-white/15 transition hover:bg-white/10 hover:ring-white/40">
+                            <PracticalThumb slug={e.slug} />
+                            <span className="block p-3">
+                              <span className="block text-sm font-black">{e.title}</span>
+                              <span className="block text-[11px] font-bold" style={{ color: SUBJECTS[e.subject].color }}>{SUBJECTS[e.subject].label} · {e.level}</span>
+                              <span className="mt-0.5 line-clamp-2 block text-xs text-white/55">{e.blurb}</span>
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
                 {others.length > 0 && <p className="mt-5 text-sm font-black">Simulations</p>}
               </section>
             )}

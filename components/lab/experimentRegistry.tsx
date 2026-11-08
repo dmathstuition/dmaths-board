@@ -18,20 +18,6 @@ const BENCH: Record<string, ComponentType> = Object.fromEntries(LAB.filter((e) =
 
 export const EXPERIMENTS: Record<string, ComponentType> = {
   ...BENCH,
-  probability: dynamic(() => import("@/components/lab/experiments/Probability"), { loading }),
-  pythagoras: dynamic(() => import("@/components/lab/experiments/Pythagoras"), { loading }),
-  statistics: dynamic(() => import("@/components/lab/experiments/Statistics"), { loading }),
-  quadratics: dynamic(() => import("@/components/lab/experiments/Quadratics"), { loading }),
-  "unit-circle": dynamic(() => import("@/components/lab/experiments/UnitCircle"), { loading }),
-  transformations: dynamic(() => import("@/components/lab/experiments/Transformations"), { loading }),
-  projectile: dynamic(() => import("@/components/lab/experiments/Projectile"), { loading }),
-  genetics: dynamic(() => import("@/components/lab/experiments/Genetics"), { loading }),
-  "circle-theorems": dynamic(() => import("@/components/lab/experiments/CircleTheorems"), { loading }),
-  "linear-graphs": dynamic(() => import("@/components/lab/experiments/LinearGraphs"), { loading }),
-  mensuration: dynamic(() => import("@/components/lab/experiments/Mensuration"), { loading }),
-  fractions: dynamic(() => import("@/components/lab/experiments/FractionWall"), { loading }),
-  polygons: dynamic(() => import("@/components/lab/experiments/Polygons"), { loading }),
-  "heart-rate": dynamic(() => import("@/components/lab/experiments/HeartRate"), { loading }),
 };
 
 export const hasExperiment = (slug: string) => slug in EXPERIMENTS;
