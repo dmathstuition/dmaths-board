@@ -38,6 +38,7 @@ export default async function ClassReportPage({ searchParams }: { searchParams: 
         <div className="grid gap-3 sm:grid-cols-2">
           {row.workMax > 0 && <Score label="Class work" value={`${row.work} / ${row.workMax}`} />}
           {row.quizAsked > 0 && <Score label="Live quiz" value={`${row.quizCorrect} / ${row.quizAsked} correct`} />}
+          {row.examMax > 0 && <Score label="Exam" value={`${row.exam} / ${row.examMax}`} />}
         </div>
         <div className="rounded-2xl border border-dmb-rule p-4">
           <p className="text-xs font-bold uppercase tracking-[.14em] text-dmb-muted">Total</p>

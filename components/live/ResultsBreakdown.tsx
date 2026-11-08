@@ -5,10 +5,13 @@ import type { LearnerDetail } from "@/lib/learnerResults";
 // learner's class page and the report page can both show it.
 export default function ResultsBreakdown({ d }: { d: LearnerDetail }) {
   const r = d.row;
+  const exams = d.exams ?? [];
   const strongest = d.work.filter((w) => w.mark != null && w.mark >= w.max).length
-    + d.quizzes.reduce((n, q) => n + q.items.filter((i) => i.correct).length, 0);
+    + d.quizzes.reduce((n, q) => n + q.items.filter((i) => i.correct).length, 0)
+    + exams.reduce((n, e) => n + (e.items ?? []).filter((i) => i.right).length, 0);
   const toReview = d.work.filter((w) => w.mark != null && w.mark < w.max).length
-    + d.quizzes.reduce((n, q) => n + q.items.filter((i) => !i.correct).length, 0);
+    + d.quizzes.reduce((n, q) => n + q.items.filter((i) => !i.correct).length, 0)
+    + exams.reduce((n, e) => n + (e.items ?? []).filter((i) => !i.right && !i.pending).length, 0);
   return (
     <div className="grid gap-4 text-ink">
       <div className="grid gap-2 sm:grid-cols-3">
@@ -51,16 +54,41 @@ export default function ResultsBreakdown({ d }: { d: LearnerDetail }) {
         </section>
       )}
 
-      {d.exams?.length > 0 && (
+      {exams.length > 0 && (
         <section aria-label="Exams">
           <h3 className="text-xs font-black uppercase tracking-wider text-[#0E6E72]">Exams</h3>
           <ul className="mt-2 grid gap-2">
-            {d.exams.map((e, i) => (
-              <li key={i} className="flex items-center gap-2 rounded-xl bg-white p-3 ring-1 ring-slate-200">
-                <span className="min-w-0 flex-1 text-sm font-bold">📝 {e.title}</span>
-                <span className="text-sm font-black">{e.submitted && e.score != null ? `${e.score} / ${e.total} (${Math.round((e.score / Math.max(1, e.total ?? 1)) * 100)}%)` : "Not handed in yet"}</span>
-              </li>
-            ))}
+            {exams.map((e, i) => {
+              const pct = e.submitted && e.score != null ? Math.round((e.score / Math.max(1, e.total ?? 1)) * 100) : null;
+              return (
+                <li key={i} className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 text-sm font-bold">📝 {e.title}</span>
+                    <span className={`rounded-lg px-2 py-1 text-sm font-black ${pct == null ? "bg-slate-100 text-ink/60" : pct >= 70 ? "bg-emerald-100 text-emerald-800" : pct >= 40 ? "bg-amber-100 text-amber-900" : "bg-red-100 text-red-700"}`}>
+                      {pct == null ? "Not handed in yet" : `${e.score} / ${e.total} (${pct}%)`}
+                    </span>
+                  </div>
+                  {!!e.toMark && <p className="mt-1 text-xs font-bold text-amber-800">✍️ Your teacher is still marking {e.toMark} answer{e.toMark === 1 ? "" : "s"} — your score may go up.</p>}
+                  {e.items && e.items.length > 0 && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs font-black text-[#0E6E72]">See each question ({e.items.filter((x) => x.right).length} of {e.items.length} right)</summary>
+                      <ol className="mt-2 grid gap-1.5">
+                        {e.items.map((it, k) => (
+                          <li key={k} className={`rounded-lg p-2 ring-1 ${it.right ? "bg-emerald-50 ring-emerald-200" : it.pending ? "bg-amber-50 ring-amber-200" : it.got > 0 ? "bg-amber-50 ring-amber-200" : "bg-red-50 ring-red-200"}`}>
+                            <p className="text-sm font-bold"><span aria-hidden>{it.right ? "✓" : it.pending ? "…" : "✗"} </span>{k + 1}. {it.q}</p>
+                            <p className="mt-0.5 text-xs font-semibold text-ink/70">
+                              {it.kind === "page"
+                                ? (it.pending ? "Not marked yet" : it.given ? `Your teacher's mark: ${it.got} / ${it.marks}` : `Left blank · 0 / ${it.marks}`)
+                                : <>You: {it.given || "no answer"}{!it.right && it.answer && <> · <span className="font-black text-emerald-800">Answer: {it.answer}</span></>}{it.got > 0 && !it.right ? ` · ${it.got} / ${it.marks} for your working` : ""}{it.pending ? " · your working is being marked" : ""}</>}
+                            </p>
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
@@ -82,7 +110,7 @@ export default function ResultsBreakdown({ d }: { d: LearnerDetail }) {
         </section>
       ))}
 
-      {!d.work.length && !d.quizzes.length && !d.exams?.length && <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-ink/60">Nothing has been marked yet. Your results appear here once your tutor marks your work or runs a quiz.</p>}
+      {!d.work.length && !d.quizzes.length && !exams.length && <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-ink/60">Nothing has been marked yet. Your results appear here once your tutor marks your work or runs a quiz.</p>}
     </div>
   );
 }

@@ -114,3 +114,57 @@ test("after class the teacher sends each parent a report by email or WhatsApp", 
   expect(text).toContain("Live quiz: 2 / 3 correct");
   expect(text).toContain(`https://dmaths.academy/report?t=`);
 });
+
+test("exam results show in the class results (teacher) and in My results (learner)", async ({ browser }) => {
+  const { teacher, learner } = await openClass(browser);
+  const qs = [
+    { q: "7 × 8 =", kind: "typed", options: [], answer: "56", marks: 1 },
+    { q: "2,416 × 37 =", kind: "typed", options: [], answer: "89392", marks: 2, method: true },
+  ];
+  // The class's exam, and the learner's paper in it (scored 2 of 3).
+  for (const page of [teacher, learner]) {
+    await page.context().route("**/api/live-sessions/results**", (r) => r.fulfill({ json: {
+      ready: true, marks: [], quizzes: [], answers: [],
+      exams: [{ id: "x1", title: "Arithmetic check", total: 3 }],
+      examEntries: [{ exam_id: "x1", student_id: GID, name: "Emmanuel", score: 2, total: 3, submitted: true }],
+    } }));
+  }
+  await teacher.context().route("**/api/board/exams**", (r) => {
+    const u = new URL(r.request().url());
+    if (u.searchParams.get("list") === "1") return r.fulfill({ json: { exams: [{ id: "x1", title: "Arithmetic check", status: "closed", createdAt: new Date().toISOString(), count: 2 }] } });
+    return r.fulfill({ json: {
+      exam: { id: "x1", title: "Arithmetic check", status: "closed", endsAt: Date.now() - 60_000, count: 2, total: 3, questions: qs, className: "Division", teacher: "Mrs Ade", createdAt: new Date().toISOString() },
+      entries: [{ id: GID, name: "Emmanuel", answered: 2, flags: 0, flagLog: [], submitted: true, score: 2, total: 3, live: null, answers: { 0: "56", 1: "89000", w1: { blank: false } }, pageMarks: { 1: 1 }, toMark: [], startedAt: null, submittedAt: new Date().toISOString() }],
+    } });
+  });
+  await learner.context().route("**/api/live-sessions/my-results**", (r) => r.fulfill({ json: { link: "/report?t=abc", detail: {
+    title: "Division", date: "9 Nov 2026", teacher: "Mrs Ade", learner: "Emmanuel", board: true, live: true, classAverage: 60,
+    row: { id: GID, name: "Emmanuel", work: 0, workMax: 0, quizCorrect: 0, quizAsked: 0, quizPoints: 0, exam: 2, examMax: 3, total: 2, totalMax: 3, percent: 67 },
+    work: [], quizzes: [],
+    exams: [{ title: "Arithmetic check", score: 2, total: 3, submitted: true, items: [
+      { q: "7 × 8 =", kind: "typed", given: "56", answer: "56", got: 1, marks: 1, right: true },
+      { q: "2,416 × 37 =", kind: "typed", given: "89000", answer: "89392", got: 1, marks: 2, right: false },
+    ] }],
+  } } }));
+
+  // The teacher: the exam is in each learner's total, and in full below.
+  await teacher.getByRole("tab", { name: /Results/ }).click();
+  const results = teacher.getByRole("region", { name: "Class results" });
+  await expect(results.getByText(/plus the exam \(Arithmetic check\)/)).toBeVisible();
+  const row = results.getByRole("row", { name: /Emmanuel/ }).first();
+  await expect(row).toContainText("2 / 3");
+  await expect(row).toContainText("67%");
+  const exams = results.getByRole("region", { name: "Exam results" });
+  await expect(exams.getByText(/Arithmetic check · 2 questions · 3 marks · 1 handed in · average 67%/)).toBeVisible();
+  await expect(exams.getByRole("row", { name: /Emmanuel/ })).toContainText("2 / 3 (67%)");
+  const pdf = teacher.waitForEvent("download");
+  await exams.getByRole("button", { name: "Download Emmanuel's exam report (PDF)" }).click();
+  expect((await pdf).suggestedFilename()).toBe("Emmanuel - Arithmetic check report.pdf");
+
+  // The learner: the exam in their results, question by question.
+  await learner.getByRole("button", { name: /My results/ }).click();
+  const mine = learner.getByRole("region", { name: "Exams" });
+  await expect(mine.getByText("2 / 3 (67%)")).toBeVisible({ timeout: 15_000 });
+  await mine.getByText(/See each question \(1 of 2 right\)/).click();
+  await expect(mine.getByText(/You: 89000 · Answer: 89392 · 1 \/ 2 for your working/)).toBeVisible();
+});

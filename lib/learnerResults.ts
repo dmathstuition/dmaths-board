@@ -6,11 +6,15 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { askedCount, classResults, type MarkRow } from "@/lib/classResults";
 import { learnerReport, type LearnerReport } from "@/lib/classReportData";
 import { cleanAnswerText, cleanImgs } from "@/lib/answerBoards";
+import { classExams } from "@/lib/classExams";
+import { cleanExamQuestions, cleanPageMarks, reviewItems, type ExamQ, type ReviewItem } from "@/lib/exams";
 
 export type WorkItem = { question: string; mark: number | null; max: number; feedback: string; answer: { text: string; imgs: string[] } | null };
 export type QuizItem = { q: string; options: string[]; answer: number; choice: number | null; correct: boolean };
 export type QuizResult = { title: string; items: QuizItem[] };
-export type ExamResult = { title: string; score: number | null; total: number | null; submitted: boolean };
+// items: question by question, when the teacher let learners see the answers;
+// toMark: how many the teacher still has to mark by hand.
+export type ExamResult = { title: string; score: number | null; total: number | null; submitted: boolean; items?: ReviewItem[]; toMark?: number };
 export type LearnerDetail = LearnerReport & { work: WorkItem[]; quizzes: QuizResult[]; exams: ExamResult[]; classAverage: number | null; live: boolean };
 
 const asItem = (m: any): WorkItem => ({
@@ -37,18 +41,28 @@ export async function learnerDetail(sessionId: string, studentId: string): Promi
     answers = data ?? [];
   }
   // The class average (everyone who took part), to compare with.
-  const ids = new Set([...(allMarks.data ?? []).map((m: any) => m.student_id), ...answers.map((a) => a.student_id)]);
-  const rows = classResults([...ids].map((id) => ({ id, name: "" })), (allMarks.data ?? []) as MarkRow[], quizzes.map((q: any) => ({ id: q.id, title: q.title, asked: q.asked })), answers);
+  const ce = await classExams(sessionId).catch(() => ({ exams: [], entries: [] }));
+  const ids = new Set([...(allMarks.data ?? []).map((m: any) => m.student_id), ...answers.map((a) => a.student_id), ...ce.entries.map((e) => e.student_id)]);
+  const rows = classResults([...ids].map((id) => ({ id, name: "" })), (allMarks.data ?? []) as MarkRow[], quizzes.map((q: any) => ({ id: q.id, title: q.title, asked: q.asked })), answers, ce.exams, ce.entries);
   const pcts = rows.map((r) => r.percent).filter((p): p is number => p != null);
   const classAverage = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null;
 
   const myAnswers = answers.filter((a) => a.student_id === studentId);
-  // Exams (supabase/migration-exams-stars.sql; none before it's run).
-  const examRows = await admin.from("board_exams").select("id, title, created_at").eq("session_id", sessionId).order("created_at").limit(20);
+  // Exams (supabase/migration-exams-stars.sql; none before it's run): their
+  // mark, and question by question if the teacher lets learners see the answers.
   let exams: ExamResult[] = [];
-  if (!examRows.error && examRows.data?.length) {
-    const { data: es } = await admin.from("board_exam_entries").select("exam_id, score, total, submitted_at").eq("student_id", studentId).in("exam_id", examRows.data.map((e: any) => e.id));
-    exams = examRows.data.map((e: any) => { const m: any = (es ?? []).find((x: any) => x.exam_id === e.id); return m ? { title: String(e.title), score: m.score, total: m.total, submitted: !!m.submitted_at } : null; }).filter(Boolean) as ExamResult[];
+  if (ce.exams.length) {
+    const ids0 = ce.exams.map((e) => e.id);
+    let mineE = await admin.from("board_exam_entries").select("exam_id, score, total, submitted_at, answers, page_marks, extra_qs").eq("student_id", studentId).in("exam_id", ids0);
+    if (mineE.error) mineE = await admin.from("board_exam_entries").select("exam_id, score, total, submitted_at, answers").eq("student_id", studentId).in("exam_id", ids0) as typeof mineE;
+    exams = ce.exams.map((e) => {
+      const m: any = (mineE.data ?? []).find((x: any) => x.exam_id === e.id);
+      if (!m) return null;
+      const qs: ExamQ[] = [...e.questions, ...cleanExamQuestions(m.extra_qs ?? [])]; // as stored (a deleted paper's pages have no picture)
+      const items = m.submitted_at ? reviewItems(qs, m.answers ?? {}, cleanPageMarks(qs, m.page_marks)) : [];
+      const toMark = items.filter((x) => x.pending).length;
+      return { title: e.title, score: m.score, total: m.total, submitted: !!m.submitted_at, ...(e.review && items.length ? { items } : {}), ...(toMark ? { toMark } : {}) };
+    }).filter(Boolean) as ExamResult[];
   }
   return {
     ...report,

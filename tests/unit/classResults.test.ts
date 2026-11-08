@@ -37,6 +37,6 @@ describe("class results", () => {
   it("makes a spreadsheet", () => {
     const csv = resultsCsv(classResults(people, marks, quizzes, answers));
     expect(csv.split("\n")[0]).toMatch(/^Learner,Class work/);
-    expect(csv).toContain("Ada,4,6,2,4,1700,6,10,60");
+    expect(csv).toContain("Ada,4,6,2,4,1700,0,0,6,10,60"); // no exams in this class: 0 of 0
   });
 });

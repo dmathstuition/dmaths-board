@@ -11,6 +11,7 @@ import { useServerClock } from "@/lib/serverClock";
 import { UK_SETS } from "@/lib/ukPrimary";
 import { SCHEMES, gradeOf, schemeById, type GradeScheme } from "@/lib/examReport";
 import { CalculatorButton } from "@/components/live/PhoneCalculator";
+import { downloadExamCsv, downloadExamReports } from "@/lib/examDownloads";
 import { EXAM_MINUTES, EXAM_TOPICS, MAX_PAGE_MARKS, clockLeft, isHandMarked, keepsOrder, needsMarking, pageDone, workingKey, spokenSpelling, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
 import { MarkingDesk, PageFlow, WorkingPad } from "@/components/live/board/PaperPages";
 import type { Difficulty } from "@/lib/games/generators";
@@ -252,28 +253,11 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   async function reports(only?: Entry) {
     if (!exam?.questions) return;
     setPdfBusy(only?.id ?? "all"); setNote(null);
-    try {
-      const [{ examReports }, { learnerPdf, classPdf, savePdf }] = await Promise.all([import("@/lib/examReport"), import("@/lib/examPdf")]);
-      const cr = examReports(exam.questions, entries.map((e) => ({ id: e.id, name: e.name, answers: e.answers ?? {}, flags: e.flags, flagLog: e.flagLog, startedAt: e.startedAt ?? null, submittedAt: e.submittedAt ?? null, pageMarks: e.pageMarks, extraQs: e.extraQs })), scheme);
-      const meta = { className: exam.className || "Class", examTitle: exam.title, teacher: exam.teacher, date: new Date(exam.createdAt ?? Date.now()).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) };
-      if (only) {
-        const r = cr.learners.find((l) => l.id === only.id);
-        if (!r) throw new Error("no report");
-        savePdf(await learnerPdf(meta, r), `${only.name} - ${exam.title} report.pdf`);
-      } else savePdf(await classPdf(meta, cr), `${exam.title} - class reports.pdf`);
-    } catch (err) {
-      console.warn("exam report failed", err);
-      setNote("Couldn't make the report — try again.");
-    } finally { setPdfBusy(null); }
+    try { await downloadExamReports(exam, entries, scheme, only); }
+    catch (err) { console.warn("exam report failed", err); setNote("Couldn't make the report — try again."); }
+    finally { setPdfBusy(null); }
   }
-  function csv() {
-    if (!exam) return;
-    const esc = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const pct = (e: Entry) => Math.round(((e.score ?? e.live ?? 0) / Math.max(1, exam.total)) * 100);
-    const rows = [["Learner", "Score", "Out of", "Percent", `Grade (${scheme.name})`, "Answered", "Left the page", "Handed in"], ...entries.map((e) => [e.name, e.score ?? e.live ?? 0, exam.total, pct(e), gradeOf(pct(e), scheme), e.answered, e.flags, e.submitted ? "yes" : "no"])];
-    const url = URL.createObjectURL(new Blob([rows.map((r) => r.map(esc).join(",")).join("\n")], { type: "text/csv" }));
-    const a = document.createElement("a"); a.href = url; a.download = `${exam.title.replace(/[^\w ]+/g, "")}.csv`; a.click(); URL.revokeObjectURL(url);
-  }
+  function csv() { if (exam) downloadExamCsv(exam, entries, scheme); }
   const chip = (on: boolean) => `min-h-[38px] rounded-xl px-3 text-xs font-black ring-1 ${on ? "bg-[#C2451C] text-white ring-[#C2451C]" : "bg-white text-ink/70 ring-slate-200"}`;
   const field = "w-full rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#C2451C]";
   const showBuilder = building || !exam;

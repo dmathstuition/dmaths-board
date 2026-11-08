@@ -103,3 +103,51 @@ describe("look, cover, write, check", () => {
     expect(missedLetters("yacht", "").every(Boolean)).toBe(true);
   });
 });
+
+import { classResults, resultsCsv } from "@/lib/classResults";
+import { reviewItems } from "@/lib/exams";
+import { examCsv } from "@/lib/examDownloads";
+import { KS2 } from "@/lib/examReport";
+describe("exam results after the class", () => {
+  it("count in each learner's class total, out of every exam's marks", () => {
+    const rows = classResults([{ id: "a", name: "Ada" }, { id: "b", name: "Ben" }, { id: "c", name: "Cy" }],
+      [{ round_id: "r1", student_id: "a", name: "Ada", question: "Q", mark: 2, max_mark: 2 }], [], [],
+      [{ id: "x1", title: "Arithmetic", total: 40 }],
+      [{ exam_id: "x1", student_id: "a", name: "Ada", score: 30, total: 40, submitted: true },
+       { exam_id: "x1", student_id: "b", name: "Ben", score: 12, total: 42, submitted: true }, // their own spelling words
+       { exam_id: "x1", student_id: "c", name: "Cy", score: 5, total: 40, submitted: false }, // not handed in: nothing yet
+       { exam_id: "other", student_id: "a", name: "Ada", score: 9, total: 9, submitted: true }]); // another class's exam
+    const by = Object.fromEntries(rows.map((r) => [r.name, r]));
+    expect([by.Ada.exam, by.Ada.examMax, by.Ada.total, by.Ada.totalMax]).toEqual([30, 40, 32, 42]);
+    expect([by.Ben.exam, by.Ben.examMax]).toEqual([12, 42]);
+    expect([by.Cy.exam, by.Cy.examMax]).toEqual([0, 40]);
+    expect(resultsCsv(rows).split("\n")[0]).toContain("Exams,Exams out of");
+  });
+  it("a learner's look back: what they gave, the answer, marks — and what's still being marked", () => {
+    const qs: ExamQ[] = [
+      { q: "7 × 8 =", kind: "typed", options: [], answer: "56 | fifty-six", marks: 1 },
+      { q: "Pick", kind: "choice", options: ["a", "b"], answer: 1, marks: 1 },
+      { q: "2,416 × 37 =", kind: "typed", options: [], answer: "89392", marks: 2, method: true },
+      { q: "Page 4", kind: "page", options: [], answer: "", marks: 3, img: "x" },
+      { q: "Page 5", kind: "page", options: [], answer: "", marks: 2, img: "y" },
+    ];
+    const items = reviewItems(qs, { 0: "54", 1: 1, 2: "89000", w2: { ink: [stroke] }, 3: { ink: [stroke], text: "", done: "t" }, 4: { ink: [], text: "", done: "t" } }, { 3: 2 });
+    expect(items[0]).toMatchObject({ given: "54", answer: "56", right: false, got: 0 });
+    expect(items[1]).toMatchObject({ given: "b", answer: "b", right: true, got: 1 });
+    expect(items[2]).toMatchObject({ right: false, got: 0, pending: true });
+    expect(items[3]).toMatchObject({ kind: "page", given: "Written on the page", got: 2, marks: 3, right: false });
+    expect(items[4]).toMatchObject({ given: "", got: 0 }); // blank page: 0, nothing to wait for
+    expect(items[4].pending).toBeUndefined();
+  });
+  it("the exam spreadsheet uses each learner's own total", () => {
+    const csv = examCsv({ title: "Spelling", total: 20 }, [
+      { id: "a", name: "Ada", flags: 0, flagLog: [], score: 21, total: 22, answered: 22, submitted: true },
+      { id: "b", name: "Ben", flags: 2, flagLog: [], score: null, live: 5, total: null, answered: 6, submitted: false },
+    ], KS2);
+    expect(csv.split("\n")).toEqual([
+      "Learner,Score,Out of,Percent,Grade (KS2 SATs (estimated scaled score)),Answered,Left the page,Handed in",
+      "Ada,21,22,95,HS,22,0,yes",
+      "Ben,5,20,25,WTS,6,2,no",
+    ]);
+  });
+});

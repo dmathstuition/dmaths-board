@@ -3,6 +3,7 @@
 // results (class-work marks + live quiz), out of what the whole class was set.
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { askedCount, classResults, type ResultRow } from "@/lib/classResults";
+import { classExams } from "@/lib/classExams";
 
 export type LearnerReport = { title: string; date: string; teacher: string; learner: string; board: boolean; row: ResultRow };
 
@@ -32,7 +33,8 @@ export async function learnerReport(sessionId: string, studentId: string): Promi
     const { data } = await admin.from("live_quiz_answers").select("quiz_id, student_id, correct, points").in("quiz_id", quizzes.map((q) => q.id)).eq("student_id", studentId).limit(5000);
     answers = data ?? [];
   }
-  const rows = classResults([{ id: studentId, name: learner || "Learner" }], (marksRes.data ?? []) as any, quizzes, answers);
+  const { exams, entries } = await classExams(sessionId).catch(() => ({ exams: [], entries: [] }));
+  const rows = classResults([{ id: studentId, name: learner || "Learner" }], (marksRes.data ?? []) as any, quizzes, answers, exams, entries.filter((e) => e.student_id === studentId));
   const row = rows.find((r) => r.id === studentId);
   if (!row) return null;
   const h: any = hostRes.data;

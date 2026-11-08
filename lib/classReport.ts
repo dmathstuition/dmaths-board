@@ -39,7 +39,7 @@ export function praise(percent: number | null): string {
 // The message a parent receives (WhatsApp text, or the body of the email).
 export function reportMessage(o: {
   learner: string; title: string; teacher: string; date: string; covered: string; homework: string;
-  row: Pick<ResultRow, "work" | "workMax" | "quizCorrect" | "quizAsked" | "total" | "totalMax" | "percent">; url: string;
+  row: Pick<ResultRow, "work" | "workMax" | "quizCorrect" | "quizAsked" | "total" | "totalMax" | "percent"> & Partial<Pick<ResultRow, "exam" | "examMax">>; url: string;
 }): string {
   const lines = [
     `Class report for ${o.learner}`,
@@ -49,6 +49,7 @@ export function reportMessage(o: {
   if (o.covered) lines.push(`What we covered: ${o.covered}`);
   if (o.row.workMax) lines.push(`Class work: ${o.row.work} / ${o.row.workMax}`);
   if (o.row.quizAsked) lines.push(`Live quiz: ${o.row.quizCorrect} / ${o.row.quizAsked} correct`);
+  if (o.row.examMax) lines.push(`Exam: ${o.row.exam ?? 0} / ${o.row.examMax}`);
   lines.push(`Total: ${scoreLine(o.row)} — ${praise(o.row.percent)}`);
   if (o.homework) lines.push(`Homework: ${o.homework}`);
   lines.push("", `Full report: ${o.url}`);

@@ -4,9 +4,10 @@ import { sessionViewer } from "@/lib/sessionAccess";
 import { rateLimit } from "@/lib/ratelimit";
 import { askedCount } from "@/lib/classResults";
 import { cleanAnswerText, cleanImgs, cleanNote } from "@/lib/answerBoards";
+import { classExams } from "@/lib/classExams";
 
 // Class results for the teacher (supabase/migration-class-marks.sql):
-//   GET    ?id=          → class-work marks + the class's live quizzes and answers
+//   GET    ?id=          → class-work marks + the class's live quizzes and answers + its exams and marks
 //   POST   { id, action: "mark", roundId, question, studentId, name, mark, max }
 //          { id, action: "unmark", roundId, studentId }
 //          { id, action: "note", roundId, studentId, feedback, answer? }   (feedback, kept for the learner)
@@ -41,7 +42,8 @@ export async function GET(req: Request) {
     const { data } = await admin.from("live_quiz_answers").select("quiz_id, student_id, correct, points").in("quiz_id", quizzes.map((q) => q.id)).limit(20000);
     answers = data ?? [];
   }
-  return NextResponse.json({ ready, marks: marksRes.data ?? [], quizzes, answers }, { headers: { "Cache-Control": "no-store" } });
+  const { exams, entries } = await classExams(id).catch(() => ({ exams: [], entries: [] }));
+  return NextResponse.json({ ready, marks: marksRes.data ?? [], quizzes, answers, exams: exams.map(({ id: examId, title, total }) => ({ id: examId, title, total })), examEntries: entries }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(req: Request) {

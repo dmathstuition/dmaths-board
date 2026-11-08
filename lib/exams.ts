@@ -199,6 +199,22 @@ export function isRight(q: ExamQ, given: unknown): boolean {
   if (q.kind === "spell") return spelledRight(String(given), String(q.answer));
   return typedRight(String(given), String(q.answer));
 }
+// Question by question, for a learner looking back at an exam: what they gave,
+// the answer, and the marks they got (a page: the teacher's mark).
+export type ReviewItem = { q: string; kind: ExamQ["kind"]; given: string; answer: string; got: number; marks: number; right: boolean; pending?: boolean };
+export function reviewItems(qs: ExamQ[], answers: Record<string, unknown>, pageMarks: Record<string, number> = {}): ReviewItem[] {
+  return qs.map((q, i) => {
+    const v = answers?.[String(i)], mark = pageMarks?.[String(i)];
+    const given = q.kind === "page" ? (pageBlank(v) ? "" : "Written on the page")
+      : q.kind === "choice" ? (v == null || v === "" ? "" : q.options[Number(v)] ?? "") : String(v ?? "").trim();
+    const answer = q.kind === "page" ? "" : q.kind === "choice" ? q.options[Number(q.answer)] ?? "" : String(q.answer).split("|")[0].trim();
+    const right = q.kind !== "page" && isRight(q, v);
+    const got = q.kind === "page" ? Math.min(q.marks, Math.max(0, Number(mark) || 0)) : right ? q.marks : q.method ? Math.min(teacherMax(q), Math.max(0, Number(mark) || 0)) : 0;
+    const pending = q.kind === "page" ? mark == null && !pageBlank(v) : !!q.method && !right && mark == null && !workingBlank(answers?.[workingKey(i)]);
+    return { q: shownQ(q), kind: q.kind, given, answer, got, marks: q.marks, right: got === q.marks && q.marks > 0, ...(pending ? { pending: true } : {}) };
+  });
+}
+
 // pageMarks: the teacher's marks for pages (added up with everything marked automatically).
 export function markPaper(qs: ExamQ[], answers: Record<string, unknown>, pageMarks: Record<string, number> = {}): { score: number; total: number; right: boolean[] } {
   const given = (q: ExamQ, i: number) => Math.max(0, Math.min(teacherMax(q), Math.round(Number(pageMarks?.[String(i)]) || 0)));

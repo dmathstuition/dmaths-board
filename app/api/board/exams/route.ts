@@ -27,6 +27,8 @@ import { removeSlidePictures } from "@/lib/slideStore";
 //        { action: "extra", examId, studentId, on }       extra time (25%) for one learner (teacher)
 //        { action: "working", examId, n, value }  working shown for a method mark (learner)
 //   GET  ?sessionId=&warmups=1      → the teacher's daily warm-ups, for the tracker
+//   GET  ?sessionId=&list=1         → the class's exams (teacher), for the results after the class
+//   GET  ?sessionId=&examId=        → that exam, as above, instead of the latest
 // Papers marked by hand: learners write on each page and hand it in; the
 // teacher's marks (board_exam_entries.page_marks) add up to the score — so do
 // method marks. Extra time: each learner's own deadline is ends_at + extra_ms,
@@ -109,8 +111,15 @@ export async function GET(req: Request) {
       }));
       return NextResponse.json({ rows }, { headers: { "Cache-Control": "no-store" } });
     }
-    const e = await latestExam(sessionId);
-    if (!e) return NextResponse.json({ exam: null });
+    if (params.get("list") === "1") {
+      if (!v.host) return bad("Only the teacher can see this.", 403);
+      const { data: list, error } = await supabaseAdmin().from("board_exams").select("id, title, status, created_at, questions").eq("session_id", sessionId).order("created_at").limit(20);
+      if (error) return dbFail(error.message);
+      return NextResponse.json({ exams: (list ?? []).map((x: any) => ({ id: x.id, title: x.title, status: x.status, createdAt: x.created_at, count: (x.questions ?? []).length })) }, { headers: { "Cache-Control": "no-store" } });
+    }
+    const examId = params.get("examId");
+    const e = examId ? await examById(examId) : await latestExam(sessionId);
+    if (!e || e.session_id !== sessionId) return NextResponse.json({ exam: null });
     await settle(e);
     const admin = supabaseAdmin();
     const meta = { id: e.id, title: e.title, minutes: e.minutes, review: e.review, calculator: e.calculator !== false, inOrder: keepsOrder(e.questions, !!e.in_order), handMarked: isHandMarked(e.questions), personal: Math.max(0, Number(e.personal_words) || 0), spelling: e.questions.some((q) => q.kind === "spell"), status: e.status, endsAt: new Date(e.ends_at).getTime(), count: e.questions.length, total: e.questions.reduce((s, q) => s + q.marks, 0) };
