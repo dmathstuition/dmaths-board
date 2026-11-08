@@ -26,14 +26,8 @@ export const EXPERIMENTS: Record<string, ComponentType> = {
   "unit-circle": dynamic(() => import("@/components/lab/experiments/UnitCircle"), { loading }),
   transformations: dynamic(() => import("@/components/lab/experiments/Transformations"), { loading }),
   projectile: dynamic(() => import("@/components/lab/experiments/Projectile"), { loading }),
-  reactivity: dynamic(() => import("@/components/lab/experiments/Reactivity"), { loading }),
-  rates: dynamic(() => import("@/components/lab/experiments/Rates"), { loading }),
-  "gas-laws": dynamic(() => import("@/components/lab/experiments/GasLaws"), { loading }),
   cells: dynamic(() => import("@/components/lab/experiments/Cells"), { loading }),
   enzymes: dynamic(() => import("@/components/lab/experiments/Enzymes"), { loading }),
-  electrolysis: dynamic(() => import("@/components/lab/experiments/Electrolysis"), { loading }),
-  chromatography: dynamic(() => import("@/components/lab/experiments/Chromatography"), { loading }),
-  "flame-tests": dynamic(() => import("@/components/lab/experiments/FlameTests"), { loading }),
   transpiration: dynamic(() => import("@/components/lab/experiments/Transpiration"), { loading }),
   genetics: dynamic(() => import("@/components/lab/experiments/Genetics"), { loading }),
   "circle-theorems": dynamic(() => import("@/components/lab/experiments/CircleTheorems"), { loading }),
@@ -41,7 +35,6 @@ export const EXPERIMENTS: Record<string, ComponentType> = {
   mensuration: dynamic(() => import("@/components/lab/experiments/Mensuration"), { loading }),
   fractions: dynamic(() => import("@/components/lab/experiments/FractionWall"), { loading }),
   polygons: dynamic(() => import("@/components/lab/experiments/Polygons"), { loading }),
-  "ph-indicators": dynamic(() => import("@/components/lab/experiments/PhIndicators"), { loading }),
   "heart-rate": dynamic(() => import("@/components/lab/experiments/HeartRate"), { loading }),
 };
 

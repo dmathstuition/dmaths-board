@@ -2,6 +2,7 @@
 import type { Practical } from "@/lib/lab/bench/types";
 import { PRACTICALS } from "@/lib/lab/bench/practicals";
 import { PHYSICS } from "@/lib/lab/bench/physics";
+import { CHEMISTRY } from "@/lib/lab/bench/chemistry";
 
-export const ALL_PRACTICALS: Practical[] = [...PRACTICALS, ...PHYSICS];
+export const ALL_PRACTICALS: Practical[] = [...PRACTICALS, ...PHYSICS, ...CHEMISTRY];
 export const practicalFor = (slug: string) => ALL_PRACTICALS.find((p) => p.slug === slug) ?? null;

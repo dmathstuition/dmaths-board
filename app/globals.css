@@ -803,7 +803,11 @@ html { scroll-behavior: smooth; }
 /* The lab bench (components/lab/bench): the outline on what to use next. */
 @keyframes benchPulse { 0%, 100% { stroke-opacity: 1; } 50% { stroke-opacity: .25; } }
 .bench-pulse { animation: benchPulse 1.4s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .bench-pulse { animation: none; } }
+@keyframes benchFlicker { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.94) scaleX(1.03); } }
+.bench-flicker { transform-box: fill-box; transform-origin: 50% 100%; animation: benchFlicker .35s ease-in-out infinite; }
+@keyframes benchFizz { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: .9; } 100% { transform: translateY(-75px); opacity: 0; } }
+.bench-fizz { animation: benchFizz 1.2s ease-in infinite; }
+@media (prefers-reduced-motion: reduce) { .bench-pulse, .bench-flicker, .bench-fizz { animation: none; } }
 @media (prefers-reduced-motion: reduce) {
   .elab-float, .elab-bubble, .elab-flow, .elab-pop, .elab-drip { animation: none; }
   .elab-card:hover { transform: none; }

@@ -122,6 +122,7 @@ export function Apparatus({ it, flowing }: { it: ItemView; flowing?: boolean }) 
       const d = "M-58,-5 Q-60,0 -53,0 H53 Q60,0 58,-5 L16,-92 V-127 H-16 V-92 Z";
       return (
         <g>
+          {p.cross && <><rect x={-80} y={-3} width={160} height={3} fill="#F8FAFC" /><path d="M-30,-1.5 L30,-1.5" stroke="#0F172A" strokeWidth={2} /></>}
           <path d={d} fill="#E2E8F0" fillOpacity=".12" />
           {h > 0 && <><path d={`M-55,-2 H55 L${wh},${-h} H${-wh} Z`} fill={p.colour} fillOpacity=".9" /><ellipse cx={0} cy={-h} rx={wh} ry={3} fill="#fff" fillOpacity=".45" /></>}
           <path d={d} fill="url(#bl-glass)" stroke="#fff" strokeOpacity=".75" strokeWidth={2} />
@@ -160,7 +161,7 @@ export function Apparatus({ it, flowing }: { it: ItemView; flowing?: boolean }) 
       );
     }
     case "rack": {
-      const tubes = (p.tubes as { label: string; level: number; colour: string }[]) ?? [];
+      const tubes = (p.tubes as { label: string; level: number; colour: string; metal?: string; bubbles?: number }[]) ?? [];
       const w = tubes.length * 46 + 30, x0 = -w / 2 + 38;
       return (
         <g>
@@ -173,6 +174,8 @@ export function Apparatus({ it, flowing }: { it: ItemView; flowing?: boolean }) 
               <g key={i}>
                 <path d={`M${x - 10},${bot - lh} V${bot - 10} a10,10 0 0 0 20,0 V${bot - lh} Z`} fill={t.colour} fillOpacity=".92" />
                 {p.potato && <rect x={x - 6} y={bot - 40} width={12} height={28} rx={3} fill="#F3E3B3" stroke="#D6B76A" />}
+                {t.metal && <rect x={x - 7} y={bot - 14} width={14} height={8} rx={2} fill={t.metal} />}
+                {Array.from({ length: (t.bubbles ?? 0) * 3 }, (_, b) => <circle key={b} className="bench-fizz" cx={x - 5 + (b % 3) * 5} cy={bot - 12} r={1.6 + (b % 2)} fill="#fff" fillOpacity=".85" style={{ animationDuration: `${1.6 / (t.bubbles ?? 1)}s`, animationDelay: `${(b * 0.23) % 1.2}s` }} />)}
                 <path d={`M${x - 11},${top} V${bot - 10} a11,11 0 0 0 22,0 V${top}`} fill="url(#bl-glass)" stroke="#fff" strokeOpacity=".8" strokeWidth={1.6} />
                 <ellipse cx={x} cy={top} rx={11} ry={2.5} fill="none" stroke="#fff" strokeOpacity=".7" />
               </g>

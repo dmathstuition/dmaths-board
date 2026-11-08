@@ -272,7 +272,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
               <BenchDefs />
               <Room />
               {order.filter((x) => move?.id !== x.id).map(drawItem)}
-              {order.filter((x) => hasFront(x.kind)).map((x) => <g key={`front-${x.id}`} transform={`translate(${x.x},${x.y})`} pointerEvents="none"><Front it={x} /></g>)}
+              {order.filter((x) => hasFront(x.kind) && move?.id !== x.id).map((x) => <g key={`front-${x.id}`} transform={`translate(${x.x},${x.y})`} pointerEvents="none"><Front it={x} /></g>)}
               {order.filter((x) => x.label && move?.id !== x.id).map((x) => (
                 <g key={`tag-${x.id}`} transform={`translate(${x.x},${x.y + 26})`} pointerEvents="none">
                   <rect x={-(x.label!.length * 3.9 + 10)} y={-13} width={x.label!.length * 7.8 + 20} height={22} rx={11} fill="#0B1220" fillOpacity=".72" />
