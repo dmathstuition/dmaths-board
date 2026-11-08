@@ -559,6 +559,27 @@ function PaperPage({ src, label }: { src: string; label: string }) {
   );
 }
 
+// "Are you sure?" inside the page. The phone's own pop-up (window.confirm)
+// takes the focus away from the page, which looked like leaving the exam.
+export type Ask = (message: string, yes: string) => Promise<boolean>;
+export function useAsk(): [Ask, React.ReactNode] {
+  const [q, setQ] = useState<{ message: string; yes: string; done: (v: boolean) => void } | null>(null);
+  const ask = useCallback<Ask>((message, yes) => new Promise((done) => setQ({ message, yes, done })), []);
+  const close = (v: boolean) => { q?.done(v); setQ(null); };
+  const box = q ? (
+    <div role="alertdialog" aria-modal="true" aria-label="Are you sure?" className="fixed inset-0 z-[150] flex items-end justify-center bg-black/50 p-4 sm:items-center">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+        <p className="whitespace-pre-line text-base font-bold text-ink">{q.message}</p>
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={() => close(false)} className="min-h-[48px] flex-1 rounded-xl bg-slate-100 text-sm font-black text-ink">Not yet</button>
+          <button type="button" onClick={() => close(true)} autoFocus className="min-h-[48px] flex-1 rounded-xl bg-emerald-600 text-sm font-black text-white">{q.yes}</button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+  return [ask, box];
+}
+
 // ── Learner ──
 function Learner({ data, reload, sessionId, follow }: { data: any; reload: () => Promise<void>; sessionId: string; follow: { n: number; k: number } | null }) {
   const now = useServerClock()();
@@ -576,6 +597,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
   const [hidden, setHidden] = useState(false);
   const [warned, setWarned] = useState(0);
   const [note, setNote] = useState<string | null>(null);
+  const [ask, askBox] = useAsk();
   const [result, setResult] = useState<{ score: number; total: number } | null>(null);
   const seeded = useRef<string | null>(null);
   const taking = !!exam && exam.status === "open" && !!entry && !entry.submitted && !!paper;
@@ -602,10 +624,18 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
       setWarned((w) => w + 1);
       api({ action: "flag", examId: exam.id, reason });
     };
+    // Leaving: the page is hidden (another app or tab, the home screen). Losing
+    // the focus only counts if it lasts — phones blur the page for a moment for
+    // all sorts of things (a keyboard, a notification) without the learner leaving.
+    let away: ReturnType<typeof setTimeout> | null = null;
     const vis = () => { if (document.visibilityState === "hidden") flag("left the exam page"); };
-    const blur = () => flag("switched away from the exam");
-    document.addEventListener("visibilitychange", vis); window.addEventListener("blur", blur);
-    return () => { document.removeEventListener("visibilitychange", vis); window.removeEventListener("blur", blur); };
+    const blur = () => {
+      if (away) clearTimeout(away);
+      away = setTimeout(() => { away = null; if (!document.hasFocus() && document.visibilityState === "visible") flag("switched away from the exam"); }, 2500);
+    };
+    const back = () => { if (away) { clearTimeout(away); away = null; } };
+    document.addEventListener("visibilitychange", vis); window.addEventListener("blur", blur); window.addEventListener("focus", back);
+    return () => { if (away) clearTimeout(away); document.removeEventListener("visibilitychange", vis); window.removeEventListener("blur", blur); window.removeEventListener("focus", back); };
   }, [taking, exam]);
   // Time's up: hand it in.
   const left = exam ? exam.endsAt - now : 0;
@@ -623,7 +653,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
     if (!exam) return;
     if (!auto) {
       const blank = (paper ?? []).filter((q) => answers[String(q.n)] == null || answers[String(q.n)] === "").length;
-      if (!window.confirm(blank ? `You haven't answered ${blank} question${blank === 1 ? "" : "s"}. Hand in anyway?` : "Hand in your exam?")) return;
+      if (!(await ask(blank ? `You haven't answered ${blank} question${blank === 1 ? "" : "s"}. Hand in anyway?` : "Hand in your exam?", "Yes, hand it in"))) return;
     }
     // Typed answers still waiting to save go first.
     await Promise.all(Object.entries(pending.current).map(([n, t]) => { clearTimeout(t); return api({ action: "answer", examId: exam.id, n: Number(n), value: answers[n] }); }));
@@ -637,6 +667,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
   const shell = (children: React.ReactNode) => (
     <div role="dialog" aria-modal="true" aria-label={`Exam: ${exam.title}`} className="fixed inset-0 z-[120] overflow-y-auto bg-[#FFF7ED] text-ink" onCopy={(e) => e.preventDefault()}>
       <div className="mx-auto flex min-h-full max-w-2xl flex-col gap-3 p-3 sm:p-6"><div className="flex justify-end"><ReadingButton /></div>{children}</div>
+      {askBox}
     </div>
   );
 
@@ -674,7 +705,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
       {warned > 0 && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-black text-red-700 ring-1 ring-red-200">⚠️ You left the exam page{warned > 1 ? ` ${warned} times` : ""}. Your teacher has been told.</p>}
       {hand ? (
         <div className="rounded-2xl bg-white p-3 shadow ring-1 ring-orange-200">
-          <PageFlow examId={exam.id} myId={entry?.id ?? "learner"} paper={paper} answers={answers} setAnswers={setAnswers} api={api} onFinished={() => { submitted.current = true; submit(true); }} />
+          <PageFlow examId={exam.id} myId={entry?.id ?? "learner"} paper={paper} answers={answers} setAnswers={setAnswers} api={api} ask={ask} onFinished={() => { submitted.current = true; submit(true); }} />
         </div>
       ) : (<>
       <div className="select-none rounded-2xl bg-white p-4 shadow ring-1 ring-orange-200">

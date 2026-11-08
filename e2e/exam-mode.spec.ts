@@ -147,10 +147,19 @@ test("exam mode: a timed test on a learner's phone, leaving the page flagged, ma
     if (i === 0) await exam.getByRole("button", { name: "Next →" }).click();
   }
   await learner.waitForTimeout(900); // the typed answer saves after a short pause
-  // Switching away from the exam is reported.
-  await learner.evaluate(() => window.dispatchEvent(new Event("blur")));
+  // A moment's blur (a keyboard, a notification) isn't leaving…
+  await learner.evaluate(() => { window.dispatchEvent(new Event("blur")); setTimeout(() => window.dispatchEvent(new Event("focus")), 300); });
+  await learner.waitForTimeout(3000);
+  await expect(exam.getByText(/You left the exam page/)).toHaveCount(0);
+  // …but going to another app or tab is reported.
+  await learner.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+  });
   await expect(exam.getByText(/You left the exam page/)).toBeVisible();
   await exam.getByRole("button", { name: "Hand in", exact: true }).click();
+  await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
   await expect(exam.getByText("3 / 3")).toBeVisible({ timeout: 15_000 });
 
   // The teacher sees it marked, with the warning.
@@ -229,6 +238,7 @@ test("KS2 SATs: a spelling test read aloud, phones following the teacher, graded
   await exam.getByLabel("The missing word").fill("confusion");
   await learner.waitForTimeout(900);
   await exam.getByRole("button", { name: "Hand in my exam" }).click();
+  await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
   await expect(exam.getByText("2 / 3")).toBeVisible({ timeout: 15_000 });
 
   // Graded the SATs way: 67% is the expected standard.
@@ -289,6 +299,7 @@ test("KS2 SATs: an arithmetic paper, and a real paper uploaded as a PDF with its
   await exam.getByLabel("Your answer").fill("5");
   await learner.waitForTimeout(900);
   await exam.getByRole("button", { name: "Hand in", exact: true }).click();
+  await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
   await expect(exam.getByText("2 / 2")).toBeVisible({ timeout: 15_000 });
 });
 
@@ -326,6 +337,8 @@ test("a paper the teacher marks by hand: learners write page by page, each page 
   await exam.getByLabel(/Or type your answers/).fill("9,215,300");
   await expect(exam.getByText("✓ Saved")).toBeVisible({ timeout: 10_000 });
   await exam.getByRole("button", { name: "Hand in page 1 →" }).click();
+  await expect(learner.getByRole("alertdialog")).toContainText("You can't go back to it");
+  await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
   await expect(exam.getByText("Page 2 of 2 · 3 marks")).toBeVisible();
   await expect(exam.getByLabel("Page 1, handed in")).toHaveText("🔒");
   await expect(exam.getByLabel(/Or type your answers/)).toHaveValue(""); // a fresh page
@@ -344,6 +357,9 @@ test("a paper the teacher marks by hand: learners write page by page, each page 
   await exam.getByLabel(/Or type your answers/).fill("5 tables");
   await learner.screenshot({ path: "test-results/hand-marking-learner.png" });
   await exam.getByRole("button", { name: /Hand in the last page & finish/ }).click();
+  await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
+  // Handing pages in is not leaving the exam.
+  await expect(exam.getByText(/You left the exam page/)).toHaveCount(0);
   await expect(exam.getByText("Handed in ✓")).toBeVisible({ timeout: 15_000 });
   await expect(exam.getByText("2 / 5")).toBeVisible();
   await expect(exam.getByText(/1 page still to mark/)).toBeVisible();

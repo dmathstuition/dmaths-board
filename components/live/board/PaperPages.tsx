@@ -51,9 +51,10 @@ function PageCanvas({ src, ink, live, zoom = 1, onStroke, label }: {
 }
 
 // ── The learner ──
-export function PageFlow({ examId, myId, paper, answers, setAnswers, api, onFinished }: {
+export function PageFlow({ examId, myId, paper, answers, setAnswers, api, ask, onFinished }: {
   examId: string; myId: string; paper: LearnerQ[]; answers: Record<string, unknown>;
   setAnswers: (f: (a: Record<string, unknown>) => Record<string, unknown>) => void; api: Api; onFinished: () => void;
+  ask: (message: string, yes: string) => Promise<boolean>; // asked inside the page (a phone pop-up looks like leaving the exam)
 }) {
   const pages = paper.filter((q) => q.kind === "page");
   const at = pages.findIndex((q) => !pageDone(answers[String(q.n)]));
@@ -63,6 +64,7 @@ export function PageFlow({ examId, myId, paper, answers, setAnswers, api, onFini
   const [text, setText] = useState("");
   const [state, setState] = useState<"saved" | "saving" | "error" | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const [mode, setMode] = useState<"write" | "move">("write");
   const [zoom, setZoom] = useState(1);
   const [colour, setColour] = useState(PENS[0]);
@@ -93,14 +95,15 @@ export function PageFlow({ examId, myId, paper, answers, setAnswers, api, onFini
   const changeInk = (next: Stroke[]) => { setInk(next); save({ ink: next, text: latest.current.text }); };
   async function handIn() {
     const last = at === pages.length - 1;
-    if (!window.confirm(last ? "Hand in the last page and finish? You can't change your paper after this."
-      : `Hand in page ${at + 1}? You can't go back to it after this.`)) return;
+    if (!(await ask(last ? "Hand in the last page and finish? You can't change your paper after this."
+      : `Hand in page ${at + 1}? You can't go back to it after this.`, "Yes, hand it in"))) return;
+    setFailed(null);
     if (timer.current) { clearTimeout(timer.current); timer.current = null; }
     setBusy(true);
     const value = latest.current;
     const { ok, j } = await api({ action: "page-done", examId, n: q!.n, value });
     setBusy(false);
-    if (!ok && !/handed in that page/i.test(j?.error ?? "")) { setState("error"); window.alert(j?.error ?? "That page didn't hand in — check the internet and try again."); return; }
+    if (!ok && !/handed in that page/i.test(j?.error ?? "")) { setState("error"); setFailed(j?.error ?? "That page didn't hand in — check the internet and try again."); return; }
     setAnswers((a) => ({ ...a, [String(q!.n)]: { ...value, done: new Date().toISOString() } }));
     if (last) onFinished();
   }
@@ -138,6 +141,7 @@ export function PageFlow({ examId, myId, paper, answers, setAnswers, api, onFini
       <button type="button" onClick={handIn} disabled={busy} className="min-h-[52px] rounded-xl bg-emerald-600 text-base font-black text-white disabled:opacity-60">
         {busy ? "Handing in…" : at === pages.length - 1 ? "Hand in the last page & finish ✓" : `Hand in page ${at + 1} →`}
       </button>
+      {failed && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{failed}</p>}
       <nav aria-label="Pages" className="flex flex-wrap gap-1">
         {pages.map((p, i) => (
           <span key={p.n} aria-label={`Page ${i + 1}${i < at ? ", handed in" : i === at ? ", you are here" : ""}`}
