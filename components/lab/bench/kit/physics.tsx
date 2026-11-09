@@ -231,7 +231,7 @@ export function PhysicsKit({ it }: { it: ItemView }): ReactNode | null {
         </g>
       );
     }
-    case "ball": return <g><circle cx={0} cy={-13} r={13} fill="url(#bl-metal)" stroke="#1F2937" /><circle cx={-4} cy={-17} r={4} fill="#fff" fillOpacity=".6" /></g>;
+    case "ball": { const r = Number(p.size ?? 13); return <g><circle cx={0} cy={-r} r={r} fill="url(#bl-metal)" stroke="#1F2937" /><circle cx={-r * 0.3} cy={-r * 1.3} r={r * 0.3} fill="#fff" fillOpacity=".6" /></g>; }
     case "timer": return (
       <g>
         <rect x={-90} y={-90} width={180} height={90} rx={8} fill="url(#bl-case)" />

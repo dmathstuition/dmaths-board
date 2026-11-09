@@ -155,13 +155,14 @@ export function Apparatus({ it, flowing }: { it: ItemView; flowing?: boolean }) 
         <g>
           <path d={`${d} Z`} fill="#E2E8F0" fillOpacity=".1" />
           {h > 0 && <path d={`M-46,-2 H46 V${-h} H-46 Z`} fill={p.colour} fillOpacity=".75" />}
+          {p.sediment && <ellipse cx={0} cy={-6} rx={36} ry={5} fill={p.sediment} />}
           <path d={d} fill="url(#bl-glass)" stroke="#fff" strokeOpacity=".75" strokeWidth={2} />
           {[25, 50, 75, 100].map((y) => <line key={y} x1={22} y1={-y} x2={40} y2={-y} stroke="#fff" strokeOpacity=".55" />)}
         </g>
       );
     }
     case "rack": {
-      const tubes = (p.tubes as { label: string; level: number; colour: string; metal?: string; bubbles?: number }[]) ?? [];
+      const tubes = (p.tubes as { label: string; level: number; colour: string; metal?: string; bubbles?: number; ppt?: string }[]) ?? [];
       const w = tubes.length * 46 + 30, x0 = -w / 2 + 38;
       return (
         <g>
@@ -175,6 +176,7 @@ export function Apparatus({ it, flowing }: { it: ItemView; flowing?: boolean }) 
                 <path d={`M${x - 10},${bot - lh} V${bot - 10} a10,10 0 0 0 20,0 V${bot - lh} Z`} fill={t.colour} fillOpacity=".92" />
                 {p.potato && <rect x={x - 6} y={bot - 40} width={12} height={28} rx={3} fill="#F3E3B3" stroke="#D6B76A" />}
                 {t.metal && <rect x={x - 7} y={bot - 14} width={14} height={8} rx={2} fill={t.metal} />}
+                {t.ppt && <path d={`M${x - 10},${bot - 36} V${bot - 10} a10,10 0 0 0 20,0 V${bot - 36} Z`} fill={t.ppt} fillOpacity=".95" />}
                 {Array.from({ length: (t.bubbles ?? 0) * 3 }, (_, b) => <circle key={b} className="bench-fizz" cx={x - 5 + (b % 3) * 5} cy={bot - 12} r={1.6 + (b % 2)} fill="#fff" fillOpacity=".85" style={{ animationDuration: `${1.6 / (t.bubbles ?? 1)}s`, animationDelay: `${(b * 0.23) % 1.2}s` }} />)}
                 <path d={`M${x - 11},${top} V${bot - 10} a11,11 0 0 0 22,0 V${top}`} fill="url(#bl-glass)" stroke="#fff" strokeOpacity=".8" strokeWidth={1.6} />
                 <ellipse cx={x} cy={top} rx={11} ry={2.5} fill="none" stroke="#fff" strokeOpacity=".7" />

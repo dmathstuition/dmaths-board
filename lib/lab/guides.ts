@@ -608,6 +608,186 @@ export const GUIDES: Record<string, LabGuide> = {
     conclusion: "Your heart rate rises during exercise to supply the muscles with more oxygen and glucose, then falls back towards resting. A fitter person recovers faster.",
   },
 
+  "wire-resistance": {
+    aim: "Find how the resistance of a wire depends on its length.",
+    steps: [
+      "Switch on the power supply.",
+      "Move the crocodile clip to twenty centimetres.",
+      "Read the ammeter, and divide the voltage by the current to get the resistance.",
+      "Repeat for forty, sixty, eighty and one hundred centimetres.",
+      "Plot resistance against length and find the gradient.",
+    ],
+    tips: [
+      "Switch off between readings so the wire does not heat up.",
+      "Make sure the crocodile clip touches the wire firmly.",
+    ],
+    conclusion: "Resistance is directly proportional to length. Twice the length of wire has twice the resistance.",
+  },
+  "electromagnet": {
+    aim: "Find how the number of turns of wire affects the strength of an electromagnet.",
+    steps: [
+      "Wind ten turns of wire round the iron nail.",
+      "Switch on, dip the nail into the paperclips and lift it.",
+      "Count the paperclips it holds.",
+      "Repeat with twenty, thirty, forty and fifty turns.",
+      "Plot paperclips against turns.",
+    ],
+    tips: [
+      "Keep the current the same every time.",
+      "Use the same kind of paperclips, and lift the nail the same way.",
+    ],
+    conclusion: "More turns of wire make a stronger electromagnet. A bigger current or an iron core also makes it stronger.",
+  },
+  "insulation": {
+    aim: "Find which material is the best insulator for a beaker of hot water.",
+    steps: [
+      "Pour the same volume of hot water into three beakers.",
+      "Read the starting temperature.",
+      "Leave them for ten minutes while the temperatures are recorded every two minutes.",
+      "Read the final temperature of each beaker.",
+      "Compare the temperature drops.",
+    ],
+    tips: [
+      "Use the same volume and starting temperature in every beaker.",
+      "Use the same thickness of each material.",
+    ],
+    conclusion: "The cotton wool beaker cooled the least. Trapped air is a poor conductor, so it reduces heat loss.",
+  },
+  "terminal-velocity": {
+    aim: "Find the terminal velocity of ball bearings falling through oil.",
+    steps: [
+      "Drop the small ball bearing into the oil.",
+      "Time it between the bands every twenty centimetres.",
+      "Find the section where the time stops changing, and work out its speed.",
+      "Repeat with the big ball bearing.",
+      "Compare the two terminal velocities.",
+    ],
+    tips: [
+      "Let the ball go just above the oil, without pushing it.",
+      "Look straight across at each band as the ball passes it.",
+    ],
+    conclusion: "Each ball speeds up, then falls at a steady terminal velocity when drag and upthrust balance its weight. The bigger ball has a higher terminal velocity.",
+  },
+  "neutralisation": {
+    aim: "Use the temperature change to find the volume of sodium hydroxide that neutralises some hydrochloric acid.",
+    steps: [
+      "Read the temperature of the acid in the polystyrene cup.",
+      "Add five cubic centimetres of sodium hydroxide, stir and record the highest temperature.",
+      "Keep adding five cubic centimetres at a time, recording each temperature.",
+      "Plot temperature against volume added.",
+      "Find where the rising and falling lines cross, and work out the concentration.",
+    ],
+    tips: [
+      "Use a polystyrene cup with a lid to reduce heat loss.",
+      "Stir well before you read the temperature.",
+    ],
+    conclusion: "Neutralisation is exothermic. The temperature is highest when the acid has just been neutralised, then falls as more cold alkali is added.",
+  },
+  "salts": {
+    aim: "Make crystals of copper sulfate from copper oxide and sulfuric acid.",
+    steps: [
+      "Warm the sulfuric acid gently.",
+      "Add copper oxide a spatula at a time until no more dissolves.",
+      "Filter off the excess copper oxide.",
+      "Heat the blue solution to evaporate some of the water.",
+      "Leave it to cool and crystallise.",
+    ],
+    tips: [
+      "Add the copper oxide in excess so all the acid is used up.",
+      "Don't heat it to dryness. Slow crystallisation gives bigger crystals.",
+    ],
+    conclusion: "Copper oxide and sulfuric acid make copper sulfate and water. The blue crystals are copper sulfate.",
+  },
+  "gas-syringe": {
+    aim: "Compare how fast marble chips and powdered marble react with acid.",
+    steps: [
+      "Add the marble chips to the acid and put the bung in.",
+      "Read the gas syringe every thirty seconds for three minutes.",
+      "Repeat with the same mass of powdered marble.",
+      "Plot volume of gas against time for both.",
+      "Compare the slopes at the start.",
+    ],
+    tips: [
+      "Use the same mass of marble and the same acid each time.",
+      "Put the bung in quickly so no gas escapes.",
+    ],
+    conclusion: "The powder reacts faster because it has a larger surface area, so there are more collisions each second. Both give the same final volume of gas.",
+  },
+  "ion-tests": {
+    aim: "Identify metal ions and halide ions in unknown solutions.",
+    steps: [
+      "Add sodium hydroxide to tubes A, B and C.",
+      "Use the colour of each precipitate to name the metal ion.",
+      "Add dilute nitric acid and then silver nitrate to tubes D, E and F.",
+      "Use the colour of each precipitate to name the halide ion.",
+      "Explain why nitric acid is added first.",
+    ],
+    tips: [
+      "Add the reagents a few drops at a time.",
+      "Look at the colours against a white background.",
+    ],
+    conclusion: "Copper two gives a blue precipitate, iron two green and iron three orange brown. Chloride gives a white precipitate, bromide cream and iodide yellow.",
+  },
+  "yeast": {
+    aim: "Find how temperature affects the rate of respiration in yeast.",
+    steps: [
+      "Set the water bath to twenty degrees.",
+      "Count the bubbles of carbon dioxide for one minute.",
+      "Repeat at thirty, forty, fifty and sixty degrees.",
+      "Plot bubbles per minute against temperature.",
+      "Find the temperature with the fastest rate.",
+    ],
+    tips: [
+      "Leave the yeast a few minutes to reach each temperature.",
+      "Use the same amounts of yeast and glucose each time.",
+    ],
+    conclusion: "Yeast respires fastest at about thirty five to forty degrees. Higher temperatures denature its enzymes. The limewater turns cloudy because carbon dioxide is given off.",
+  },
+  "leaf-starch": {
+    aim: "Show that chlorophyll is needed for photosynthesis by testing a variegated leaf for starch.",
+    steps: [
+      "Boil the leaf in water for one minute.",
+      "Turn off the flame, then put the leaf in hot ethanol in a water bath.",
+      "When the leaf is pale, dip it in warm water to soften it.",
+      "Spread it on a white tile and add iodine.",
+      "See which parts turn blue black.",
+    ],
+    tips: [
+      "Never heat ethanol with a naked flame. It is highly flammable.",
+      "Spread the leaf flat so the colours are easy to see.",
+    ],
+    conclusion: "Only the parts that were green turn blue black, so only they made starch. Chlorophyll is needed for photosynthesis.",
+  },
+  "quadrats": {
+    aim: "Estimate the number of daisies in a field using quadrats.",
+    steps: [
+      "Place the quadrat at a random spot in the field.",
+      "Count the daisies inside it.",
+      "Repeat for five quadrats.",
+      "Work out the mean number of daisies per square metre.",
+      "Multiply by the area of the field to estimate the population.",
+    ],
+    tips: [
+      "Use random coordinates so the sample is fair.",
+      "Use more quadrats for a more reliable estimate.",
+    ],
+    conclusion: "The mean per square metre times the area gives an estimate of the population. Because daisies grow in clumps, more quadrats give a better estimate.",
+  },
+  "reaction-time": {
+    aim: "Measure your reaction time with a falling ruler, and compare your hands.",
+    steps: [
+      "Hold your finger and thumb open level with the zero mark.",
+      "Your partner drops the ruler without warning, and you catch it.",
+      "Read the distance at the top of your thumb.",
+      "Do three drops with each hand.",
+      "Find the mean distances and work out your reaction time.",
+    ],
+    tips: [
+      "Look at the ruler, not at your partner's hand.",
+      "Keep your hand at the same height every time.",
+    ],
+    conclusion: "The shorter the distance, the quicker the reaction. Reaction time is about a fifth of a second, and your writing hand is usually quicker.",
+  },
 };
 
 export const guideFor = (slug: string): LabGuide | null => GUIDES[slug] ?? null;

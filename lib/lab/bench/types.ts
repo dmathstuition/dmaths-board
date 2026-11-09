@@ -49,7 +49,8 @@ export type Step<S> = {
 };
 
 export type Table = { title: string; columns: string[]; rows: (string | number)[][] };
-export type Graph = { title: string; x: string; y: string; points: [number, number][]; line?: [number, number][] };
+export type Graph = { title: string; x: string; y: string; points: [number, number][]; line?: [number, number][];
+  label?: string; more?: { label: string; points: [number, number][] }[] }; // more: extra series, joined, with a key
 
 export type Practical<S = any> = {
   slug: string; title: string; subject: "maths" | "physics" | "chemistry" | "biology";

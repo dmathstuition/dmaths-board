@@ -813,6 +813,8 @@ html { scroll-behavior: smooth; }
 .bench-beat { transform-box: fill-box; transform-origin: 50% 50%; animation: benchBeat 1s ease-out infinite; }
 @keyframes benchStep { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-60px); } }
 .bench-step { animation: benchStep .9s ease-in-out infinite; }
+@keyframes benchDrop { from { transform: translateY(0); } }
+.bench-drop { animation: benchDrop .3s cubic-bezier(.5,0,1,1); }
 @media (prefers-reduced-motion: reduce) { .bench-pulse, .bench-flicker, .bench-fizz, .bench-shake, .bench-beat, .bench-step { animation: none; } }
 @media (prefers-reduced-motion: reduce) {
   .elab-float, .elab-bubble, .elab-flow, .elab-pop, .elab-drip { animation: none; }

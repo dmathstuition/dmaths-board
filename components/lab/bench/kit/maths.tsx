@@ -44,11 +44,12 @@ function GridView({ g }: { g: Grid }) {
 
 function PaperView({ p }: { p: Record<string, any> }) {
   const w = Number(p.w ?? 640), h = Number(p.h ?? 330), style = p.style ?? "paper";
-  const bg = style === "cork" ? "#C08A55" : style === "board" ? "#F8FAFC" : "#FBFBF7";
+  const bg = style === "cork" ? "#C08A55" : style === "board" ? "#F8FAFC" : style === "grass" ? "#4D7C0F" : "#FBFBF7";
   return (
     <g>
       {style === "board" && <rect x={-w / 2 - 8} y={-h - 8} width={w + 16} height={h + 8} rx={4} fill="#94A3B8" />}
       <rect x={-w / 2} y={-h} width={w} height={h} rx={style === "cork" ? 4 : 2} fill={bg} />
+      {style === "grass" && Array.from({ length: 160 }, (_, k) => <path key={k} d={`M${-w / 2 + ((k * 89) % w)},${-((k * 53) % h)} l3,-8`} stroke="#65A30D" strokeWidth={1.5} />)}
       {style === "cork" && Array.from({ length: 90 }, (_, k) => <circle key={k} cx={-w / 2 + ((k * 73) % w)} cy={-h + ((k * 41) % h)} r={1.6} fill="#8B5E34" fillOpacity=".5" />)}
       {p.grid && <GridView g={p.grid as Grid} />}
       {((p.shapes as Shape[]) ?? []).map((s, i) => <ShapeView key={i} s={s} />)}

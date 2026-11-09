@@ -522,8 +522,11 @@ function niceStep(x: number) { const k = 10 ** Math.floor(Math.log10(x)), f = x 
 const tidy = (v: number) => String(Number(v.toFixed(6)));
 export function GraphView({ g }: { g: Graph }) {
   const w = 320, h = 220, m = { l: 46, r: 12, t: 10, b: 40 };
-  const xs = [0, ...g.points.map((q) => q[0]), ...(g.line ?? []).map((q) => q[0])];
-  const ys = [0, ...g.points.map((q) => q[1]), ...(g.line ?? []).map((q) => q[1])];
+  const extra = (g.more ?? []).flatMap((m) => m.points);
+  const xs = [0, ...g.points.map((q) => q[0]), ...(g.line ?? []).map((q) => q[0]), ...extra.map((q) => q[0])];
+  const ys = [0, ...g.points.map((q) => q[1]), ...(g.line ?? []).map((q) => q[1]), ...extra.map((q) => q[1])];
+  const COLS = ["#B91C1C", "#2563EB", "#16A34A", "#9333EA"];
+  const series = g.more ? [{ label: g.label ?? "", points: g.points }, ...g.more] : null;
   const axis = (vals: number[]) => {
     let lo = Math.min(...vals), hi = Math.max(...vals);
     if (hi === lo) hi = lo + 1;
@@ -542,7 +545,14 @@ export function GraphView({ g }: { g: Graph }) {
       <line x1={X(0)} y1={m.t} x2={X(0)} y2={h - m.b} stroke="#334155" strokeWidth={1.5} />
       <line x1={m.l} y1={Y(0)} x2={w - m.r} y2={Y(0)} stroke="#334155" strokeWidth={1.5} />
       {g.line && <line x1={X(g.line[0][0])} y1={Y(g.line[0][1])} x2={X(g.line[1][0])} y2={Y(g.line[1][1])} stroke="#0E6E72" strokeWidth={2} />}
-      {g.points.map(([x, y], i) => <g key={i} stroke="#B91C1C" strokeWidth={2}><line x1={X(x) - 4} y1={Y(y) - 4} x2={X(x) + 4} y2={Y(y) + 4} /><line x1={X(x) - 4} y1={Y(y) + 4} x2={X(x) + 4} y2={Y(y) - 4} /></g>)}
+      {series ? series.map((sr, k) => (
+        <g key={sr.label} stroke={COLS[k % 4]} fill="none" strokeWidth={2}>
+          <polyline points={sr.points.map(([x, y]) => `${X(x)},${Y(y)}`).join(" ")} strokeOpacity=".5" />
+          {sr.points.map(([x, y], i) => <g key={i}><line x1={X(x) - 3.5} y1={Y(y) - 3.5} x2={X(x) + 3.5} y2={Y(y) + 3.5} /><line x1={X(x) - 3.5} y1={Y(y) + 3.5} x2={X(x) + 3.5} y2={Y(y) - 3.5} /></g>)}
+          <rect x={w - m.r - 96} y={m.t + 4 + k * 14} width={8} height={8} fill={COLS[k % 4]} stroke="none" />
+          <text x={w - m.r - 84} y={m.t + 11 + k * 14} fontSize={9} fontWeight={700} fill="#0F172A" stroke="none">{sr.label}</text>
+        </g>
+      )) : g.points.map(([x, y], i) => <g key={i} stroke="#B91C1C" strokeWidth={2}><line x1={X(x) - 4} y1={Y(y) - 4} x2={X(x) + 4} y2={Y(y) + 4} /><line x1={X(x) - 4} y1={Y(y) + 4} x2={X(x) + 4} y2={Y(y) - 4} /></g>)}
       <text x={(m.l + w - m.r) / 2} y={h - 6} textAnchor="middle" fontSize={11} fontWeight={700} fill="#0F172A">{g.x}</text>
       <text transform={`translate(12,${(m.t + h - m.b) / 2}) rotate(-90)`} textAnchor="middle" fontSize={11} fontWeight={700} fill="#0F172A">{g.y}</text>
     </svg>
