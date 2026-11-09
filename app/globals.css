@@ -816,6 +816,10 @@ html { scroll-behavior: smooth; }
 @keyframes benchDrop { from { transform: translateY(0); } }
 .bench-drop { animation: benchDrop .3s cubic-bezier(.5,0,1,1); }
 @media (prefers-reduced-motion: reduce) { .bench-pulse, .bench-flicker, .bench-fizz, .bench-shake, .bench-beat, .bench-step { animation: none; } }
+/* A reward popping onto every screen (components/live/board/BuzzRewards). */
+@keyframes rewardPop { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+.reward-pop { animation: rewardPop .45s cubic-bezier(.2,.9,.3,1.2); }
+@media (prefers-reduced-motion: reduce) { .reward-pop { animation: none; } }
 @media (prefers-reduced-motion: reduce) {
   .elab-float, .elab-bubble, .elab-flow, .elab-pop, .elab-drip { animation: none; }
   .elab-card:hover { transform: none; }

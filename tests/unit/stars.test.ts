@@ -18,7 +18,7 @@ describe("stars and badges", () => {
     expect(nameKey("  Ada   OBI ")).toBe("ada obi");
     const [ada] = leaderboard(rows, "s3").filter((p) => p.key === "ada obi");
     expect(ada.classes).toBe(3);
-    expect(ada.parts).toEqual({ attend: 3, quiz: 9, work: 2, exams: 0, games: 0 });
+    expect(ada.parts).toEqual({ attend: 3, quiz: 9, work: 2, exams: 0, games: 0, rewards: 0 });
     expect(ada.stars).toBe(14);
     expect(ada.classStars).toBe(3); // this class: came (1) + class work (2)
     expect(ada.badges.map((b) => b.id)).toEqual(["first", "regular"]);

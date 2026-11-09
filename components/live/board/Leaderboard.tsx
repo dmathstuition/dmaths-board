@@ -83,7 +83,7 @@ export default function Leaderboard({ sessionId, host, myName, open, onClose }: 
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-black">{p.name}</span>
                     <span className="block text-[11px] font-bold text-white/55" title="Where the stars came from">
-                      {[["coming", p.parts.attend], ["quiz", p.parts.quiz], ["class work", p.parts.work], ["exams", p.parts.exams], ["games", p.parts.games]].filter(([, n]) => Number(n) > 0).map(([l, n]) => `${l} ⭐${n}`).join(" · ") || "—"}
+                      {[["coming", p.parts.attend], ["quiz", p.parts.quiz], ["class work", p.parts.work], ["exams", p.parts.exams], ["games", p.parts.games], ["rewards", p.parts.rewards ?? 0]].filter(([, n]) => Number(n) > 0).map(([l, n]) => `${l} ⭐${n}`).join(" · ") || "—"}
                       {scope === "all" && ` · in ${p.classes} class${p.classes === 1 ? "" : "es"}`}
                     </span>
                   </span>
