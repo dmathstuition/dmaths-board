@@ -23,7 +23,8 @@ test("buzz in first, then get a reward", async ({ browser }) => {
   };
   const teacher = await open("teacher"), learner = await open("learner");
 
-  await teacher.getByRole("button", { name: "Buzzer" }).click();
+  await teacher.getByRole("button", { name: "Class tools" }).click();
+  await teacher.getByRole("dialog", { name: "Class tools" }).getByRole("button", { name: "Buzzer" }).click();
   const panel = teacher.getByRole("dialog", { name: "Buzzer" });
   await panel.getByPlaceholder(/What is 7/).fill("What is 7 × 8?");
   await panel.getByRole("button", { name: "Open the buzzer" }).click();
@@ -44,7 +45,8 @@ test("buzz in first, then get a reward", async ({ browser }) => {
   // Rewards from their own panel: the whole class.
   await panel.getByRole("button", { name: "End" }).click();
   await expect(buzzer).toBeHidden({ timeout: 20_000 });
-  await teacher.getByRole("button", { name: "Rewards" }).click();
+  await teacher.getByRole("button", { name: "Class tools" }).click();
+  await teacher.getByRole("dialog", { name: "Class tools" }).getByRole("button", { name: "Rewards" }).click();
   const rewards = teacher.getByRole("dialog", { name: "Rewards" });
   await rewards.getByRole("button", { name: "Hard work" }).click();
   await rewards.getByRole("button", { name: /Whole class/ }).click();

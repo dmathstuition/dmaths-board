@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 
-// Content-Security-Policy: only the origins the board uses (Supabase, Paystack, Google Fonts).
+// Content-Security-Policy: only the origins the board uses (Supabase, Paystack, Google Fonts, YouTube's player).
 const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.paystack.co",
@@ -11,7 +11,7 @@ const csp = [
   "worker-src 'self' blob:",
   "manifest-src 'self'",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.paystack.co https://script.google.com https://script.googleusercontent.com",
-  "frame-src https://checkout.paystack.com https://*.paystack.co",
+  "frame-src https://checkout.paystack.com https://*.paystack.co https://www.youtube-nocookie.com", // the last: watching a video together
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

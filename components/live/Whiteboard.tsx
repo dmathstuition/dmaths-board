@@ -22,6 +22,9 @@ import ExamMode from "@/components/live/board/ExamMode";
 import Leaderboard from "@/components/live/board/Leaderboard";
 import PulsePoll from "@/components/live/board/PulsePoll";
 import BuzzRewards from "@/components/live/board/BuzzRewards";
+import ClassChat from "@/components/live/board/ClassChat";
+import FocusTools from "@/components/live/board/FocusTools";
+import WatchTogether from "@/components/live/board/WatchTogether";
 import GroupBoards from "@/components/live/board/GroupBoards";
 import AskTeacher from "@/components/live/board/AskTeacher";
 import dynamic from "next/dynamic";
@@ -215,6 +218,11 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const [toolsLeft, setToolsLeft] = useState(false);     // the class tools menu opens to the right of its button (button near the left edge)
   const [buzzOpen, setBuzzOpen] = useState(false);       // the buzzer (components/live/board/BuzzRewards)
   const [rewardsOpen, setRewardsOpen] = useState(false); // rewards
+  const [chatOpen, setChatOpen] = useState(false);       // class chat and reactions (components/live/board/ClassChat)
+  const [chatCount, setChatCount] = useState(0);
+  const [focusOpen, setFocusOpen] = useState(false);     // lock screens, who's away, roll call (components/live/board/FocusTools)
+  const [awayCount, setAwayCount] = useState(0);
+  const [videoOpen, setVideoOpen] = useState(false);     // watch a video together (components/live/board/WatchTogether)
   const [askOpen, setAskOpen] = useState(false);   // private questions (components/live/board/AskTeacher)
   const [askCount, setAskCount] = useState(0);
   const [groupsOpen, setGroupsOpen] = useState(false);
@@ -1279,6 +1287,27 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
         <p className="text-sm font-black">Class tools</p>
         <button type="button" onClick={() => setToolsOpen(false)} aria-label="Close class tools" className="flex h-8 w-8 items-center justify-center rounded-lg text-ink/50 hover:bg-ink/5"><BoardIcon name="close" className="h-4 w-4" /></button>
       </div>
+      {!lessonId && sessionId && (
+        <div className="mb-2">
+          <p className="mb-1 text-[11px] font-black uppercase tracking-wider text-ink/45">With the class</p>
+          <div className="grid grid-cols-4 gap-1.5">
+            {([
+              ["🔔", "Buzzer", "See who answers first", () => setBuzzOpen(true), 0],
+              ["🏅", "Rewards", "Give a trophy — it's a star", () => setRewardsOpen(true), 0],
+              ["💬", "Class chat", "Chat and reactions, when you allow them", () => setChatOpen(true), chatCount],
+              ["🎯", "Focus tools", "Lock screens, who's looking away, roll call", () => setFocusOpen(true), awayCount],
+              ["🎬", "Watch a video together", "A YouTube video that follows your player", () => setVideoOpen(true), 0],
+            ] as [string, string, string, () => void, number][]).map(([icon, label, hint, go, n]) => (
+              <button key={label} type="button" onClick={() => { setToolsOpen(false); go(); }} title={hint} aria-label={n ? `${label}, ${n} waiting` : label}
+                className="relative flex min-h-[70px] flex-col items-center justify-center gap-1 rounded-xl bg-white p-2 text-center text-[11px] font-bold leading-tight text-ink/80 ring-1 ring-line transition hover:bg-[#F1F8F7] hover:ring-[#A9D6D3]">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#E2F3F2] text-lg" aria-hidden>{icon}</span>
+                <span aria-hidden>{label.replace("Watch a video together", "Video").replace("Class chat", "Chat").replace("Focus tools", "Focus")}</span>
+                {n > 0 && <span aria-hidden className="absolute right-1 top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#C2451C] px-1 text-[11px] font-black text-white">{n}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {TOOL_GROUPS.map((g) => (
         <div key={g.title} className="mb-2 last:mb-0">
           <p className="mb-1 text-[11px] font-black uppercase tracking-wider text-ink/45">{g.title}</p>
@@ -1458,12 +1487,6 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
               <button type="button" onClick={() => setPollOpen(true)} className={`${btn} ${pollOpen ? on : idle}`} title="Ask a quick question — learners tap a choice" aria-label="Quick poll">
                 <BoardIcon name="poll" />{full ? "" : "Poll"}
               </button>
-              <button type="button" onClick={() => setBuzzOpen(true)} className={`${btn} ${buzzOpen ? on : idle}`} title="Buzzer — see who answers first" aria-label="Buzzer">
-                <span aria-hidden className="text-base leading-none">🔔</span>{full ? "" : "Buzzer"}
-              </button>
-              <button type="button" onClick={() => setRewardsOpen(true)} className={`${btn} ${rewardsOpen ? on : idle}`} title="Give a learner a reward — every screen celebrates, and it's a star" aria-label="Rewards">
-                <span aria-hidden className="text-base leading-none">🏅</span>{full ? "" : "Rewards"}
-              </button>
               <button type="button" onClick={() => setAskOpen(true)} className={`${btn} relative ${askOpen ? on : idle}`} title="Questions learners asked you privately" aria-label={`Private questions${askCount ? `, ${askCount} waiting` : ""}`}>
                 <span aria-hidden className="text-base leading-none">🙋</span>{full ? "" : "Questions"}
                 {askCount > 0 && <span aria-hidden className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#C2451C] px-1 text-[11px] font-black text-white">{askCount}</span>}
@@ -1475,7 +1498,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
           )}
           <div className={full ? "" : "relative"}>
             <button type="button" onClick={(e) => { setToolsLeft(e.currentTarget.getBoundingClientRect().right < 420); setToolsOpen((v) => !v); }} aria-expanded={toolsOpen} title="Class tools" aria-label="Class tools" className={`${btn} ${toolsOpen ? on : idle}`}>
-              <BoardIcon name="toolbox" />{full ? "" : "Class tools"}{activeTools > 0 && <span className="ml-0.5 rounded-full bg-[#14B8A6] px-1.5 text-[10px] font-black text-[#0B1220]">{activeTools}</span>}
+              <BoardIcon name="toolbox" />{full ? "" : "Class tools"}{activeTools > 0 && <span className="ml-0.5 rounded-full bg-[#14B8A6] px-1.5 text-[10px] font-black text-[#0B1220]">{activeTools}</span>}{chatCount + awayCount > 0 && <span className="ml-0.5 rounded-full bg-[#C2451C] px-1.5 text-[10px] font-black text-white" title="Chat messages waiting, or learners looking away">{chatCount + awayCount}</span>}
             </button>
             {toolsOpen && !full && toolsPanel}
           </div>
@@ -1636,6 +1659,9 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
           onOpen={applyLesson} onClose={() => setLessonsOpen(false)} notify={setNotice} />}
         {!readOnly && !lessonId && sessionId && <AskTeacher host={host} myId={myId} myName={myName} open={askOpen} onClose={() => setAskOpen(false)} onCount={setAskCount} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <BuzzRewards sessionId={sessionId} host={host} myId={myId} myName={myName} people={people} buzzOpen={buzzOpen} onBuzzOpen={() => setBuzzOpen(true)} onBuzzClose={() => setBuzzOpen(false)} rewardsOpen={rewardsOpen} onRewardsClose={() => setRewardsOpen(false)} keep={keep} />}
+        {!readOnly && !lessonId && sessionId && <ClassChat host={host} myId={myId} myName={myName} people={people} open={chatOpen} onClose={() => setChatOpen(false)} onCount={setChatCount} keep={keep} />}
+        {!readOnly && !lessonId && sessionId && <FocusTools host={host} myId={myId} myName={myName} people={people} open={focusOpen} onClose={() => setFocusOpen(false)} onCount={setAwayCount} keep={keep} />}
+        {!readOnly && !lessonId && sessionId && <WatchTogether host={host} open={videoOpen} onOpen={() => setVideoOpen(true)} onClose={() => setVideoOpen(false)} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <PulsePoll host={host} myId={myId} myName={myName} people={people} pollOpen={pollOpen} onPollOpen={() => setPollOpen(true)} onPollClose={() => setPollOpen(false)} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <GroupBoards host={host} myId={myId} myName={myName} people={people} open={groupsOpen} onOpen={() => setGroupsOpen(true)} onClose={() => setGroupsOpen(false)} onBring={addBoardPage} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <Leaderboard sessionId={sessionId} host={host} myName={myName} open={starsOpen} onClose={() => setStarsOpen(false)} />}
