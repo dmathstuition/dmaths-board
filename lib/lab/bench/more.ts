@@ -410,14 +410,23 @@ const QU_IDS = QU_STEPS.map((x) => x.id);
 quadrats.steps = QU_STEPS;
 
 // ── Reaction time: the ruler drop ──────────────────────────────────────────
-type Rx = { d: number[]; drops: number };
+type Rx = { d: number[]; drops: number; odd: number }; // odd: a writing-hand drop that went wrong (−1: none)
+const DROPS = ["Drop 1", "Drop 2", "Drop 3"], NO_ODD = "None — they agree";
+const rxMean = (s: Rx, v: Record<string, string>) => { const xs = vals(v, ["d0", "d1", "d2"]).map((x) => x ?? 0).filter((_, i) => i !== s.odd); return xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length); };
 const HANDS = ["writing hand", "other hand"];
 const reactionTime = (dcm: number) => Math.sqrt((2 * dcm) / 100 / 9.8);
 export const reactionTimeP: Practical<Rx> = {
   slug: "reaction-time", title: "Reaction time: the ruler drop", subject: "biology",
   aim: "Catch a falling ruler, use the distance it falls to work out your reaction time, and compare your two hands.",
   safety: ["Drop the ruler straight down — don't flick it."],
-  init: (r) => { const a = between(r, 11, 16, 1), b = a + between(r, 3, 6, 1); return { d: [a, a, a, b, b, b].map((m) => Math.round((m + (r() - 0.5) * 3) * 2) / 2), drops: 0 }; },
+  init: (r) => {
+    const a = between(r, 11, 16, 1), b = a + between(r, 3, 6, 1);
+    const d = [a, a, a, b, b, b].map((m) => Math.round((m + (r() - 0.5) * 3) * 2) / 2);
+    // Most of the time one writing-hand catch goes wrong: you blinked, or guessed and grabbed early.
+    const odd = r() < 0.75 ? Math.floor(r() * 3) % 3 : -1;
+    if (odd >= 0) d[odd] = Math.min(28, Math.round((d[odd] + between(r, 7, 10, 1)) * 2) / 2);
+    return { d, drops: 0, odd };
+  },
   layout: (s) => [{ id: "ruler", kind: "ruler-drop", x: 700, y: BENCH, label: "Your partner drops the ruler; you catch it", props: { d: s.drops ? s.d[s.drops - 1] : 0, drops: s.drops, hand: s.drops > 3 ? 1 : 0 } }],
   steps: [
     ...[0, 1, 2, 3, 4, 5].flatMap((k): Step<Rx>[] => [
@@ -426,9 +435,12 @@ export const reactionTimeP: Practical<Rx> = {
       { id: `d${k}`, title: "Read where you caught it", how: "Read the ruler at the top of your thumb, to the nearest 0.5 cm.", magnify: "ruler",
         action: { type: "record", fields: [{ key: `d${k}`, label: `Distance (drop ${k + 1})`, unit: "cm", check: (v, s: Rx) => (near(v, s.d[k], 0.25) ? true : "Read the ruler level with the top of the thumb."), answer: (s: Rx) => fix(s.d[k], 1) }] } },
     ]),
-    { id: "calc", group: "Calculate", title: "Work out the means and your reaction time", how: "Mean distance for each hand. Reaction time t = √(2d ÷ g), with d in metres and g = 9.8 m/s².",
+    { id: "calc", group: "Calculate", title: "Work out the means and your reaction time", how: "First look for an anomaly: a catch far from the others (you blinked, or guessed). Leave it out of the mean. Reaction time t = √(2d ÷ g), with d in metres and g = 9.8 m/s².",
       action: { type: "record", fields: [
-        { key: "m0", label: "Mean distance, writing hand", unit: "cm", check: (v, _s, values) => { const xs = vals(values, ["d0", "d1", "d2"]); if (xs.some((x) => x == null)) return "Measure first."; return near(v, (xs[0]! + xs[1]! + xs[2]!) / 3, 0.05) ? true : "Add the three and divide by 3."; }, answer: (_s, values) => { const xs = vals(values, ["d0", "d1", "d2"]); return fix(((xs[0] ?? 0) + (xs[1] ?? 0) + (xs[2] ?? 0)) / 3, 1); } },
+        { key: "a0", label: "Anomalous drop (writing hand)", options: [...DROPS, NO_ODD],
+          check: (v, s: Rx) => { const want = s.odd >= 0 ? DROPS[s.odd] : NO_ODD; return v === want ? true : want === NO_ODD ? "Are any of the three far from the others?" : "Which catch is well away from the other two?"; },
+          answer: (s: Rx) => (s.odd >= 0 ? DROPS[s.odd] : NO_ODD) },
+        { key: "m0", label: "Mean distance, writing hand (leave out any anomaly)", unit: "cm", check: (v, s: Rx, values) => { const xs = vals(values, ["d0", "d1", "d2"]); if (xs.some((x) => x == null)) return "Measure first."; if (near(v, rxMean(s, values), 0.05)) return true; return s.odd >= 0 && near(v, (xs[0]! + xs[1]! + xs[2]!) / 3, 0.05) ? "Leave the anomalous drop out of the mean." : "Add the drops you keep and divide by how many there are."; }, answer: (s: Rx, values) => fix(rxMean(s, values), 1) },
         { key: "m1", label: "Mean distance, other hand", unit: "cm", check: (v, _s, values) => { const xs = vals(values, ["d3", "d4", "d5"]); if (xs.some((x) => x == null)) return "Measure first."; return near(v, (xs[0]! + xs[1]! + xs[2]!) / 3, 0.05) ? true : "Add the three and divide by 3."; }, answer: (_s, values) => { const xs = vals(values, ["d3", "d4", "d5"]); return fix(((xs[0] ?? 0) + (xs[1] ?? 0) + (xs[2] ?? 0)) / 3, 1); } },
         { key: "t", label: "Reaction time, writing hand", unit: "s", check: (v, _s, values) => { const m = num(values.m0 ?? ""); if (m == null) return "Find the mean first."; const t = reactionTime(m); return near(v, t, t * 0.03) ? true : "√(2 × d ÷ 9.8) with d in metres (cm ÷ 100)."; }, answer: (_s, values) => fix(reactionTime(num(values.m0 ?? "") ?? 0), 3) },
       ] } },

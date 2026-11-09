@@ -1,7 +1,7 @@
 // Running a practical without a screen: doing a step "for" the learner (the
 // bench's "Do it for me" button, and the tests), and a seeded random number
 // generator so a practical can be set up the same way twice.
-import type { Field, Practical, Rand, Step } from "@/lib/lab/bench/types";
+import type { Field, Practical, Rand, Step, Table } from "@/lib/lab/bench/types";
 
 export type Done<S> = { s: S; values: Record<string, string> };
 
@@ -54,3 +54,8 @@ export function seeded(seed: number): Rand {
 
 // The right setting for a dial.
 export const targetOf = (a: { target: number; targetOf?: (s: any) => number }, s: unknown) => (a.targetOf ? a.targetOf(s) : a.target);
+
+// Every results table: the practical's own, then any repeat readings taken so far.
+export function tablesOf<S>(p: Practical<S>, s: S, values: Record<string, string>, upTo = p.steps.length): Table[] {
+  return [...p.results(s, values), ...p.steps.slice(0, upTo).flatMap((st) => (st.show ? [st.show(s, values)] : []))];
+}

@@ -2,6 +2,7 @@
 // required practicals) done step by step on a lab bench. Pure: the state of
 // the experiment, the protocol, and where every piece of apparatus stands.
 import { fitLine, fix, near, num, round, type ItemView, type Practical, type Step } from "@/lib/lab/bench/types";
+import { planRepeats, repMean, repeatReadings, repeatSteps, type Rep } from "@/lib/lab/bench/repeats";
 
 const SHELF = 300, BENCH = 640;
 const between = (r: () => number, a: number, b: number, dp = 2) => round(a + r() * (b - a), dp);
@@ -10,15 +11,16 @@ const choice = (...opts: string[]) => opts;
 // ── Chemistry: acid–alkali titration ──────────────────────────────────────
 // Find the concentration of hydrochloric acid using 25.0 cm³ of 0.100 mol/dm³
 // sodium hydroxide and phenolphthalein.
-type Titr = { c: number; r0: number; filled: boolean; pipette: "empty" | "full"; flask: number; indicator: boolean; onTile: boolean; added: number };
+type Titr = { c: number; r0: number; filled: boolean; pipette: "empty" | "full"; flask: number; indicator: boolean; onTile: boolean; added: number; rep: Rep };
 const NAOH = 0.1, ALIQUOT = 25;
 const veq = (s: Titr) => (NAOH * ALIQUOT) / s.c; // cm³ of acid to neutralise
+const titreUsed = (v: Record<string, string>) => repMean(v, "titre") ?? num(v.titre ?? ""); // the mean, once worked out
 const pinkness = (s: Titr) => (!s.indicator || !s.flask ? 0 : s.added >= veq(s) ? 0 : Math.min(1, Math.max(0.12, (veq(s) - s.added) / 1.2)));
 export const titration: Practical<Titr> = {
   slug: "titration", title: "Acid–alkali titration", subject: "chemistry",
   aim: "Find the concentration of a solution of hydrochloric acid by titrating it against 25.0 cm³ of 0.100 mol/dm³ sodium hydroxide.",
   safety: ["Wear eye protection — the acid and the alkali are irritants.", "Fill the burette below eye level, using a funnel; remove the funnel before you start.", "Use a pipette filler — never pipette by mouth."],
-  init: (r) => ({ c: between(r, 0.08, 0.12, 3), r0: Math.round(between(r, 0.4, 1.6, 2) * 20) / 20, filled: false, pipette: "empty", flask: 0, indicator: false, onTile: false, added: 0 }),
+  init: (r) => ({ c: between(r, 0.08, 0.12, 3), r0: Math.round(between(r, 0.4, 1.6, 2) * 20) / 20, filled: false, pipette: "empty", flask: 0, indicator: false, onTile: false, added: 0, rep: planRepeats(r) }),
   layout: (s) => [
     { id: "acid", kind: "bottle", x: 130, y: SHELF, label: "HCl (aq)", props: { liquid: "#E0F2FE", text: "HCl\n? mol/dm³", cap: "#DC2626" } },
     { id: "naoh", kind: "bottle", x: 250, y: SHELF, label: "NaOH (aq)", props: { liquid: "#F0F9FF", text: "NaOH\n0.100 mol/dm³", cap: "#2563EB", open: s.pipette === "full" } },
@@ -61,15 +63,19 @@ export const titration: Practical<Titr> = {
       action: { type: "record", fields: [{ key: "titre", label: "Titre", unit: "cm³",
         check: (v, _s, values) => { const a = num(values.r1 ?? ""), b = num(values.r0 ?? ""); return a != null && b != null && near(v, a - b, 0.02) ? true : "Take the initial reading away from the final reading."; },
         answer: (_s, values) => fix((num(values.r1 ?? "") ?? 0) - (num(values.r0 ?? "") ?? 0), 2) }] } },
-    { id: "conc", title: "Calculate the acid's concentration", how: "Moles of NaOH = 0.100 × 25.0 ÷ 1000. HCl + NaOH → NaCl + H₂O (1 : 1), so concentration of HCl = moles ÷ (titre ÷ 1000).",
+    ...repeatSteps<Titr>({ id: "rep", group: "Repeat", item: "burette", again: "Repeat the titration twice more", how: "Refill the burette, pipette another 25.0 cm³ of alkali into a clean flask, and titrate again — then once more.",
+      label: "Titrate twice more", key: "titre", names: ["Run 1", "Run 2", "Run 3"], what: "Titre", unit: "cm³", dp: 2, rep: (s) => s.rep,
+      readings: (s, v) => repeatReadings(num(v.titre ?? "") ?? veq(s), s.rep, { spread: 0.002, off: 0.022, step: 0.05, up: true }),
+      cause: "the end point was overshot. Concordant titres agree within 0.10 cm³ — add the last few cm³ drop by drop, swirling." }),
+    { id: "conc", title: "Calculate the acid's concentration", how: "Use your mean titre. Moles of NaOH = 0.100 × 25.0 ÷ 1000. HCl + NaOH → NaCl + H₂O (1 : 1), so concentration of HCl = moles ÷ (mean titre ÷ 1000).",
       action: { type: "record", fields: [{ key: "conc", label: "Concentration of HCl", unit: "mol/dm³",
-        check: (v, _s, values) => { const t = num(values.titre ?? ""); if (!t) return "Work out the titre first."; const want = 2.5 / t; return near(v, want, want * 0.03) ? true : "0.0025 moles of NaOH ÷ (titre in dm³)."; },
-        answer: (_s, values) => fix(2.5 / (num(values.titre ?? "") || 1), 3) }] } },
+        check: (v, _s, values) => { const t = titreUsed(values); if (!t) return "Work out the titre first."; const want = 2.5 / t; return near(v, want, want * 0.03) ? true : "0.0025 moles of NaOH ÷ (mean titre in dm³)."; },
+        answer: (_s, values) => fix(2.5 / (titreUsed(values) || 1), 3) }] } },
   ],
   results: (s, v) => [{ title: "Results", columns: ["", "Reading"], rows: [
-    ["Final burette reading / cm³", v.r1 ?? "—"], ["Initial burette reading / cm³", v.r0 ?? "—"], ["Titre / cm³", v.titre ?? "—"], ["Concentration of HCl / mol dm⁻³", v.conc ?? "—"],
+    ["Final burette reading / cm³", v.r1 ?? "—"], ["Initial burette reading / cm³", v.r0 ?? "—"], ["Titre (run 1) / cm³", v.titre ?? "—"], ["Mean titre / cm³", v.titreMean ?? "—"], ["Concentration of HCl / mol dm⁻³", v.conc ?? "—"],
   ] }],
-  conclusion: (s, v) => `The hydrochloric acid's concentration is ${v.conc ?? "…"} mol/dm³ (the true value was ${fix(s.c, 3)} mol/dm³). Repeat until two titres agree within 0.10 cm³ and use their mean.`,
+  conclusion: (s, v) => `The hydrochloric acid's concentration is ${v.conc ?? "…"} mol/dm³ (the true value was ${fix(s.c, 3)} mol/dm³). It comes from the mean of concordant titres — ones within 0.10 cm³ of each other — which makes it reliable.`,
 };
 
 // ── Biology: food tests ───────────────────────────────────────────────────

@@ -1661,7 +1661,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   // a phone held upright and cut to the board's size.
   const labLayer = !readOnly && (labUsed || !host) && !(lessonId && !host) && rootEl
     ? createPortal(
-        <LabPanel host={host} open={labOpen} live={!lessonId} onOpen={() => setLabOpen(true)} onClose={() => setLabOpen(false)}
+        <LabPanel host={host} open={labOpen} live={!lessonId} onOpen={() => setLabOpen(true)} onClose={() => setLabOpen(false)} myId={myId} myName={myName}
           onSnapshot={async (file) => { await addSlides([file]); }} keep={keep} />,
         full ? rootEl : document.body)
     : null;

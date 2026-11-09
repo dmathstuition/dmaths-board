@@ -2,22 +2,25 @@
 // hides a true value (g, a spring constant, a refractive index…) that the
 // learner finds from their own readings.
 import { BENCH, SHELF, between, deg, fitLine, fix, near, num, round, type Practical, type Step } from "@/lib/lab/bench/types";
+import { planRepeats, repMean, repeatReadings, repeatSteps, type Rep } from "@/lib/lab/bench/repeats";
 
 const vals = (v: Record<string, string>, keys: string[]) => keys.map((k) => num(v[k] ?? ""));
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
 
 // ── Simple pendulum: g from T² against L ───────────────────────────────────
-type Pend = { g: number; L: number; noise: number[]; t: number; swinging: boolean; run: number };
+type Pend = { g: number; L: number; noise: number[]; t: number; swinging: boolean; run: number; rep: Rep };
 const LENGTHS = [0.4, 0.6, 0.8, 1.0];
 const periodOf = (L: number, g: number) => 2 * Math.PI * Math.sqrt(L / g);
 const t10 = (s: Pend, i: number) => round(10 * periodOf(LENGTHS[i], s.g) + s.noise[i], 2);
-const pendT2 = (v: Record<string, string>) => LENGTHS.map((L, i) => [L, num(v[`t${i}`] ?? "")] as const)
+// The 1.00 m time is repeated: once its mean is worked out, that's what is used.
+const pendT = (v: Record<string, string>, i: number) => (i === 3 ? repMean(v, "t3") : null) ?? num(v[`t${i}`] ?? "");
+const pendT2 = (v: Record<string, string>) => LENGTHS.map((L, i) => [L, pendT(v, i)] as const)
   .filter((p): p is readonly [number, number] => p[1] != null).map(([L, t]) => [L, round((t / 10) ** 2, 3)] as [number, number]);
 export const pendulum: Practical<Pend> = {
   slug: "pendulum", title: "Simple pendulum: finding g", subject: "physics",
   aim: "Measure the period of a simple pendulum for different lengths, and use a graph of T² against L to find g.",
   safety: ["Clamp the stand firmly, or weight its base, so it can't topple.", "Keep the swings small (under 10°) and stand clear of the bob."],
-  init: (r) => ({ g: between(r, 9.78, 9.84, 3), L: 0.3, noise: LENGTHS.map(() => round((r() - 0.5) * 0.24, 2)), t: 0, swinging: false, run: -1 }),
+  init: (r) => ({ g: between(r, 9.78, 9.84, 3), L: 0.3, noise: LENGTHS.map(() => round((r() - 0.5) * 0.24, 2)), t: 0, swinging: false, run: -1, rep: planRepeats(r) }),
   layout: (s) => [
     { id: "pend", kind: "pendulum", x: 620, y: BENCH, label: "Pendulum & metre rule", props: { L: s.L, swinging: s.swinging, period: periodOf(s.L, s.g) } },
     { id: "watch", kind: "stopwatch", x: 1010, y: BENCH, label: "Stopwatch", props: { t: s.t } },
@@ -38,13 +41,17 @@ export const pendulum: Practical<Pend> = {
         action: { type: "record", fields: [{ key: `t${i}`, label: `Time for 10 swings at ${L.toFixed(2)} m`, unit: "s",
           check: (v, s: Pend) => (near(v, t10(s, i), 0.005) ? true : "Copy the stopwatch reading exactly."), answer: (s: Pend) => fix(t10(s, i), 2) }] } },
     ]),
+    ...repeatSteps<Pend>({ id: "rep", group: "Repeat", item: "watch", again: "Time 10 swings twice more at 1.00 m", how: "Leave the length at 1.00 m. Release the bob and time another 10 swings — then do it once more.",
+      label: "Time it twice more", key: "t3", what: "Time for 10 swings at 1.00 m", unit: "s", dp: 2, rep: (s) => s.rep,
+      readings: (s, v) => repeatReadings(num(v.t3 ?? "") ?? t10(s, 3), s.rep, { spread: 0.006, off: 0.1, step: 0.01 }),
+      cause: "the swings were miscounted (9 or 11 instead of 10). Count \"zero\" as you start the stopwatch, and use a marker at the middle of the swing." }),
     { id: "g", group: "Analyse", title: "Find g from your graph", how: "T = time for 10 swings ÷ 10. The graph of T² against L is a straight line through the origin with gradient 4π² ÷ g, so g = 4π² ÷ gradient.",
       action: { type: "record", fields: [{ key: "g", label: "g", unit: "m/s²",
         check: (v, _s, values) => { const pts = pendT2(values); if (pts.length < 2) return "Take your readings first."; const want = (4 * Math.PI ** 2) / fitLine(pts, true).m; return near(v, want, want * 0.03) ? true : "g = 4π² ÷ (the gradient of T² against L)."; },
         answer: (_s, values) => fix((4 * Math.PI ** 2) / fitLine(pendT2(values), true).m, 2) }] } },
   ],
   results: (_s, v) => [{ title: "Results", columns: ["L / m", "10 swings / s", "T / s", "T² / s²"],
-    rows: LENGTHS.map((L, i) => { const t = num(v[`t${i}`] ?? ""); return [fix(L, 2), t != null ? fix(t, 2) : "—", t != null ? fix(t / 10, 3) : "—", t != null ? fix((t / 10) ** 2, 3) : "—"]; }) }],
+    rows: LENGTHS.map((L, i) => { const t = pendT(v, i); return [fix(L, 2), t != null ? fix(t, 2) : "—", t != null ? fix(t / 10, 3) : "—", t != null ? fix((t / 10) ** 2, 3) : "—"]; }) }],
   graph: (_s, v) => { const points = pendT2(v); if (!points.length) return null; const { m } = fitLine(points, true);
     return { title: "T² against L", x: "L / m", y: "T² / s²", points, line: points.length > 1 ? [[0, 0], [1, m]] : undefined }; },
   conclusion: (s, v) => `T² is proportional to L (a straight line through the origin). From the gradient, g = ${v.g ?? "…"} m/s² (the true value here was ${fix(s.g, 2)} m/s²). Timing 10 swings, not one, makes the reaction-time error ten times smaller.`,
@@ -314,16 +321,17 @@ export const specificHeat: Practical<Sh> = {
 };
 
 // ── Free fall: g from drop times ──────────────────────────────────────────
-type Ff = { g: number; delay: number; h: number; dropped: boolean };
+type Ff = { g: number; delay: number; h: number; dropped: boolean; rep: Rep };
 const HEIGHTS = [0.4, 0.6, 0.8, 1.0];
 const dropTime = (s: Ff, h = s.h) => round(Math.sqrt((2 * h) / s.g) + s.delay, 3);
 const MAG_Y = (h: number) => BENCH - 40 - h * 400;
-const ffPts = (v: Record<string, string>) => HEIGHTS.map((h, k) => [num(v[`t${k}`] ?? ""), h] as const).filter((p): p is readonly [number, number] => p[0] != null).map(([t, h]) => [round(t * t, 4), h] as [number, number]);
+const ffT = (v: Record<string, string>, k: number) => (k === 3 ? repMean(v, "t3") : null) ?? num(v[`t${k}`] ?? ""); // 1.00 m: the mean of three drops
+const ffPts = (v: Record<string, string>) => HEIGHTS.map((h, k) => [ffT(v, k), h] as const).filter((p): p is readonly [number, number] => p[0] != null).map(([t, h]) => [round(t * t, 4), h] as [number, number]);
 export const freeFall: Practical<Ff> = {
   slug: "free-fall", title: "Free fall: measuring g", subject: "physics",
   aim: "Time a steel ball falling from different heights with an electromagnet and trapdoor timer, and find g from a graph of h against t².",
   safety: ["Clamp the stand firmly.", "Keep fingers clear of the trapdoor."],
-  init: (r) => ({ g: between(r, 9.78, 9.83, 3), delay: between(r, 0.001, 0.003, 3), h: 0.3, dropped: false }),
+  init: (r) => ({ g: between(r, 9.78, 9.83, 3), delay: between(r, 0.001, 0.003, 3), h: 0.3, dropped: false, rep: planRepeats(r) }),
   layout: (s) => [
     { id: "rig", kind: "drop-rig", x: 600, y: BENCH, label: "Electromagnet, trapdoor & rule", props: { h: s.h, magnet: !s.dropped } },
     { id: "ball", kind: "ball", x: 600, y: s.dropped ? BENCH - 34 : MAG_Y(s.h) + 26, z: 3 },
@@ -338,12 +346,16 @@ export const freeFall: Practical<Ff> = {
       { id: `t${k}`, title: `Record the time (${h.toFixed(2)} m)`, how: "Copy the timer reading.", magnify: "timer",
         action: { type: "record", fields: [{ key: `t${k}`, label: `Time to fall ${h.toFixed(2)} m`, unit: "s", check: (v, s: Ff) => (near(v, dropTime(s, h), 0.0005) ? true : "Copy the timer reading."), answer: (s: Ff) => fix(dropTime(s, h), 3) }] } },
     ]),
+    ...repeatSteps<Ff>({ id: "rep", group: "Repeat", item: "rig", again: "Drop the ball twice more from 1.00 m", how: "Leave the magnet at 1.00 m, reset the trapdoor and timer, and time two more drops.",
+      label: "Drop it twice more", key: "t3", what: "Time to fall 1.00 m", unit: "s", dp: 3, rep: (s) => s.rep,
+      readings: (s, v) => repeatReadings(num(v.t3 ?? "") ?? dropTime(s, 1), s.rep, { spread: 0.003, off: 0.06, step: 0.001, up: true }),
+      cause: "the ball clung to the magnet for a moment as it was switched off, so the timer ran on before the ball fell. Use the smallest current that holds the ball." }),
     { id: "g", group: "Analyse", title: "Find g from your graph", how: "h = ½ g t², so the graph of h against t² is a straight line with gradient g ÷ 2. g = 2 × gradient.",
       action: { type: "record", fields: [{ key: "g", label: "g", unit: "m/s²",
         check: (v, _s, values) => { const pts = ffPts(values); if (pts.length < 2) return "Take your readings first."; const want = 2 * fitLine(pts, true).m; return near(v, want, want * 0.03) ? true : "g = 2 × the gradient of h against t²."; },
         answer: (_s, values) => fix(2 * fitLine(ffPts(values), true).m, 2) }] } },
   ],
-  results: (_s, v) => [{ title: "Results", columns: ["h / m", "t / s", "t² / s²"], rows: HEIGHTS.map((h, k) => { const t = num(v[`t${k}`] ?? ""); return [fix(h, 2), t != null ? fix(t, 3) : "—", t != null ? fix(t * t, 4) : "—"]; }) }],
+  results: (_s, v) => [{ title: "Results", columns: ["h / m", "t / s", "t² / s²"], rows: HEIGHTS.map((h, k) => { const t = ffT(v, k); return [fix(h, 2), t != null ? fix(t, 3) : "—", t != null ? fix(t * t, 4) : "—"]; }) }],
   graph: (_s, v) => { const points = ffPts(v); if (!points.length) return null; const { m } = fitLine(points, true); const x = Math.max(...points.map((p) => p[0]));
     return { title: "h against t²", x: "t² / s²", y: "h / m", points, line: points.length > 1 ? [[0, 0], [x, x * m]] : undefined }; },
   conclusion: (s, v) => `The height is proportional to t², so the ball accelerates uniformly. g = ${v.g ?? "…"} m/s² (true value ${fix(s.g, 2)} m/s²); the magnet letting go a little late makes every time slightly too long.`,

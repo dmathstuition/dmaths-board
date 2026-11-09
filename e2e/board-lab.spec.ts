@@ -33,6 +33,13 @@ test("an experiment goes on the board and learners can try it", async ({ browser
   await lab.getByLabel("Let learners try it").check();
   await expect(learner.getByRole("dialog", { name: /Experiment: Simple Pendulum/ })).toBeVisible({ timeout: 20_000 });
   await expect(learner.getByRole("group", { name: /Lab bench/ })).toBeVisible({ timeout: 30_000 });
+  // The teacher sees how far they've got, live.
+  await learner.getByRole("button", { name: "Do this step for me" }).click();
+  await lab.getByRole("button", { name: /Learners' progress/ }).click();
+  const tracker = lab.getByRole("region", { name: "Learners' progress" });
+  await expect(tracker.getByText(/Step 2:/)).toBeVisible({ timeout: 20_000 });
+  await expect(tracker.getByText("1 trying")).toBeVisible();
+  await tracker.getByRole("button", { name: "Back to the experiment" }).click();
   await learner.getByRole("button", { name: "Back to the class board" }).click();
   await expect(learner.getByRole("button", { name: /Try Simple Pendulum/ })).toBeVisible();
 

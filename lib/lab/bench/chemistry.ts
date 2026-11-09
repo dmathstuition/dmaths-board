@@ -1,20 +1,22 @@
 // Chemistry practicals on the lab bench (see lib/lab/bench/types.ts).
 import { BENCH, SHELF, between, fitLine, fix, near, num, round, type Practical, type Step } from "@/lib/lab/bench/types";
 import { mix } from "@/lib/lab/bench/practicals";
+import { planRepeats, repMean, repeatReadings, repeatSteps, type Rep } from "@/lib/lab/bench/repeats";
 
 const vals = (v: Record<string, string>, keys: string[]) => keys.map((k) => num(v[k] ?? ""));
 const pick = <T,>(r: () => number, xs: T[]) => xs[Math.floor(r() * xs.length) % xs.length];
 
 // ── Rates: the disappearing cross ──────────────────────────────────────────
-type Rt = { k: number; noise: number[]; vol: number; run: number; acid: boolean; t: number };
+type Rt = { k: number; noise: number[]; vol: number; run: number; acid: boolean; t: number; rep: Rep };
 const VOLS = [50, 40, 30, 20];
 const crossTime = (s: Rt, i: number) => round((s.k * 50) / VOLS[i] + s.noise[i], 1);
-const ratePts = (v: Record<string, string>) => VOLS.map((V, i) => [V, num(v[`t${i}`] ?? "")] as const).filter((p): p is readonly [number, number] => !!p[1]).map(([V, t]) => [V, round(1000 / t, 1)] as [number, number]);
+const rtT = (v: Record<string, string>, i: number) => (i === 0 ? repMean(v, "t0") : null) ?? num(v[`t${i}`] ?? ""); // 50 cm³: the mean of three runs
+const ratePts = (v: Record<string, string>) => VOLS.map((V, i) => [V, rtT(v, i)] as const).filter((p): p is readonly [number, number] => !!p[1]).map(([V, t]) => [V, round(1000 / t, 1)] as [number, number]);
 export const rates: Practical<Rt> = {
   slug: "rates", title: "Rates of reaction: the disappearing cross", subject: "chemistry",
   aim: "Find how the concentration of sodium thiosulfate affects the rate of its reaction with hydrochloric acid, timing how long a cross takes to disappear.",
   safety: ["Wear eye protection.", "The reaction gives off sulfur dioxide — work in a ventilated room, and pour the mixture away straight after."],
-  init: (r) => ({ k: between(r, 18, 26, 1), noise: VOLS.map(() => round((r() - 0.5) * 1.2, 1)), vol: 0, run: -1, acid: false, t: 0 }),
+  init: (r) => ({ k: between(r, 18, 26, 1), noise: VOLS.map(() => round((r() - 0.5) * 1.2, 1)), vol: 0, run: -1, acid: false, t: 0, rep: planRepeats(r) }),
   layout: (s) => {
     const T = s.run >= 0 ? crossTime(s, s.run) : 1, cloud = s.acid ? Math.min(1, s.t / T) : 0;
     return [
@@ -38,13 +40,17 @@ export const rates: Practical<Rt> = {
         note: () => "A pale yellow cloud of sulfur forms and hides the cross." },
       { id: `t${i}`, title: `Record the time (${V} cm³)`, how: "Copy the stopwatch reading.", magnify: "watch",
         action: { type: "record", fields: [{ key: `t${i}`, label: `Time with ${V} cm³ of thiosulfate`, unit: "s", check: (v, s: Rt) => (near(v, crossTime(s, i), 0.05) ? true : "Copy the stopwatch."), answer: (s: Rt) => fix(crossTime(s, i), 1) }] } },
+      ...(i === 0 ? repeatSteps<Rt>({ id: "rep", item: "flask", again: "Repeat the 50 cm³ run twice more", how: "Rinse the flask, make up 50 cm³ of thiosulfate again, add the acid and time it — then once more.",
+        label: "Do it twice more", key: "t0", what: "Time with 50 cm³ of thiosulfate", unit: "s", dp: 1, rep: (s) => s.rep,
+        readings: (s, v) => repeatReadings(num(v.t0 ?? "") ?? crossTime(s, 0), s.rep, { spread: 0.03, off: 0.25, step: 0.1 }),
+        cause: "the cross was watched from a different height, or the flask wasn't rinsed between runs. Look straight down from the same height every time." }) : []),
     ]),
     { id: "concl", group: "Conclusion", title: "What does concentration do to the rate?", how: "Rate ∝ 1 ÷ time. Look at your graph.",
       action: { type: "record", fields: [{ key: "concl", label: "As the concentration goes up, the rate", options: ["goes up (proportionally)", "goes down", "stays the same"],
         check: (v) => (v === "goes up (proportionally)" ? true : "Shorter time means a faster reaction."), answer: () => "goes up (proportionally)" }] } },
   ],
   results: (_s, v) => [{ title: "Results", columns: ["Thiosulfate / cm³", "Water / cm³", "Time / s", "Rate (1000 ÷ t) / s⁻¹"],
-    rows: VOLS.map((V, i) => { const t = num(v[`t${i}`] ?? ""); return [String(V), String(50 - V), t != null ? fix(t, 1) : "—", t ? fix(1000 / t, 1) : "—"]; }) }],
+    rows: VOLS.map((V, i) => { const t = rtT(v, i); return [String(V), String(50 - V), t != null ? fix(t, 1) : "—", t ? fix(1000 / t, 1) : "—"]; }) }],
   graph: (_s, v) => { const points = ratePts(v); if (!points.length) return null; const { m } = fitLine(points, true);
     return { title: "Rate against volume of thiosulfate", x: "thiosulfate / cm³", y: "1000 ÷ time / s⁻¹", points, line: points.length > 1 ? [[0, 0], [50, 50 * m]] : undefined }; },
   conclusion: () => "The rate is proportional to the concentration: twice as many thiosulfate particles in the same volume means twice as many collisions with acid particles each second.",

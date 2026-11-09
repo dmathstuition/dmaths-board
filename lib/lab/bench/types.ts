@@ -46,6 +46,7 @@ export type Step<S> = {
   note?: (s: S) => string | null;           // what you see afterwards
   magnify?: string;                         // show a close-up of this item (reading a scale)
   magnifyAt?: { x: number; y: number };     // where the close-up goes (default: beside the item)
+  show?: (s: S, values: Record<string, string>) => Table; // a table to look at while doing the step (repeat readings)
 };
 
 export type Table = { title: string; columns: string[]; rows: (string | number)[][] };

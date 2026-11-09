@@ -6,16 +6,20 @@
 // notebook, which checks them. The practical itself is pure data
 // (lib/lab/bench/practicals.ts).
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import type { Field, Graph, ItemView, Practical, Step } from "@/lib/lab/bench/types";
-import { checkField, doStep, targetOf } from "@/lib/lab/bench/run";
+import type { Field, Graph, ItemView, Practical, Step, Table } from "@/lib/lab/bench/types";
+import { checkField, doStep, tablesOf, targetOf } from "@/lib/lab/bench/run";
+import { examFor, type ExamQ } from "@/lib/lab/bench/exam";
+import { useLabReport } from "@/components/lab/bench/labReport";
 import { SUBJECTS } from "@/lib/lab/catalog";
 import { Apparatus, BenchDefs, Front, Lens, Room, W, closeup, dims, hasFront, hasShadow, mouth } from "@/components/lab/bench/Apparatus";
 
-type Run = { s: any; step: number; values: Record<string, string>; notes: Record<number, string>; shown: string[] };
+type Run = { id: number; s: any; step: number; values: Record<string, string>; notes: Record<number, string>; shown: string[] };
+type Exam = { picks: Record<number, string>; marked: boolean };
 type Move = { id: string; x: number; y: number; tilt: number; instant?: boolean };
 // The part of the room shown: the top of the wall and most of the cupboards are left out.
 const VIEW = { y: 24, h: 700 };
-const fresh = (p: Practical): Run => ({ s: p.init(Math.random), step: 0, values: {}, notes: {}, shown: [] });
+const fresh = (p: Practical): Run => ({ id: Math.random(), s: p.init(Math.random), step: 0, values: {}, notes: {}, shown: [] });
+const shuffle = <T,>(xs: T[]) => { const a = [...xs]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const nameOf = (it?: ItemView) => String(it?.props?.name || it?.label || it?.id || "apparatus").replace(/\s*\(.*\)$/, "");
 const lower = (s: string) => (/^[A-Z][a-z]/.test(s) && !/^(Benedict|Biuret|HCl|NaOH)/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
@@ -35,6 +39,14 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
   const [hint, setHint] = useState<string | null>(null);
   const [tab, setTab] = useState<"protocol" | "results" | "about">("protocol");
   const [sure, setSure] = useState(false);
+  const [misses, setMisses] = useState(0);              // wrong tries on this step (for the teacher's tracker)
+  const stepAt = useRef(Date.now());
+  const [exam, setExam] = useState<Exam>({ picks: {}, marked: false });
+  // The questions, in a new order each run (run.id changes when it restarts).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const questions = useMemo(() => shuffle(examFor(p.slug)).map((q) => ({ q, options: shuffle([q.right, ...q.wrong]) })), [p.slug, run.id]);
+  const { name, report } = useLabReport();
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<{ id: string; ox: number; oy: number; sx: number; sy: number; moved: boolean } | null>(null);
   const raf = useRef(0);
@@ -45,7 +57,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
 
   // A new step: clear what the last one left behind.
   useEffect(() => {
-    setHint(null); setPicked(false);
+    setHint(null); setPicked(false); setMisses(0); stepAt.current = Date.now();
     const a = p.steps[run.step]?.action;
     setSetVal(a?.type === "set" ? lastSet.current[a.item] ?? a.start ?? a.min : null);
     if (run.step >= p.steps.length) setTab("results");
@@ -96,7 +108,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
     if (!d.moved) { setPicked((x) => !x); setHint(null); return; }
     const t = byId(a.onto), pt = toSvg(e);
     if (t && hits(t, pt)) void act({ x: pt.x - d.ox, y: pt.y - d.oy });
-    else { setMove(null); setHint(`Not there — put it on the ${lower(nameOf(t))}.`); }
+    else { setMove(null); setHint(`Not there — put it on the ${lower(nameOf(t))}.`); setMisses((m) => m + 1); }
   }
 
   async function act(from?: { x: number; y: number }) {
@@ -177,7 +189,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
   function setDone(v = setVal) {
     if (a?.type !== "set" || v == null) return;
     if (Math.abs(v - targetOf(a, runRef.current.s)) <= a.tolerance + 1e-9) { lastSet.current[a.item] = v; finish(step!.apply ? step!.apply(runRef.current.s, v) : runRef.current.s); }
-    else setHint(a.hint ?? `It's on ${v} ${a.unit} — turn it to ${a.target} ${a.unit}.`);
+    else { setHint(a.hint ?? `It's on ${v} ${a.unit} — turn it to ${a.target} ${a.unit}.`); setMisses((m) => m + 1); }
   }
   function tapIt() { if (a?.type === "tap" && !busy) finish(step!.apply ? step!.apply(runRef.current.s) : runRef.current.s); }
 
@@ -196,7 +208,42 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
     if (!sure) { setSure(true); setTimeout(() => alive.current && setSure(false), 3500); return; }
     cancelAnimationFrame(raf.current); holdingRef.current = false;
     setSure(false); setHolding(false); setBusy(false); setMove(null); setPour(null); lastSet.current = {};
-    setRun(fresh(p)); setTab("protocol");
+    setRun(fresh(p)); setTab("protocol"); setExam({ picks: {}, marked: false });
+  }
+
+  // ── Telling the teacher where we're up to (only when a class is listening) ──
+  const examScore = exam.marked ? questions.filter((x, i) => exam.picks[i] === x.q.right).length : null;
+  useEffect(() => {
+    if (!report) return;
+    const send = () => {
+      const r = runRef.current;
+      const readings = p.steps.slice(0, r.step).flatMap((st) => (st.action.type === "record" ? st.action.fields : []))
+        .filter((f) => r.values[f.key] != null)
+        .map((f) => ({ l: f.label, v: `${r.values[f.key]}${f.unit ? ` ${f.unit}` : ""}`, ...(r.shown.includes(f.key) ? { s: true } : {}) }));
+      report({ slug: p.slug, step: Math.min(r.step, p.steps.length), total: p.steps.length, title: p.steps[r.step]?.title ?? "Finished", done: r.step >= p.steps.length,
+        misses, onStep: Math.round((Date.now() - stepAt.current) / 1000), shown: r.shown.length, readings: readings.slice(-40),
+        exam: examScore != null ? { score: examScore, of: questions.length } : null });
+    };
+    send();
+    const t = setInterval(send, 10_000);
+    return () => clearInterval(t);
+  }, [report, p, run.step, run.values, run.shown, misses, examScore, questions.length]);
+
+  // ── The write-up, as a PDF to print or keep ──
+  async function writeup() {
+    if (pdfBusy) return;
+    setPdfBusy("Making your write-up…");
+    try {
+      const { makeWriteup, downloadPdf } = await import("@/lib/lab/writeupPdf");
+      const r = runRef.current;
+      const bytes = await makeWriteup({ p, s: r.s, values: r.values, notes: r.notes, step: r.step, shown: r.shown, name,
+        date: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }),
+        exam: exam.marked ? questions.map((x, i) => ({ q: x.q, picked: exam.picks[i] ?? null })) : null });
+      downloadPdf(bytes, `${p.title} - write-up`);
+      setPdfBusy(null);
+    } catch (e) {
+      setPdfBusy(`Couldn't make the PDF (${e instanceof Error ? e.message : e}). Try again.`);
+    }
   }
 
   // ── Drawing the bench ──
@@ -296,8 +343,11 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
                 <p className="mt-1 text-sm text-slate-700">{p.conclusion(run.s, run.values)}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" onClick={() => setTab("results")} className="min-h-[44px] rounded-xl bg-[#0E6E72] px-4 text-sm font-black text-white">See the results</button>
+                  <button type="button" onClick={writeup} disabled={!!pdfBusy && pdfBusy.startsWith("Making")} className="min-h-[44px] rounded-xl bg-[#EEF7F6] px-4 text-sm font-black text-[#0A4F52] ring-1 ring-[#A9D6D3] disabled:opacity-60">⬇ Download the write-up (PDF)</button>
                   <button type="button" onClick={restart} className="min-h-[44px] rounded-xl bg-slate-100 px-4 text-sm font-black text-slate-700">{sure ? "Sure? Start again" : "Do it again (new samples)"}</button>
                 </div>
+                {pdfBusy && <p role="status" className="mt-2 text-sm font-bold text-[#0A4F52]">{pdfBusy}</p>}
+                {questions.length > 0 && <ExamCard questions={questions} exam={exam} setExam={setExam} />}
               </div>
             ) : step && (
               <div>
@@ -341,9 +391,10 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
                       {busy ? (a.minutes >= 1 ? `⏩ ${a.minutes} minute${a.minutes === 1 ? "" : "s"} passing…` : "⏱ Timing…") : `▶ ${a.label}`}
                     </button>
                   )}
+                  {step.show && <ReadingsTable t={step.show(run.s, run.values)} />}
                   {a?.type === "record" && (
                     <RecordForm key={run.step} fields={a.fields} s={run.s} values={run.values} graph={graph}
-                      onDone={(v, shown) => finish(run.s, { ...run.values, ...v }, shown)} />
+                      onDone={(v, shown) => finish(run.s, { ...run.values, ...v }, shown)} onMiss={() => setMisses((m) => m + 1)} />
                   )}
                 </div>
                 {hint && <p role="alert" className="mt-2 text-sm font-bold text-amber-700">{hint}</p>}
@@ -358,16 +409,16 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
           </section>
         </div>
 
-        <Notebook p={p} run={run} tab={tab} setTab={setTab} graph={graph} />
+        <Notebook p={p} run={run} tab={tab} setTab={setTab} graph={graph} onWriteup={writeup} />
       </div>
     </div>
   );
 }
 
 // ── Writing readings in the notebook ──
-function RecordForm({ fields, s, values, graph, onDone }: {
+function RecordForm({ fields, s, values, graph, onDone, onMiss }: {
   fields: Field[]; s: any; values: Record<string, string>; graph: Graph | null;
-  onDone: (v: Record<string, string>, shown: string[]) => void;
+  onDone: (v: Record<string, string>, shown: string[]) => void; onMiss?: () => void;
 }) {
   const [v, setV] = useState<Record<string, string>>({});
   const [state, setState] = useState<Record<string, { ok?: boolean; shown?: boolean; hint?: string; tries: number }>>({});
@@ -383,6 +434,7 @@ function RecordForm({ fields, s, values, graph, onDone }: {
       else next[f.key] = { hint: res, tries };
     }
     setV(vals); setState(next);
+    if (fields.some((f) => !locked(f.key) && !next[f.key]?.ok)) onMiss?.();
     if (fields.every((f) => next[f.key]?.ok || next[f.key]?.shown)) {
       setTimeout(() => onDone(vals, fields.filter((f) => next[f.key]?.shown).map((f) => f.key)), 700);
     }
@@ -440,7 +492,7 @@ function RecordForm({ fields, s, values, graph, onDone }: {
 }
 
 // ── The lab notebook ──
-function Notebook({ p, run, tab, setTab, graph }: { p: Practical; run: Run; tab: "protocol" | "results" | "about"; setTab: (t: "protocol" | "results" | "about") => void; graph: Graph | null }) {
+function Notebook({ p, run, tab, setTab, graph, onWriteup }: { p: Practical; run: Run; tab: "protocol" | "results" | "about"; setTab: (t: "protocol" | "results" | "about") => void; graph: Graph | null; onWriteup: () => void }) {
   const list = useRef<HTMLOListElement>(null);
   useEffect(() => { // keep the current step in view (without scrolling the page)
     const box = list.current, li = box?.querySelector<HTMLElement>("[data-current]");
@@ -488,22 +540,15 @@ function Notebook({ p, run, tab, setTab, graph }: { p: Practical; run: Run; tab:
       )}
       {tab === "results" && (
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
-          {p.results(run.s, run.values).map((t) => (
-            <div key={t.title}>
-              <p className="mb-1 text-sm font-black text-slate-900">{t.title}</p>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-xs">
-                  <thead><tr>{t.columns.map((c, i) => <th key={i} className="border border-slate-300 bg-slate-100 px-2 py-1 text-left font-black text-slate-700">{c}</th>)}</tr></thead>
-                  <tbody>{t.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} className={`border border-slate-300 px-2 py-1 ${j ? "font-mono tabular-nums" : "font-bold"} text-slate-800`}>{c}</td>)}</tr>)}</tbody>
-                </table>
-              </div>
-            </div>
-          ))}
+          {tablesOf(p, run.s, run.values, run.step).map((t) => <ReadingsTable key={t.title} t={t} />)}
           {graph && <div><p className="mb-1 text-sm font-black text-slate-900">{graph.title}</p><GraphView g={graph} /></div>}
           <div>
             <p className="mb-1 text-sm font-black text-slate-900">Conclusion</p>
             <p className="text-sm text-slate-700">{done ? p.conclusion(run.s, run.values) : "Finish the protocol to write the conclusion."}</p>
           </div>
+          <button type="button" onClick={onWriteup} className="min-h-[40px] w-full rounded-xl bg-[#EEF7F6] px-3 text-xs font-black text-[#0A4F52] ring-1 ring-[#A9D6D3]">
+            ⬇ Download the write-up (PDF){done ? "" : " — so far"}
+          </button>
         </div>
       )}
       {tab === "about" && (
@@ -514,6 +559,62 @@ function Notebook({ p, run, tab, setTab, graph }: { p: Practical; run: Run; tab:
         </div>
       )}
     </aside>
+  );
+}
+
+// ── A results table ──
+function ReadingsTable({ t }: { t: Table }) {
+  return (
+    <div className="mb-2">
+      <p className="mb-1 text-sm font-black text-slate-900">{t.title}</p>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-xs">
+          <thead><tr>{t.columns.map((c, i) => <th key={i} className="border border-slate-300 bg-slate-100 px-2 py-1 text-left font-black text-slate-700">{c}</th>)}</tr></thead>
+          <tbody>{t.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} className={`border border-slate-300 px-2 py-1 ${j ? "font-mono tabular-nums" : "font-bold"} text-slate-800`}>{c}</td>)}</tr>)}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Exam-style questions, after the practical ──
+function ExamCard({ questions, exam, setExam }: { questions: { q: ExamQ; options: string[] }[]; exam: Exam; setExam: (e: Exam) => void }) {
+  const all = questions.every((_, i) => exam.picks[i]);
+  const score = questions.filter((x, i) => exam.picks[i] === x.q.right).length;
+  return (
+    <section aria-label="Exam-style questions" className="mt-4 rounded-2xl bg-[#FFFDF7] p-3 ring-1 ring-slate-200 sm:p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-black text-slate-900">📝 Exam-style questions</p>
+        {exam.marked ? <p className="text-sm font-black text-[#0A4F52]">Score: {score} / {questions.length}</p> : <p className="text-xs font-bold text-slate-500">Like the practical paper — choose one answer each.</p>}
+      </div>
+      <ol className="mt-2 space-y-3">
+        {questions.map((x, i) => {
+          const pick = exam.picks[i], right = pick === x.q.right;
+          return (
+            <li key={x.q.q}>
+              <p className="text-sm font-black text-slate-800">{i + 1}. {x.q.q}</p>
+              <div role="radiogroup" aria-label={`Question ${i + 1}`} className="mt-1.5 grid gap-1.5">
+                {x.options.map((o) => {
+                  const chosen = pick === o, mark = exam.marked && (o === x.q.right ? "right" : chosen ? "wrong" : null);
+                  return (
+                    <button key={o} type="button" role="radio" aria-checked={chosen} disabled={exam.marked}
+                      onClick={() => setExam({ ...exam, picks: { ...exam.picks, [i]: o } })}
+                      className={`min-h-[40px] rounded-lg px-3 py-1.5 text-left text-sm font-bold ring-1 ${mark === "right" ? "bg-[#DCFCE7] text-[#14532D] ring-[#22C55E]" : mark === "wrong" ? "bg-[#FEE2E2] text-[#7F1D1D] ring-[#F87171]" : chosen ? "bg-[#0E6E72] text-white ring-[#0E6E72]" : "bg-white text-slate-700 ring-slate-300"} disabled:cursor-default`}>
+                      {mark === "right" ? "✓ " : mark === "wrong" ? "✗ " : ""}{o}
+                    </button>
+                  );
+                })}
+              </div>
+              {exam.marked && <p className={`mt-1 text-xs font-bold ${right ? "text-[#047857]" : "text-amber-700"}`}>{right ? "Right. " : "Not quite. "}<span className="font-semibold text-slate-600">{x.q.why}</span></p>}
+            </li>
+          );
+        })}
+      </ol>
+      {!exam.marked && (
+        <button type="button" disabled={!all} onClick={() => setExam({ ...exam, marked: true })}
+          className="mt-3 min-h-[44px] rounded-xl bg-[#0E6E72] px-5 text-sm font-black text-white disabled:opacity-50">{all ? "Mark my answers" : `Answer all ${questions.length} to mark them`}</button>
+      )}
+    </section>
   );
 }
 

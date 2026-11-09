@@ -8,6 +8,9 @@ import { LAB, SUBJECTS, type LabEntry, type LabSubject } from "@/lib/lab/catalog
 import { BOARD_H, BOARD_W } from "@/lib/whiteboard";
 import { useKeptRef, useKeptState, type KeepStore } from "@/lib/keptState";
 import PracticalThumb from "@/components/lab/bench/Thumb";
+import { LabReportContext, type LabReport } from "@/components/lab/bench/labReport";
+import LabTracker, { useNow } from "@/components/live/board/LabTracker";
+import { addReport, cleanProgress, summary, type LabEntry as TrackEntry, type LabProgress } from "@/lib/lab/labTrack";
 
 // The E-Laboratory on the board. The teacher picks an experiment and works it
 // live; "Put on the board" turns what it shows into a board page, so the
@@ -15,8 +18,10 @@ import PracticalThumb from "@/components/lab/bench/Thumb";
 // tools (it's saved and replayed like a slide). "Let learners try it" opens the
 // same experiment on every learner's own device to explore.
 //
-// Message: "lab-open" (teacher → all, signed): { slug } or { slug: null },
-// re-sent every few seconds while open so late joiners catch up.
+// Messages: "lab-open" (teacher → all, signed): { slug } or { slug: null },
+// re-sent every few seconds while open so late joiners catch up; and
+// "lab-progress" (learner → teacher): where a learner trying it is up to —
+// step, readings, wrong tries — for the teacher's live tracker.
 
 export const BOARD_LAB: LabEntry[] = LAB.filter((e) => e.status !== "soon" && e.slug in EXPERIMENTS);
 const entryFor = (slug: string | null) => BOARD_LAB.find((e) => e.slug === slug) ?? null;
@@ -72,8 +77,8 @@ async function svgOnly(node: HTMLElement): Promise<HTMLCanvasElement> {
   return c;
 }
 
-export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live, keep }: {
-  host: boolean; open: boolean; onOpen: () => void; onClose: () => void;
+export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live, keep, myId = "", myName }: {
+  host: boolean; open: boolean; onOpen: () => void; onClose: () => void; myId?: string; myName?: string;
   onSnapshot: (file: File) => Promise<void>; live: boolean; // live: in a class (not preparing a lesson)
   keep?: KeepStore; // the board's store: an open experiment survives going in or out of full screen
 }) {
@@ -99,6 +104,8 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
   const scale = shooting ? 1 : (zoom ?? fit);
   const sharedRef = useRef({ slug, shared }); sharedRef.current = { slug, shared };
 
+  const [track, setTrack] = useKeptState<Record<string, TrackEntry>>(keep, "lab:track", {}); // teacher: each learner's progress
+  const [tracking, setTracking] = useKeptState(keep, "lab:tracking", false);           // teacher: looking at the tracker
   const send = useLive({
     "lab-open": (p) => {
       if (host || !p?.host) return;
@@ -106,9 +113,30 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
       if (s && s !== theirsRef.current) setHidden(false);
       theirsRef.current = s; setTheirs(s);
     },
+    "lab-progress": (p) => { if (host) setTrack((m) => addReport(m, cleanProgress(p), Date.now())); },
   });
   // Teacher: keep learners in step while they're trying it.
   const repeat = useClassScale(); // big classes: repeat less (lib/classScale)
+
+  // Learner: tell the teacher where I'm up to — at once when something
+  // changes (at most every couple of seconds), and now and then otherwise.
+  const mine = useRef<{ v: number; last: number; key: string; timer: ReturnType<typeof setTimeout> | null; p: LabProgress | null }>({ v: 0, last: 0, key: "", timer: null, p: null });
+  const reportCtx = useMemo<LabReport>(() => ({
+    name: myName,
+    report: host || !live || !myId ? undefined : (prog) => {
+      const m = mine.current, key = JSON.stringify({ ...prog, onStep: 0 }), now = Date.now();
+      m.p = prog;
+      const go = () => { m.timer = null; m.last = Date.now(); m.key = JSON.stringify({ ...m.p, onStep: 0 }); send("lab-progress", { ...m.p, by: myId, name: myName, v: ++m.v }); };
+      if (key === m.key && now - m.last < 10_000 * repeat) return; // nothing new: the regular update will do
+      if (now - m.last >= 2000 * repeat) return go();
+      if (!m.timer) m.timer = setTimeout(go, 2000 * repeat - (now - m.last));
+    },
+  }), [host, live, myId, myName, send, repeat]);
+  useEffect(() => () => { if (mine.current.timer) clearTimeout(mine.current.timer); }, []);
+  const now = useNow(5000);
+  const trackList = useMemo(() => Object.values(track).filter((e) => e.slug === slug), [track, slug]);
+  const quiet = 30_000 * repeat;
+  const trackSum = summary(trackList, now, quiet);
   useEffect(() => {
     if (!host || !live) return;
     const tell = () => send("lab-open", { host: true, slug: sharedRef.current.shared ? sharedRef.current.slug : null });
@@ -143,7 +171,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
       setBusy(`Couldn't put it on the board (${e instanceof Error ? e.message : e}) — try again.`);
     }
   }
-  function end() { setSlug(null); setShared(false); setBusy(null); onClose(); }
+  function end() { setSlug(null); setShared(false); setTracking(false); setTrack({}); setBusy(null); onClose(); }
 
   // Esc hides the lab (and never reaches the board behind it).
   const showing = host ? open : !!theirs && !hidden;
@@ -179,7 +207,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
           <button type="button" onClick={() => setHidden(true)} className="min-h-[40px] shrink-0 rounded-xl bg-white px-3 text-xs font-black text-[#0B1220]">Back to the class board</button>
         </div>
         <div className="elab min-h-0 flex-1 overflow-auto overscroll-contain p-2 sm:p-4">
-          <div className="mx-auto max-w-6xl" style={{ zoom: scale }}><Experiment /></div>
+          <div className="mx-auto max-w-6xl" style={{ zoom: scale }}><LabReportContext.Provider value={reportCtx}><Experiment /></LabReportContext.Provider></div>
         </div>
       </div>
     );
@@ -193,7 +221,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
     return (
       <div className="fixed left-1/2 top-2 z-[95] flex max-w-[92vw] -translate-x-1/2 items-center gap-1 rounded-full bg-[#0B1220] p-1 text-white shadow-2xl ring-1 ring-white/20">
         <button type="button" onClick={onOpen} className="flex min-h-[40px] min-w-0 items-center gap-2 rounded-full px-3 text-sm font-black hover:bg-white/10">
-          <BoardIcon name="flask" /> <span className="truncate">{entryFor(slug)?.title ?? "Lab"}{shared ? " · learners trying it" : ""}</span>
+          <BoardIcon name="flask" /> <span className="truncate">{entryFor(slug)?.title ?? "Lab"}{shared ? " · learners trying it" : ""}{shared && trackSum.stuck ? ` · ${trackSum.stuck} stuck` : ""}</span>
         </button>
         <button type="button" onClick={end} aria-label="End the experiment" title="End the experiment"
           className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-white/10 px-3 text-xs font-black hover:bg-red-500/80"><BoardIcon name="close" className="h-4 w-4" /> End</button>
@@ -224,7 +252,13 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
               <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} className="h-4 w-4 accent-[#38BDF8]" /> Let learners try it
             </label>
           )}
-          <button type="button" onClick={() => { setSlug(null); setShared(false); }} className={`${chip} bg-white/5 hover:bg-white/10`}>Change experiment</button>
+          {live && (shared || trackList.length > 0) && (
+            <button type="button" onClick={() => setTracking(!tracking)} aria-pressed={tracking} className={`${chip} ${tracking ? "bg-white text-[#0B1220]" : "bg-white/10 hover:bg-white/15"}`}>
+              👥 Learners&apos; progress{trackList.length ? ` · ${trackList.length}` : ""}
+              {trackSum.stuck > 0 && <span className="rounded-full bg-[#F87171] px-1.5 text-[11px] text-white">{trackSum.stuck} stuck</span>}
+            </button>
+          )}
+          <button type="button" onClick={() => { setSlug(null); setShared(false); setTracking(false); }} className={`${chip} bg-white/5 hover:bg-white/10`}>Change experiment</button>
         </div>
       )}
       {busy && <p role="status" className="bg-[#38BDF8]/15 px-4 py-2 text-sm font-bold text-[#BAE6FD]">{busy}</p>}
@@ -287,8 +321,11 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
           </div>
         </div>
       ) : (
-        <div className="elab min-h-0 flex-1 overflow-auto overscroll-contain p-2 sm:p-4">
-          <div ref={stage} className="mx-auto max-w-6xl" style={{ zoom: scale }}>{Experiment && <Experiment />}</div>
+        <div className="relative min-h-0 flex-1">
+          <div className="elab absolute inset-0 isolate overflow-auto overscroll-contain p-2 sm:p-4">
+            <div ref={stage} className="mx-auto max-w-6xl" style={{ zoom: scale }}>{Experiment && <Experiment />}</div>
+          </div>
+          {tracking && live && <LabTracker entries={trackList} quiet={quiet} onClose={() => setTracking(false)} />}
         </div>
       )}
     </div>
