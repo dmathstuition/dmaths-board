@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import type { Field, Graph, ItemView, Practical, Step, Table } from "@/lib/lab/bench/types";
 import { checkField, doStep, tablesOf, targetOf } from "@/lib/lab/bench/run";
 import { examFor, type ExamQ } from "@/lib/lab/bench/exam";
-import { useLabReport } from "@/components/lab/bench/labReport";
+import { HELP_AFTER, useLabReport } from "@/components/lab/bench/labReport";
 import { SUBJECTS } from "@/lib/lab/catalog";
 import { Apparatus, BenchDefs, Front, Lens, Room, W, closeup, dims, hasFront, hasShadow, mouth } from "@/components/lab/bench/Apparatus";
 
@@ -45,7 +45,9 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
   // The questions, in a new order each run (run.id changes when it restarts).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const questions = useMemo(() => shuffle(examFor(p.slug)).map((q) => ({ q, options: shuffle([q.right, ...q.wrong]) })), [p.slug, run.id]);
-  const { name, report } = useLabReport();
+  const { name, report, learner } = useLabReport();
+  // Learners have a real go first: the step is done for them only after HELP_AFTER wrong tries.
+  const canHelp = !learner || misses >= HELP_AFTER;
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<{ id: string; ox: number; oy: number; sx: number; sy: number; moved: boolean } | null>(null);
@@ -195,7 +197,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
 
   // Do the step for the learner (and for a teacher showing the class).
   function doForMe() {
-    if (!step || busy) return;
+    if (!step || busy || !canHelp) return;
     const r = runRef.current;
     if (a?.type === "drag") return void act();
     if (a?.type === "wait") return startWait();
@@ -265,7 +267,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
         tabIndex={draggable || droppable ? 0 : undefined}
         aria-label={draggable ? `Pick up the ${lower(nameOf(it))}` : droppable ? `Put it on the ${lower(nameOf(it))}` : undefined}
         onPointerDown={draggable ? (e) => down(e, it) : undefined}
-        onClick={droppable ? () => void act() : undefined}
+        onClick={droppable ? () => void act() : picked && a?.type === "drag" && it.id !== a.item ? () => { setHint(`Not there — put it on the ${lower(nameOf(target))}.`); setMisses((m) => m + 1); } : undefined}
         onKeyDown={draggable || droppable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (droppable) void act(); else setPicked(true); } } : undefined}
         style={{
           transform: `translate(${pos.x}px, ${pos.y}px) translate(0px, ${-h / 2}px) rotate(${pos.tilt}deg) translate(0px, ${h / 2}px)`,
@@ -393,15 +395,18 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
                   )}
                   {step.show && <ReadingsTable t={step.show(run.s, run.values)} />}
                   {a?.type === "record" && (
-                    <RecordForm key={run.step} fields={a.fields} s={run.s} values={run.values} graph={graph}
+                    <RecordForm key={run.step} fields={a.fields} s={run.s} values={run.values} graph={graph} tries={learner ? HELP_AFTER : 3} canShow={canHelp}
                       onDone={(v, shown) => finish(run.s, { ...run.values, ...v }, shown)} onMiss={() => setMisses((m) => m + 1)} />
                   )}
                 </div>
                 {hint && <p role="alert" className="mt-2 text-sm font-bold text-amber-700">{hint}</p>}
-                {a?.type !== "record" && (
+                {a?.type !== "record" && canHelp && (
                   <button type="button" onClick={doForMe} disabled={busy || holding} className="mt-3 min-h-[36px] rounded-lg px-2 text-xs font-black text-slate-500 underline decoration-dotted hover:text-slate-800 disabled:opacity-50">
                     Do this step for me
                   </button>
+                )}
+                {!canHelp && misses > 0 && (a?.type === "drag" || a?.type === "set") && (
+                  <p className="mt-2 text-xs font-bold text-slate-500">Keep trying — help unlocks after {HELP_AFTER} tries ({HELP_AFTER - misses} to go).</p>
                 )}
               </div>
             )}
@@ -416,9 +421,11 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
 }
 
 // ── Writing readings in the notebook ──
-function RecordForm({ fields, s, values, graph, onDone, onMiss }: {
+function RecordForm({ fields, s, values, graph, onDone, onMiss, tries: most = 3, canShow = true }: {
   fields: Field[]; s: any; values: Record<string, string>; graph: Graph | null;
   onDone: (v: Record<string, string>, shown: string[]) => void; onMiss?: () => void;
+  tries?: number;     // wrong tries before the answer is filled in
+  canShow?: boolean;  // "Show me the answer" offered
 }) {
   const [v, setV] = useState<Record<string, string>>({});
   const [state, setState] = useState<Record<string, { ok?: boolean; shown?: boolean; hint?: string; tries: number }>>({});
@@ -430,7 +437,7 @@ function RecordForm({ fields, s, values, graph, onDone, onMiss }: {
       const res = checkField(f, vals[f.key] ?? "", s, { ...values, ...vals });
       const tries = (next[f.key]?.tries ?? 0) + (res === true ? 0 : 1);
       if (res === true) next[f.key] = { ok: true, tries };
-      else if (tries >= 3) { vals[f.key] = f.answer(s, { ...values, ...vals }); next[f.key] = { shown: true, tries, hint: res }; }
+      else if (tries >= most) { vals[f.key] = f.answer(s, { ...values, ...vals }); next[f.key] = { shown: true, tries, hint: res }; }
       else next[f.key] = { hint: res, tries };
     }
     setV(vals); setState(next);
@@ -441,7 +448,7 @@ function RecordForm({ fields, s, values, graph, onDone, onMiss }: {
   }
   function showMe() {
     const vals = { ...v }, next = { ...state };
-    for (const f of fields) if (!locked(f.key)) { vals[f.key] = f.answer(s, { ...values, ...vals }); next[f.key] = { shown: true, tries: 3 }; }
+    for (const f of fields) if (!locked(f.key)) { vals[f.key] = f.answer(s, { ...values, ...vals }); next[f.key] = { shown: true, tries: most }; }
     setV(vals); setState(next);
     setTimeout(() => onDone(vals, fields.filter((f) => next[f.key]?.shown).map((f) => f.key)), 700);
   }
@@ -475,14 +482,14 @@ function RecordForm({ fields, s, values, graph, onDone, onMiss }: {
                 {st?.ok && <span className="text-sm font-black text-[#047857]">✓ Right</span>}
                 {st?.shown && <span className="text-sm font-black text-amber-700">Answer shown</span>}
               </div>
-              {st?.hint && !st.ok && <p className="mt-1 text-xs font-bold text-amber-700">{st.shown ? `${st.hint} The answer is filled in.` : `${st.hint} (${3 - st.tries} ${3 - st.tries === 1 ? "try" : "tries"} left)`}</p>}
+              {st?.hint && !st.ok && <p className="mt-1 text-xs font-bold text-amber-700">{st.shown ? `${st.hint} The answer is filled in.` : `${st.hint} (${most - st.tries} ${most - st.tries === 1 ? "try" : "tries"} left)`}</p>}
             </div>
           );
         })}
         {!all && (
           <div className="flex flex-wrap gap-2 pt-1">
             <button type="submit" className="min-h-[44px] rounded-xl bg-[#0E6E72] px-5 text-sm font-black text-white">Check</button>
-            <button type="button" onClick={showMe} className="min-h-[44px] rounded-xl px-3 text-xs font-black text-slate-500 underline decoration-dotted">Show me the answer</button>
+            {canShow && <button type="button" onClick={showMe} className="min-h-[44px] rounded-xl px-3 text-xs font-black text-slate-500 underline decoration-dotted">Show me the answer</button>}
           </div>
         )}
       </div>

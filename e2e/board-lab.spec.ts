@@ -33,6 +33,10 @@ test("an experiment goes on the board and learners can try it", async ({ browser
   await lab.getByLabel("Let learners try it").check();
   await expect(learner.getByRole("dialog", { name: /Experiment: Simple Pendulum/ })).toBeVisible({ timeout: 20_000 });
   await expect(learner.getByRole("group", { name: /Lab bench/ })).toBeVisible({ timeout: 30_000 });
+  // Learners do it themselves: no "Do this step for me" until they've tried 5 times.
+  await expect(learner.getByRole("button", { name: "Do this step for me" })).toHaveCount(0);
+  for (let i = 0; i < 5; i++) await learner.getByRole("button", { name: "Done" }).click();
+  await expect(learner.getByText(/help unlocks/)).toHaveCount(0);
   // The teacher sees how far they've got, live.
   await learner.getByRole("button", { name: "Do this step for me" }).click();
   await lab.getByRole("button", { name: /Learners' progress/ }).click();

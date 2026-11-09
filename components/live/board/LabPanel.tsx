@@ -122,7 +122,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
   // changes (at most every couple of seconds), and now and then otherwise.
   const mine = useRef<{ v: number; last: number; key: string; timer: ReturnType<typeof setTimeout> | null; p: LabProgress | null }>({ v: 0, last: 0, key: "", timer: null, p: null });
   const reportCtx = useMemo<LabReport>(() => ({
-    name: myName,
+    name: myName, learner: !host,
     report: host || !live || !myId ? undefined : (prog) => {
       const m = mine.current, key = JSON.stringify({ ...prog, onStep: 0 }), now = Date.now();
       m.p = prog;
