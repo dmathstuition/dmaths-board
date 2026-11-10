@@ -11,7 +11,9 @@ const csp = [
   "worker-src 'self' blob:",
   "manifest-src 'self'",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.paystack.co https://script.google.com https://script.googleusercontent.com",
-  "frame-src https://checkout.paystack.com https://*.paystack.co https://www.youtube-nocookie.com", // the last: watching a video together
+  // Any https page: the board's web browser shows the page the teacher opens, in a sandboxed frame
+  // (components/live/board/WebBrowser.tsx). Also covers Paystack's checkout and YouTube's player.
+  "frame-src https:",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

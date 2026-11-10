@@ -25,6 +25,7 @@ import BuzzRewards from "@/components/live/board/BuzzRewards";
 import ClassChat from "@/components/live/board/ClassChat";
 import FocusTools from "@/components/live/board/FocusTools";
 import WatchTogether from "@/components/live/board/WatchTogether";
+import WebBrowser from "@/components/live/board/WebBrowser";
 import GroupBoards from "@/components/live/board/GroupBoards";
 import AskTeacher from "@/components/live/board/AskTeacher";
 import dynamic from "next/dynamic";
@@ -222,6 +223,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const [chatCount, setChatCount] = useState(0);
   const [focusOpen, setFocusOpen] = useState(false);     // lock screens, who's away, roll call (components/live/board/FocusTools)
   const [awayCount, setAwayCount] = useState(0);
+  const [webOpen, setWebOpen] = useState(false);         // the web browser (components/live/board/WebBrowser)
   const [videoOpen, setVideoOpen] = useState(false);     // watch a video together (components/live/board/WatchTogether)
   const [askOpen, setAskOpen] = useState(false);   // private questions (components/live/board/AskTeacher)
   const [askCount, setAskCount] = useState(0);
@@ -1297,11 +1299,12 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
               ["💬", "Class chat", "Chat and reactions, when you allow them", () => setChatOpen(true), chatCount],
               ["🎯", "Focus tools", "Lock screens, who's looking away, roll call", () => setFocusOpen(true), awayCount],
               ["🎬", "Watch a video together", "A YouTube video that follows your player", () => setVideoOpen(true), 0],
+              ["🌐", "Web browser", "Open a web page full screen, and show it to learners", () => setWebOpen(true), 0],
             ] as [string, string, string, () => void, number][]).map(([icon, label, hint, go, n]) => (
               <button key={label} type="button" onClick={() => { setToolsOpen(false); go(); }} title={hint} aria-label={n ? `${label}, ${n} waiting` : label}
                 className="relative flex min-h-[70px] flex-col items-center justify-center gap-1 rounded-xl bg-white p-2 text-center text-[11px] font-bold leading-tight text-ink/80 ring-1 ring-line transition hover:bg-[#F1F8F7] hover:ring-[#A9D6D3]">
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#E2F3F2] text-lg" aria-hidden>{icon}</span>
-                <span aria-hidden>{label.replace("Watch a video together", "Video").replace("Class chat", "Chat").replace("Focus tools", "Focus")}</span>
+                <span aria-hidden>{label.replace("Watch a video together", "Video").replace("Class chat", "Chat").replace("Focus tools", "Focus").replace("Web browser", "Web")}</span>
                 {n > 0 && <span aria-hidden className="absolute right-1 top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#C2451C] px-1 text-[11px] font-black text-white">{n}</span>}
               </button>
             ))}
@@ -1702,6 +1705,10 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
           onSnapshot={async (file) => { await addSlides([file]); }} keep={keep} />,
         full ? rootEl : document.body)
     : null;
+  // The web browser: the same kind of layer as the lab (it covers the whole screen).
+  const webLayer = !readOnly && !lessonId && sessionId && rootEl
+    ? createPortal(<WebBrowser sessionId={sessionId} host={host} live open={webOpen} onOpen={() => setWebOpen(true)} onClose={() => setWebOpen(false)} keep={keep} />, full ? rootEl : document.body)
+    : null;
   // Games and ready-made quizzes: the same kind of layer as the lab.
   async function launchQuiz(title: string, questions: unknown[]): Promise<string | null> {
     if (!sessionId || lessonId) return "Live quizzes run during a class.";
@@ -1740,6 +1747,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
           {toolsOpen && toolsPanel}
         </div>
         {labLayer}
+        {webLayer}
         {gamesLayer}
       </div>
     );
@@ -1756,6 +1764,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
       {activity && <ActivityDialog kind={activity} by={myId} idp={newId()} onClose={() => setActivity(null)} onDone={(items) => { insertItems(items); setActivity(null); setTool("select"); }} />}
       {replay && <Replay pages={pages.current} papers={papers} bgs={bgs} img={getImg} onClose={() => setReplay(false)} />}
       {labLayer}
+      {webLayer}
       {gamesLayer}
       <div className="flex items-center justify-between text-xs text-ink/50">
         <span aria-live="polite">{status}</span>

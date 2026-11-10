@@ -5,7 +5,7 @@
 // Messages only the teacher sends, plus anything marked `host: true`.
 export const HOST_EVENTS = new Set([
   "board-clear", "board-paper", "board-page", "board-delpage", "board-sync", "board-page-data",
-  "board-digest", "board-view", "board-widgets", "ab-round", "poll-round", "pulse-reset", "grp-plan", "voice", "exam", "lb-show", "ask-ack", "ask-reply", "ask-show", "buzz-round", "reward", "chat-state", "react-burst", "focus-lock", "rollcall", "watch",
+  "board-digest", "board-view", "board-widgets", "ab-round", "poll-round", "pulse-reset", "grp-plan", "voice", "exam", "lb-show", "ask-ack", "ask-reply", "ask-show", "buzz-round", "reward", "chat-state", "react-burst", "focus-lock", "rollcall", "watch", "web-share",
 ]);
 export const needsSignature = (event: string, payload: any) => HOST_EVENTS.has(event) || payload?.host === true;
 
