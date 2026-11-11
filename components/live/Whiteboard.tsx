@@ -72,7 +72,7 @@ const STAMP_LOOK: Record<StampId, { label: string; bg: string; icon: BoardIconNa
   star: { label: "Star", bg: "#EAB308", icon: "stamp" }, heart: { label: "Heart", bg: "#EC4899", icon: "heart" },
   smiley: { label: "Smiley", bg: "#F59E0B", icon: "smiley" }, question: { label: "Question", bg: "#0E6E72", icon: "question" },
 };
-type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "bearing" | "graph" | "calc" | "numberLine" | "geoboard" | "balance" | "chart" | "ptable" | "circuit" | "labels"
+type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "bearing" | "graph" | "calc" | "numberLine" | "geoboard" | "balance" | "chart" | "ptable" | "circuit" | "labels" | "transform" | "atom" | "sort"
   | "clock" | "fractions" | "hundred" | "placeValue" | "wordCard" | "sentence" | "spell" | "groups" | "spotlight";
 // The class-tools panel, grouped so the host finds things fast.
 const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: string; icon: BoardIconName }[] }[] = [
@@ -89,6 +89,7 @@ const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: 
     { k: "geoboard", label: "Geoboard", hint: "Pegs and bands: area, perimeter, angles, symmetry", icon: "geoboard" },
     { k: "balance", label: "Equation balance", hint: "Do the same to both sides", icon: "balance" },
     { k: "chart", label: "Chart maker", hint: "Bar, pie, line, histogram — with mean, median, mode, range", icon: "chart" },
+    { k: "transform", label: "Transformations", hint: "Reflect, rotate, translate and enlarge a shape on a grid", icon: "transform" },
     { k: "fractions", label: "Fraction wall", hint: "Shade and compare", icon: "fractions" },
     { k: "hundred", label: "Hundred square", hint: "Patterns and multiples", icon: "hundred" },
     { k: "placeValue", label: "Place value", hint: "Digits in columns", icon: "placevalue" },
@@ -98,6 +99,7 @@ const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: 
     { k: "ptable", label: "Periodic table", hint: "Tap an element; colour by family; hide names for a quiz", icon: "ptable" },
     { k: "circuit", label: "Circuit builder", hint: "Cells, bulbs, switches and meters, with readings", icon: "circuit" },
     { k: "labels", label: "Label the diagram", hint: "Cells, heart, flower, Bunsen burner — cover the names", icon: "label" },
+    { k: "atom", label: "Atom builder", hint: "Add protons, neutrons and electrons; atoms, ions and isotopes", icon: "atom" },
   ] },
   { title: "English", items: [
     { k: "wordCard", label: "Word card", hint: "Word, class, meaning", icon: "wordcard" },
@@ -111,6 +113,7 @@ const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: 
     { k: "groups", label: "Group maker", hint: "Random groups", icon: "groups" },
     { k: "spotlight", label: "Spotlight", hint: "Focus on one part", icon: "spotlight" },
     { k: "shade", label: "Screen shade", hint: "Reveal step by step", icon: "shade" },
+    { k: "sort", label: "Card sort", hint: "Sort cards under headings; ready-made sets or write your own", icon: "sort" },
   ] },
 ];
 const SHAPES: Tool[] = SHAPE_TOOLS;
