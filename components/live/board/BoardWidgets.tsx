@@ -19,6 +19,7 @@ import { CircuitPanel, LabelPanel, PeriodicPanel } from "@/components/live/board
 import { AtomPanel, SortPanel, TransformPanel } from "@/components/live/board/LessonTools";
 import { TimesSquarePanel } from "@/components/live/board/TimesTables";
 import { BalancerPanel, FoodWebPanel, RayPanel } from "@/components/live/board/ScienceMore";
+import { AnglesPanel, BarPanel, ChancePanel, ColumnPanel, MachinePanel } from "@/components/live/board/MathsMore";
 
 // The class tools that sit on top of the board: timer, dice, name picker,
 // screen shade, ruler and protractor. Only the host can change them; every
@@ -49,6 +50,11 @@ export default function BoardWidgets({ w, host, onChange, boxW, names, onDraw, m
       {w.geoboard.on && <GeoboardPanel s={w.geoboard} host={host} boxW={boxW} onChange={(geoboard, final) => onChange({ ...w, geoboard }, final)} />}
       {w.balance.on && <BalancePanel s={w.balance} host={host} boxW={boxW} onChange={(balance, final) => onChange({ ...w, balance }, final)} />}
       {w.chart.on && <ChartPanel s={w.chart} host={host} boxW={boxW} onChange={(chart, final) => onChange({ ...w, chart }, final)} />}
+      {w.column.on && <ColumnPanel s={w.column} host={host} boxW={boxW} onChange={(column, final) => onChange({ ...w, column }, final)} />}
+      {w.barmodel.on && <BarPanel s={w.barmodel} host={host} boxW={boxW} onChange={(barmodel, final) => onChange({ ...w, barmodel }, final)} />}
+      {w.machine.on && <MachinePanel s={w.machine} host={host} boxW={boxW} onChange={(machine, final) => onChange({ ...w, machine }, final)} />}
+      {w.chance.on && <ChancePanel s={w.chance} host={host} boxW={boxW} onChange={(chance, final) => onChange({ ...w, chance }, final)} />}
+      {w.angles.on && <AnglesPanel s={w.angles} host={host} boxW={boxW} onChange={(angles, final) => onChange({ ...w, angles }, final)} />}
       {w.balancer.on && <BalancerPanel s={w.balancer} host={host} boxW={boxW} onChange={(balancer, final) => onChange({ ...w, balancer }, final)} />}
       {w.rays.on && <RayPanel s={w.rays} host={host} boxW={boxW} onChange={(rays, final) => onChange({ ...w, rays }, final)} />}
       {w.foodweb.on && <FoodWebPanel s={w.foodweb} host={host} boxW={boxW} onChange={(foodweb, final) => onChange({ ...w, foodweb }, final)} />}

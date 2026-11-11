@@ -73,7 +73,7 @@ const STAMP_LOOK: Record<StampId, { label: string; bg: string; icon: BoardIconNa
   star: { label: "Star", bg: "#EAB308", icon: "stamp" }, heart: { label: "Heart", bg: "#EC4899", icon: "heart" },
   smiley: { label: "Smiley", bg: "#F59E0B", icon: "smiley" }, question: { label: "Question", bg: "#0E6E72", icon: "question" },
 };
-type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "bearing" | "graph" | "calc" | "numberLine" | "geoboard" | "balance" | "chart" | "ptable" | "circuit" | "labels" | "transform" | "atom" | "sort" | "tsquare" | "balancer" | "rays" | "foodweb"
+type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "bearing" | "graph" | "calc" | "numberLine" | "geoboard" | "balance" | "chart" | "ptable" | "circuit" | "labels" | "transform" | "atom" | "sort" | "tsquare" | "balancer" | "rays" | "foodweb" | "column" | "barmodel" | "machine" | "chance" | "angles"
   | "clock" | "fractions" | "hundred" | "placeValue" | "wordCard" | "sentence" | "spell" | "groups" | "spotlight";
 // The class-tools panel, grouped so the host finds things fast.
 const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: string; icon: BoardIconName }[] }[] = [
@@ -92,6 +92,11 @@ const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: 
     { k: "chart", label: "Chart maker", hint: "Bar, pie, line, histogram — with mean, median, mode, range", icon: "chart" },
     { k: "tsquare", label: "Times-table square", hint: "Tap a fact, light up a table, or hide the answers for a quiz", icon: "tsquare" },
     { k: "transform", label: "Transformations", hint: "Reflect, rotate, translate and enlarge a shape on a grid", icon: "transform" },
+    { k: "column", label: "Column methods", hint: "Add, subtract, long multiplication and long division, a step at a time", icon: "column" },
+    { k: "barmodel", label: "Bar model", hint: "Bars for ratio, fraction and percentage problems", icon: "barmodel" },
+    { k: "machine", label: "Function machine", hint: "A number in, a rule, a number out; hide any one", icon: "machine" },
+    { k: "chance", label: "Probability", hint: "Coin, dice and spinner: watch the tally build", icon: "chance" },
+    { k: "angles", label: "Angle facts", hint: "Drag a triangle or parallel lines and see the angles", icon: "angles" },
     { k: "fractions", label: "Fraction wall", hint: "Shade and compare", icon: "fractions" },
     { k: "hundred", label: "Hundred square", hint: "Patterns and multiples", icon: "hundred" },
     { k: "placeValue", label: "Place value", hint: "Digits in columns", icon: "placevalue" },

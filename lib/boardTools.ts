@@ -6,6 +6,7 @@ import { isSolid, type SolidKind } from "@/lib/solids";
 import { DEFAULT_BLOCKS, cleanBlocks, type BlocksState } from "@/lib/mathBlocks";
 import { DEFAULT_ATOM, DEFAULT_SORT, DEFAULT_TRANSFORM, cleanAtom, cleanSort, cleanTransform, type AtomState, type SortState, type TransformState } from "@/lib/lessonTools";
 import { DEFAULT_SQUARE, cleanSquare, type SquareState } from "@/lib/tablesDrill";
+import { DEFAULT_ANGLES, DEFAULT_BAR, DEFAULT_CHANCE, DEFAULT_COLUMN, DEFAULT_MACHINE, cleanAngles, cleanBar, cleanChance, cleanColumn, cleanMachine, type AngleState, type BarState, type ChanceState, type ColumnState, type MachineState } from "@/lib/mathsMore";
 import { DEFAULT_BALANCER, DEFAULT_FOODWEB, DEFAULT_RAYS, cleanBalancer, cleanFoodWeb, cleanRays, type BalancerState, type FoodWebState, type RayState } from "@/lib/scienceMore";
 import { DEFAULT_CIRCUIT, DEFAULT_LABELS, DEFAULT_PTABLE, cleanCircuit, cleanLabels, cleanPTable, type CircuitState, type LabelState, type PTableState } from "@/lib/scienceTools";
 import { DEFAULT_BALANCE, DEFAULT_CHART, DEFAULT_GEO, cleanBalance, cleanChart, cleanGeo, type BalanceState, type ChartState, type GeoState } from "@/lib/mathTools";
@@ -78,6 +79,11 @@ export type Widgets = {
   balancer: BalancerState; // the equation balancer (lib/scienceMore.ts)
   rays: RayState;        // ray diagrams
   foodweb: FoodWebState; // the food web builder
+  column: ColumnState;   // column methods, a step at a time (lib/mathsMore.ts)
+  barmodel: BarState;    // the bar model
+  machine: MachineState; // the function machine
+  chance: ChanceState;   // coin, dice and spinner
+  angles: AngleState;    // angle facts
 };
 
 export const DEFAULT_WIDGETS: Widgets = {
@@ -105,6 +111,7 @@ export const DEFAULT_WIDGETS: Widgets = {
   ptable: DEFAULT_PTABLE, circuit: DEFAULT_CIRCUIT, labels: DEFAULT_LABELS,
   transform: DEFAULT_TRANSFORM, atom: DEFAULT_ATOM, sort: DEFAULT_SORT, tsquare: DEFAULT_SQUARE,
   balancer: DEFAULT_BALANCER, rays: DEFAULT_RAYS, foodweb: DEFAULT_FOODWEB,
+  column: DEFAULT_COLUMN, barmodel: DEFAULT_BAR, machine: DEFAULT_MACHINE, chance: DEFAULT_CHANCE, angles: DEFAULT_ANGLES,
 };
 
 export const WORD_KINDS = ["noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection"] as const;
@@ -161,6 +168,7 @@ export function cleanWidgets(v: unknown): Widgets {
     ptable: cleanPTable(w?.ptable), circuit: cleanCircuit(w?.circuit), labels: cleanLabels(w?.labels),
     transform: cleanTransform(w?.transform), atom: cleanAtom(w?.atom), sort: cleanSort(w?.sort), tsquare: cleanSquare(w?.tsquare),
     balancer: cleanBalancer(w?.balancer), rays: cleanRays(w?.rays), foodweb: cleanFoodWeb(w?.foodweb),
+    column: cleanColumn(w?.column), barmodel: cleanBar(w?.barmodel), machine: cleanMachine(w?.machine), chance: cleanChance(w?.chance), angles: cleanAngles(w?.angles),
   };
 }
 
