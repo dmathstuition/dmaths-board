@@ -149,7 +149,7 @@ export function solveCircuit(c: Pick<CircuitState, "cells" | "closed" | "branche
 
 // ═══ Label the diagram ════════════════════════════════════════════════════
 // Each label points at a place on a 600 × 360 drawing (components/live/board/ScienceTools).
-export type DiagramId = "animal-cell" | "plant-cell" | "heart" | "flower" | "bunsen";
+export type DiagramId = "animal-cell" | "plant-cell" | "heart" | "flower" | "bunsen" | "digestion" | "eye" | "leaf" | "skeleton" | "tooth";
 export type DLabel = { name: string; note: string; at: [number, number]; side: "l" | "r" };
 export const DIAGRAMS: Record<DiagramId, { title: string; subject: string; labels: DLabel[] }> = {
   "animal-cell": { title: "Animal cell", subject: "Biology", labels: [
@@ -199,6 +199,63 @@ export const DIAGRAMS: Record<DiagramId, { title: string; subject: string; label
     { name: "Air hole", note: "Open: a hot blue flame. Closed: a yellow safety flame.", at: [300, 272], side: "l" },
     { name: "Gas tube", note: "Brings gas from the gas tap.", at: [222, 302], side: "l" },
     { name: "Base", note: "Heavy, so the burner stands steady.", at: [352, 322], side: "r" },
+  ] },
+  digestion: { title: "Digestive system", subject: "Biology", labels: [
+    { name: "Mouth", note: "Teeth break food up; saliva starts to digest starch.", at: [312, 36], side: "r" },
+    { name: "Oesophagus", note: "The gullet: muscles squeeze food down to the stomach.", at: [297, 82], side: "l" },
+    { name: "Liver", note: "Makes bile, which breaks fat into tiny droplets.", at: [238, 140], side: "l" },
+    { name: "Stomach", note: "Churns food with acid and enzymes that digest protein.", at: [342, 148], side: "r" },
+    { name: "Pancreas", note: "Makes enzymes that digest starch, protein and fat.", at: [346, 199], side: "r" },
+    { name: "Small intestine", note: "Digestion finishes; food is absorbed into the blood.", at: [340, 266], side: "r" },
+    { name: "Large intestine", note: "Absorbs water from what is left.", at: [231, 264], side: "l" },
+    { name: "Rectum", note: "Stores the waste (faeces) until it leaves the body.", at: [297, 324], side: "l" },
+    { name: "Anus", note: "The opening where the waste leaves the body.", at: [303, 342], side: "r" },
+  ] },
+  eye: { title: "Eye", subject: "Biology", labels: [
+    { name: "Ciliary muscle", note: "Changes the shape of the lens to focus near or far.", at: [246, 136], side: "l" },
+    { name: "Iris", note: "The coloured ring: it makes the pupil bigger or smaller.", at: [229, 148], side: "l" },
+    { name: "Cornea", note: "The clear front window: it bends most of the light.", at: [201, 172], side: "l" },
+    { name: "Pupil", note: "The hole that lets light into the eye.", at: [232, 181], side: "l" },
+    { name: "Lens", note: "Fine-focuses the light onto the retina.", at: [251, 197], side: "l" },
+    { name: "Sclera", note: "The tough white outer coat that protects the eye.", at: [397, 101], side: "r" },
+    { name: "Vitreous humour", note: "Clear jelly that keeps the eyeball in shape.", at: [330, 168], side: "r" },
+    { name: "Retina", note: "Light-sensitive cells: this is where the image forms.", at: [421, 176], side: "r" },
+    { name: "Optic nerve", note: "Carries the signals from the retina to the brain.", at: [440, 216], side: "r" },
+  ] },
+  leaf: { title: "Leaf (cut across)", subject: "Biology", labels: [
+    { name: "Waxy cuticle", note: "Waterproof layer: stops the leaf losing too much water.", at: [182, 48], side: "l" },
+    { name: "Upper epidermis", note: "Thin and clear, so light passes through to the cells below.", at: [420, 65], side: "r" },
+    { name: "Chloroplast", note: "Contains chlorophyll, which traps light for photosynthesis.", at: [392, 104], side: "r" },
+    { name: "Palisade cell", note: "Tall cells packed with chloroplasts: most photosynthesis happens here.", at: [185, 124], side: "l" },
+    { name: "Spongy cell", note: "Loosely packed, so gases can move between the cells.", at: [400, 180], side: "r" },
+    { name: "Vein", note: "Xylem brings water; phloem carries sugar away.", at: [258, 206], side: "l" },
+    { name: "Air space", note: "Lets carbon dioxide reach the cells and oxygen leave.", at: [366, 214], side: "r" },
+    { name: "Guard cell", note: "A pair of them opens and closes each stoma.", at: [316, 270], side: "r" },
+    { name: "Lower epidermis", note: "The bottom layer, where most of the stomata are.", at: [192, 274], side: "l" },
+    { name: "Stoma", note: "A tiny hole: gases go in and out, and water vapour escapes.", at: [301, 281], side: "r" },
+  ] },
+  skeleton: { title: "Skeleton", subject: "Biology", labels: [
+    { name: "Skull", note: "The cranium: it protects the brain.", at: [286, 38], side: "l" },
+    { name: "Collar bone", note: "The clavicle: it joins the arm to the body.", at: [278, 82], side: "l" },
+    { name: "Ribs", note: "A cage that protects the heart and lungs.", at: [324, 112], side: "r" },
+    { name: "Upper arm bone", note: "The humerus, from shoulder to elbow.", at: [256, 118], side: "l" },
+    { name: "Backbone", note: "The spine: it holds the body up and protects the spinal cord.", at: [301, 162], side: "r" },
+    { name: "Lower arm bones", note: "The radius and the ulna, from elbow to wrist.", at: [246, 182], side: "l" },
+    { name: "Hip bone (pelvis)", note: "Supports the body and joins the legs to the spine.", at: [318, 196], side: "r" },
+    { name: "Thigh bone", note: "The femur: the longest and strongest bone in the body.", at: [283, 238], side: "l" },
+    { name: "Kneecap", note: "The patella: it protects the knee joint.", at: [280, 272], side: "l" },
+    { name: "Shin bones", note: "The tibia and the fibula, from knee to ankle.", at: [320, 306], side: "r" },
+  ] },
+  tooth: { title: "Tooth", subject: "Biology", labels: [
+    { name: "Enamel", note: "The hardest substance in the body: it protects the tooth.", at: [244, 122], side: "l" },
+    { name: "Crown", note: "The part of the tooth you can see above the gum.", at: [384, 140], side: "r" },
+    { name: "Dentine", note: "Softer than enamel: it makes up most of the tooth.", at: [265, 160], side: "l" },
+    { name: "Pulp cavity", note: "The soft centre, holding the nerves and blood vessels.", at: [305, 162], side: "r" },
+    { name: "Gum", note: "Covers the jawbone and seals round the tooth.", at: [214, 197], side: "l" },
+    { name: "Nerve and vessels", note: "Nerves feel hot, cold and pain; blood brings food and oxygen.", at: [318, 250], side: "r" },
+    { name: "Cement", note: "A thin layer that fixes the root into the jaw.", at: [253, 262], side: "l" },
+    { name: "Root", note: "The part below the gum that holds the tooth in the jaw.", at: [384, 264], side: "r" },
+    { name: "Jawbone", note: "The bone the teeth are set into.", at: [404, 304], side: "r" },
   ] },
 };
 export const DIAGRAM_IDS = Object.keys(DIAGRAMS) as DiagramId[];

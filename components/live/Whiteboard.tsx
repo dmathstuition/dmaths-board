@@ -73,7 +73,7 @@ const STAMP_LOOK: Record<StampId, { label: string; bg: string; icon: BoardIconNa
   star: { label: "Star", bg: "#EAB308", icon: "stamp" }, heart: { label: "Heart", bg: "#EC4899", icon: "heart" },
   smiley: { label: "Smiley", bg: "#F59E0B", icon: "smiley" }, question: { label: "Question", bg: "#0E6E72", icon: "question" },
 };
-type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "bearing" | "graph" | "calc" | "numberLine" | "geoboard" | "balance" | "chart" | "ptable" | "circuit" | "labels" | "transform" | "atom" | "sort" | "tsquare" | "balancer" | "rays" | "foodweb" | "column" | "barmodel" | "machine" | "chance" | "angles"
+type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "bearing" | "graph" | "calc" | "numberLine" | "geoboard" | "balance" | "chart" | "ptable" | "circuit" | "labels" | "transform" | "atom" | "sort" | "tsquare" | "balancer" | "rays" | "foodweb" | "column" | "barmodel" | "machine" | "chance" | "angles" | "particles" | "ph" | "forces"
   | "clock" | "fractions" | "hundred" | "placeValue" | "wordCard" | "sentence" | "spell" | "groups" | "spotlight";
 // The class-tools panel, grouped so the host finds things fast.
 const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: string; icon: BoardIconName }[] }[] = [
@@ -105,11 +105,14 @@ const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: 
   { title: "Science", items: [
     { k: "ptable", label: "Periodic table", hint: "Tap an element; colour by family; hide names for a quiz", icon: "ptable" },
     { k: "circuit", label: "Circuit builder", hint: "Cells, bulbs, switches and meters, with readings", icon: "circuit" },
-    { k: "labels", label: "Label the diagram", hint: "Cells, heart, flower, Bunsen burner — cover the names", icon: "label" },
+    { k: "labels", label: "Label the diagram", hint: "Cells, heart, eye, digestion, skeleton and more — cover the names", icon: "label" },
     { k: "atom", label: "Atom builder", hint: "Add protons, neutrons and electrons; atoms, ions and isotopes", icon: "atom" },
     { k: "balancer", label: "Chemical equations", hint: "Change the numbers until the atoms match on both sides", icon: "balancer" },
     { k: "rays", label: "Ray diagrams", hint: "Move an object in front of a lens or mirror and see the image", icon: "rays" },
     { k: "foodweb", label: "Food web", hint: "Draw who eats what, then take one out and see what changes", icon: "foodweb" },
+    { k: "particles", label: "Particle model", hint: "Solid, liquid and gas particles that speed up as you heat them", icon: "particles" },
+    { k: "ph", label: "pH scale", hint: "Indicator colours, acids and alkalis, everyday examples", icon: "ph" },
+    { k: "forces", label: "Forces", hint: "Set the forces on an object and see the resultant", icon: "forces" },
   ] },
   { title: "English", items: [
     { k: "wordCard", label: "Word card", hint: "Word, class, meaning", icon: "wordcard" },

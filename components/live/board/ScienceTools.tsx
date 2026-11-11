@@ -325,6 +325,84 @@ function Drawing({ id }: { id: DiagramId }) {
       </g>
     );
   }
+  if (id === "digestion") return (
+    <g>
+      <ellipse cx={300} cy={36} rx={18} ry={9} fill="#FDA4AF" stroke="#9F1239" strokeWidth={2} /><path d="M286,36 H314" stroke="#9F1239" strokeWidth={1.5} />
+      <rect x={294} y={44} width={12} height={74} fill="#FCA5A5" stroke="#9F1239" strokeWidth={2} />
+      <path d="M292,118 C262,104 214,112 206,140 C202,158 232,170 262,166 C282,162 294,146 292,118 Z" fill="#B45309" stroke="#78350F" strokeWidth={2} />
+      <path d="M300,112 C340,104 372,128 366,162 C362,188 332,196 312,184 C300,176 302,150 300,112 Z" fill="#FB923C" stroke="#9A3412" strokeWidth={2} />
+      <ellipse cx={326} cy={201} rx={30} ry={8} transform="rotate(-8 326 201)" fill="#FDE68A" stroke="#A16207" strokeWidth={2} />
+      <path d="M314,186 C300,206 270,214 262,240" fill="none" stroke="#9D174D" strokeWidth={9} strokeLinecap="round" /><path d="M314,186 C300,206 270,214 262,240" fill="none" stroke="#F9A8D4" strokeWidth={5} strokeLinecap="round" />
+      {([["#9A6B43", 20], ["#E7B98F", 14]] as const).map(([c, w]) => <path key={c} d="M232,304 V228 H368 V298 Q368,314 346,314 H300 V334" fill="none" stroke={c} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" />)}
+      {([["#9D174D", 13], ["#F9A8D4", 9]] as const).map(([c, w]) => <path key={c} d="M262,246 H338 Q350,246 350,256 Q350,266 338,266 H262 Q250,266 250,276 Q250,286 262,286 H338 Q350,286 350,294" fill="none" stroke={c} strokeWidth={w} strokeLinecap="round" />)}
+      <circle cx={300} cy={342} r={4} fill="#0B1220" />
+    </g>
+  );
+  if (id === "eye") return (
+    <g>
+      <circle cx={318} cy={180} r={112} fill="#F8FAFC" stroke="#0B1220" strokeWidth={2} />
+      <circle cx={318} cy={180} r={103} fill="#E0F2FE" stroke="#CBD5E1" strokeWidth={1} />
+      <path d="M300,77.6 A104,104 0 1 1 300,282.4" fill="none" stroke="#F97316" strokeWidth={5} />
+      <path d="M462,224 L420,204" stroke="#EAB308" strokeWidth={18} /><path d="M462,224 L420,204" stroke="#FEF08A" strokeWidth={10} />
+      <path d="M221,125 Q172,180 221,235" fill="#BAE6FD" fillOpacity={0.55} stroke="#0284C7" strokeWidth={3.5} />
+      <path d="M226,131 L232,163 M232,199 L226,229" stroke="#92400E" strokeWidth={8} strokeLinecap="round" />
+      <ellipse cx={252} cy={180} rx={13} ry={31} fill="#FEF9C3" stroke="#A16207" strokeWidth={2.5} />
+      {[136, 224].map((y) => <g key={y}><path d={`M246,${y} L251,${y < 180 ? 150 : 210}`} stroke="#64748B" strokeWidth={1.5} /><ellipse cx={246} cy={y} rx={8} ry={10} fill="#FB7185" stroke="#9F1239" strokeWidth={2} /></g>)}
+      <path d="M150,150 H196 M150,180 H196 M150,210 H196" stroke="#F59E0B" strokeWidth={1.5} strokeDasharray="5 5" opacity={0.7} />
+    </g>
+  );
+  if (id === "leaf") {
+    const spongy: [number, number, number][] = [[192, 180, 17], [232, 182, 15], [190, 226, 17], [228, 238, 14], [318, 178, 17], [358, 190, 16], [400, 180, 17], [336, 230, 15], [380, 238, 16], [412, 224, 13], [296, 240, 12]];
+    return (
+      <g>
+        <rect x={170} y={52} width={260} height={234} fill="#fff" stroke="#166534" strokeWidth={2} />
+        <rect x={170} y={44} width={260} height={8} fill="#FDE68A" stroke="#A16207" strokeWidth={1.5} />
+        {Array.from({ length: 6 }, (_, i) => <rect key={i} x={170 + (i * 260) / 6} y={52} width={260 / 6} height={26} fill="#D9F99D" stroke="#4D7C0F" strokeWidth={1.5} />)}
+        {Array.from({ length: 9 }, (_, i) => { const x = 170 + (i * 260) / 9; return <g key={i}><rect x={x + 1} y={79} width={260 / 9 - 2} height={78} rx={8} fill="#86EFAC" stroke="#166534" strokeWidth={1.5} />{[92, 104, 124, 142].map((y, k) => <ellipse key={y} cx={x + (k % 2 ? 19 : 10)} cy={y} rx={4.5} ry={3} fill="#15803D" />)}</g>; })}
+        {spongy.map(([x, y, r], i) => <g key={i}><circle cx={x} cy={y} r={r} fill="#BBF7D0" stroke="#166534" strokeWidth={1.5} /><ellipse cx={x - 4} cy={y - 3} rx={4} ry={2.6} fill="#15803D" /><ellipse cx={x + 5} cy={y + 5} rx={4} ry={2.6} fill="#15803D" /></g>)}
+        <circle cx={270} cy={206} r={22} fill="#FEF3C7" stroke="#92400E" strokeWidth={2} /><path d="M252,206 H288" stroke="#92400E" strokeWidth={1.5} />
+        {[[262, 197], [272, 195], [280, 199]].map(([x, y]) => <circle key={x} cx={x} cy={y} r={3.5} fill="#fff" stroke="#1D4ED8" strokeWidth={1.5} />)}{[[260, 214], [270, 217], [280, 214]].map(([x, y]) => <circle key={x} cx={x} cy={y} r={2.6} fill="#F97316" />)}
+        {[170, 198, 226, 254, 318, 346, 374, 402].map((x) => <rect key={x} x={x} y={262} width={28} height={24} fill="#D9F99D" stroke="#4D7C0F" strokeWidth={1.5} />)}
+        {[286, 314].map((x) => <ellipse key={x} cx={x} cy={274} rx={8} ry={12} fill="#4ADE80" stroke="#166534" strokeWidth={2} />)}
+        <path d="M300,286 V306 M294,300 L300,308 L306,300" fill="none" stroke="#64748B" strokeWidth={1.5} />
+      </g>
+    );
+  }
+  if (id === "skeleton") {
+    // Each bone is drawn twice: a dark outline, then the pale bone inside it.
+    const side = (k: number) => (k === 1 ? undefined : "translate(600,0) scale(-1,1)");
+    const limbs: [string, number][] = [["M298,78 L264,84", 5], ["M262,88 L250,150", 8], ["M249,154 L240,212", 4], ["M255,154 L249,212", 4], ["M286,210 L280,266", 9], ["M279,279 L279,334", 7], ["M287,280 L286,334", 3.5], ["M279,339 L265,342", 5]];
+    return (
+      <g strokeLinecap="round">
+        <path d="M300,64 V190" stroke="#334155" strokeWidth={9} /><path d="M300,64 V190" stroke="#F8FAFC" strokeWidth={5.5} strokeDasharray="6 3" strokeLinecap="butt" />
+        <circle cx={300} cy={42} r={20} fill="#F8FAFC" stroke="#334155" strokeWidth={2.5} /><rect x={291} y={56} width={18} height={10} rx={3} fill="#F8FAFC" stroke="#334155" strokeWidth={2} />
+        <circle cx={293} cy={40} r={3.5} fill="#334155" /><circle cx={307} cy={40} r={3.5} fill="#334155" />
+        {Array.from({ length: 5 }, (_, k) => <g key={k}><ellipse cx={300} cy={100 + k * 13} rx={27 - k * 1.5} ry={7} fill="none" stroke="#334155" strokeWidth={4.5} /><ellipse cx={300} cy={100 + k * 13} rx={27 - k * 1.5} ry={7} fill="none" stroke="#F8FAFC" strokeWidth={2} /></g>)}
+        <path d="M276,186 C278,177 322,177 324,186 L318,208 C308,215 292,215 282,208 Z" fill="#F8FAFC" stroke="#334155" strokeWidth={2.5} strokeLinejoin="round" />
+        {[1, -1].map((k) => (
+          <g key={k} transform={side(k)}>
+            {limbs.map(([d, w]) => <path key={d} d={d} stroke="#334155" strokeWidth={w + 3} />)}
+            {limbs.map(([d, w]) => <path key={d} d={d} stroke="#F8FAFC" strokeWidth={w} />)}
+            <circle cx={243} cy={221} r={6} fill="#F8FAFC" stroke="#334155" strokeWidth={2} />
+            <circle cx={280} cy={272} r={5.5} fill="#F8FAFC" stroke="#334155" strokeWidth={2} />
+          </g>
+        ))}
+      </g>
+    );
+  }
+  if (id === "tooth") return (
+    <g>
+      <rect x={190} y={206} width={220} height={126} rx={10} fill="#FDE7C4" stroke="#B45309" strokeWidth={2} />
+      {[[204, 230], [222, 262], [206, 296], [238, 316], [368, 316], [392, 240], [380, 276], [398, 310]].map(([x, y]) => <circle key={`${x}-${y}`} cx={x} cy={y} r={2.5} fill="#D6A77A" />)}
+      <rect x={190} y={182} width={220} height={30} rx={8} fill="#FDA4AF" stroke="#9F1239" strokeWidth={2} />
+      <path d="M244,196 C232,150 236,96 262,84 C278,76 290,92 300,92 C310,92 322,76 338,84 C364,96 368,150 356,196 C352,240 346,290 334,318 C328,330 318,326 316,312 C314,286 308,250 300,250 C292,250 286,286 284,312 C282,326 272,330 266,318 C254,290 248,240 244,196 Z" fill="#FEF3C7" stroke="#A16207" strokeWidth={4} strokeLinejoin="round" />
+      <path d="M244,196 C232,150 236,96 262,84 C278,76 290,92 300,92 C310,92 322,76 338,84 C364,96 368,150 356,196 Z" fill="#fff" stroke="#334155" strokeWidth={2.5} strokeLinejoin="round" />
+      <path d="M258,196 C250,156 252,116 268,104 C280,98 290,108 300,108 C310,108 320,98 332,104 C348,116 350,156 342,196 C338,236 334,280 326,306 C322,300 318,262 300,240 C282,262 278,300 274,306 C266,280 262,236 258,196 Z" fill="#FCD34D" stroke="#B45309" strokeWidth={1.5} strokeLinejoin="round" />
+      <path d="M282,180 C278,150 284,128 300,128 C316,128 322,150 318,180 C316,214 320,262 322,290 C316,268 310,226 300,214 C290,226 284,268 278,290 C280,262 284,214 282,180 Z" fill="#FB7185" stroke="#9F1239" strokeWidth={1.5} strokeLinejoin="round" />
+      <path d="M294,148 C292,200 285,250 280,284" fill="none" stroke="#B91C1C" strokeWidth={1.6} /><path d="M306,148 C308,200 315,250 320,284" fill="none" stroke="#1D4ED8" strokeWidth={1.6} />
+      {[[86, 194], [202, 322]].map(([a, b]) => <path key={a} d={`M378,${a} H384 V${b} H378`} fill="none" stroke="#334155" strokeWidth={1.8} />)}
+    </g>
+  );
   return (
     <g>
       <rect x={196} y={296} width={94} height={12} rx={6} fill="#F59E0B" stroke="#92400E" strokeWidth={1.5} />

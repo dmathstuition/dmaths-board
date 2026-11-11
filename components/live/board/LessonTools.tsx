@@ -20,13 +20,13 @@ const field = "min-h-[32px] w-full rounded-lg bg-slate-50 px-2 text-xs font-bold
 const small = "text-[11px] font-black text-ink/60";
 const FONT = "Poppins, system-ui, sans-serif";
 
-export function Step({ label, value, min, max, onChange, show }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void; show?: string }) {
+export function Step({ label, value, min, max, onChange, show, by = 1 }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void; show?: string; by?: number }) {
   return (
     <span className={`flex items-center gap-1 ${small}`} role="group" aria-label={label}>
       <span className="min-w-[4.2rem]">{label}</span>
-      <button type="button" className={`${chip} w-8 px-0`} aria-label={`${label}: one less`} disabled={value <= min} onClick={() => onChange(value - 1)}>−</button>
-      <span className="w-7 text-center font-mono text-sm text-ink" aria-live="polite">{show ?? num(value)}</span>
-      <button type="button" className={`${chip} w-8 px-0`} aria-label={`${label}: one more`} disabled={value >= max} onClick={() => onChange(value + 1)}>+</button>
+      <button type="button" className={`${chip} w-8 px-0`} aria-label={`${label}: one less`} disabled={value <= min} onClick={() => onChange(Math.max(min, value - by))}>−</button>
+      <span className="min-w-[1.75rem] text-center font-mono text-sm text-ink" aria-live="polite">{show ?? num(value)}</span>
+      <button type="button" className={`${chip} w-8 px-0`} aria-label={`${label}: one more`} disabled={value >= max} onClick={() => onChange(Math.min(max, value + by))}>+</button>
     </span>
   );
 }

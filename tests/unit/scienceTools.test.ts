@@ -126,7 +126,7 @@ describe("circuit builder", () => {
 
 describe("label the diagram", () => {
   it("every diagram has labels with a name, a note and a place on the drawing", () => {
-    expect(DIAGRAM_IDS).toEqual(["animal-cell", "plant-cell", "heart", "flower", "bunsen"]);
+    expect(DIAGRAM_IDS).toEqual(["animal-cell", "plant-cell", "heart", "flower", "bunsen", "digestion", "eye", "leaf", "skeleton", "tooth"]);
     for (const id of DIAGRAM_IDS) {
       const d = DIAGRAMS[id];
       expect(d.labels.length, id).toBeGreaterThanOrEqual(5);

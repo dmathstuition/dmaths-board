@@ -20,6 +20,7 @@ import { AtomPanel, SortPanel, TransformPanel } from "@/components/live/board/Le
 import { TimesSquarePanel } from "@/components/live/board/TimesTables";
 import { BalancerPanel, FoodWebPanel, RayPanel } from "@/components/live/board/ScienceMore";
 import { AnglesPanel, BarPanel, ChancePanel, ColumnPanel, MachinePanel } from "@/components/live/board/MathsMore";
+import { ForcesPanel, ParticlePanel, PhPanel } from "@/components/live/board/SciencePlus";
 
 // The class tools that sit on top of the board: timer, dice, name picker,
 // screen shade, ruler and protractor. Only the host can change them; every
@@ -55,6 +56,9 @@ export default function BoardWidgets({ w, host, onChange, boxW, names, onDraw, m
       {w.machine.on && <MachinePanel s={w.machine} host={host} boxW={boxW} onChange={(machine, final) => onChange({ ...w, machine }, final)} />}
       {w.chance.on && <ChancePanel s={w.chance} host={host} boxW={boxW} onChange={(chance, final) => onChange({ ...w, chance }, final)} />}
       {w.angles.on && <AnglesPanel s={w.angles} host={host} boxW={boxW} onChange={(angles, final) => onChange({ ...w, angles }, final)} />}
+      {w.particles.on && <ParticlePanel s={w.particles} host={host} boxW={boxW} onChange={(particles, final) => onChange({ ...w, particles }, final)} />}
+      {w.ph.on && <PhPanel s={w.ph} host={host} boxW={boxW} onChange={(ph, final) => onChange({ ...w, ph }, final)} />}
+      {w.forces.on && <ForcesPanel s={w.forces} host={host} boxW={boxW} onChange={(forces, final) => onChange({ ...w, forces }, final)} />}
       {w.balancer.on && <BalancerPanel s={w.balancer} host={host} boxW={boxW} onChange={(balancer, final) => onChange({ ...w, balancer }, final)} />}
       {w.rays.on && <RayPanel s={w.rays} host={host} boxW={boxW} onChange={(rays, final) => onChange({ ...w, rays }, final)} />}
       {w.foodweb.on && <FoodWebPanel s={w.foodweb} host={host} boxW={boxW} onChange={(foodweb, final) => onChange({ ...w, foodweb }, final)} />}
