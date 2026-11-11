@@ -6,6 +6,7 @@ import { isSolid, type SolidKind } from "@/lib/solids";
 import { DEFAULT_BLOCKS, cleanBlocks, type BlocksState } from "@/lib/mathBlocks";
 import { DEFAULT_ATOM, DEFAULT_SORT, DEFAULT_TRANSFORM, cleanAtom, cleanSort, cleanTransform, type AtomState, type SortState, type TransformState } from "@/lib/lessonTools";
 import { DEFAULT_SQUARE, cleanSquare, type SquareState } from "@/lib/tablesDrill";
+import { DEFAULT_BALANCER, DEFAULT_FOODWEB, DEFAULT_RAYS, cleanBalancer, cleanFoodWeb, cleanRays, type BalancerState, type FoodWebState, type RayState } from "@/lib/scienceMore";
 import { DEFAULT_CIRCUIT, DEFAULT_LABELS, DEFAULT_PTABLE, cleanCircuit, cleanLabels, cleanPTable, type CircuitState, type LabelState, type PTableState } from "@/lib/scienceTools";
 import { DEFAULT_BALANCE, DEFAULT_CHART, DEFAULT_GEO, cleanBalance, cleanChart, cleanGeo, type BalanceState, type ChartState, type GeoState } from "@/lib/mathTools";
 
@@ -74,6 +75,9 @@ export type Widgets = {
   atom: AtomState;       // the atom builder
   sort: SortState;       // the card sort
   tsquare: SquareState;  // the times-table square (lib/tablesDrill.ts)
+  balancer: BalancerState; // the equation balancer (lib/scienceMore.ts)
+  rays: RayState;        // ray diagrams
+  foodweb: FoodWebState; // the food web builder
 };
 
 export const DEFAULT_WIDGETS: Widgets = {
@@ -100,6 +104,7 @@ export const DEFAULT_WIDGETS: Widgets = {
   geoboard: DEFAULT_GEO, balance: DEFAULT_BALANCE, chart: DEFAULT_CHART,
   ptable: DEFAULT_PTABLE, circuit: DEFAULT_CIRCUIT, labels: DEFAULT_LABELS,
   transform: DEFAULT_TRANSFORM, atom: DEFAULT_ATOM, sort: DEFAULT_SORT, tsquare: DEFAULT_SQUARE,
+  balancer: DEFAULT_BALANCER, rays: DEFAULT_RAYS, foodweb: DEFAULT_FOODWEB,
 };
 
 export const WORD_KINDS = ["noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection"] as const;
@@ -155,6 +160,7 @@ export function cleanWidgets(v: unknown): Widgets {
     geoboard: cleanGeo(w?.geoboard), balance: cleanBalance(w?.balance), chart: cleanChart(w?.chart),
     ptable: cleanPTable(w?.ptable), circuit: cleanCircuit(w?.circuit), labels: cleanLabels(w?.labels),
     transform: cleanTransform(w?.transform), atom: cleanAtom(w?.atom), sort: cleanSort(w?.sort), tsquare: cleanSquare(w?.tsquare),
+    balancer: cleanBalancer(w?.balancer), rays: cleanRays(w?.rays), foodweb: cleanFoodWeb(w?.foodweb),
   };
 }
 

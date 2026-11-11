@@ -20,7 +20,7 @@ const field = "min-h-[32px] w-full rounded-lg bg-slate-50 px-2 text-xs font-bold
 const small = "text-[11px] font-black text-ink/60";
 const FONT = "Poppins, system-ui, sans-serif";
 
-function Step({ label, value, min, max, onChange, show }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void; show?: string }) {
+export function Step({ label, value, min, max, onChange, show }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void; show?: string }) {
   return (
     <span className={`flex items-center gap-1 ${small}`} role="group" aria-label={label}>
       <span className="min-w-[4.2rem]">{label}</span>
