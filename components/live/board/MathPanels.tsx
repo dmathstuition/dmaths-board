@@ -35,7 +35,7 @@ export function Floating<T extends Panel>({ p, host, title, icon, width, onChang
   return (
     <section className="pointer-events-auto absolute z-[25] max-h-[96%] overflow-y-auto rounded-2xl bg-white text-ink shadow-2xl ring-1 ring-black/10"
       style={{ left: `${p.x * 100}%`, top: `${Math.min(p.y * 100, 96)}%`, width }} aria-label={title}>
-      <header onPointerDown={drag} className={`flex items-center gap-2 bg-[#0B1220] px-3 py-1.5 text-white ${host ? "cursor-move touch-none" : ""}`}>
+      <header onPointerDown={drag} className={`sticky top-0 z-10 flex items-center gap-2 bg-[#0B1220] px-3 py-1.5 text-white ${host ? "cursor-move touch-none" : ""}`}>
         <BoardIcon name={icon} className="h-4 w-4 text-sky-300" />
         <h3 className="flex-1 text-xs font-black uppercase tracking-[.14em]">{title}</h3>
         {host && <button type="button" onClick={() => onChange({ ...p, on: false }, true)} aria-label={`Close ${title}`} className="rounded p-1 hover:bg-white/15"><BoardIcon name="close" className="h-4 w-4" /></button>}

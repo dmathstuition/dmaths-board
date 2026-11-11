@@ -4,6 +4,7 @@
 
 import { isSolid, type SolidKind } from "@/lib/solids";
 import { DEFAULT_BLOCKS, cleanBlocks, type BlocksState } from "@/lib/mathBlocks";
+import { DEFAULT_BALANCE, DEFAULT_CHART, DEFAULT_GEO, cleanBalance, cleanChart, cleanGeo, type BalanceState, type ChartState, type GeoState } from "@/lib/mathTools";
 
 export type Timer = { seconds: number; endsAt: number | null; left: number | null; mode: "down" | "up"; startedAt: number | null };
 export type Placed = { on: boolean; x: number; y: number; rot: number }; // x,y = centre as a fraction of the board
@@ -60,6 +61,9 @@ export type Widgets = {
   solid: SolidState;
   blocks: BlocksState;
   bearing: BearingState;
+  geoboard: GeoState;   // pegs and bands (lib/mathTools.ts)
+  balance: BalanceState; // the equation balance
+  chart: ChartState;     // the chart maker
 };
 
 export const DEFAULT_WIDGETS: Widgets = {
@@ -83,6 +87,7 @@ export const DEFAULT_WIDGETS: Widgets = {
   solid: { on: false, x: 0.55, y: 0.04, shape: "cuboid", a: 6, b: 4, c: 3, yaw: 35, pitch: 20, net: false, facts: true },
   blocks: DEFAULT_BLOCKS,
   bearing: { on: false, x: 0.5, y: 0.03, mode: "bearing", b: 50, d: 50, back: false, parts: false, d1: 8, b1: 40, d2: 6, b2: 120, names: ["H", "A", "B"], step: 0, unit: "km" },
+  geoboard: DEFAULT_GEO, balance: DEFAULT_BALANCE, chart: DEFAULT_CHART,
 };
 
 export const WORD_KINDS = ["noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection"] as const;
@@ -135,6 +140,7 @@ export function cleanWidgets(v: unknown): Widgets {
     },
     blocks: cleanBlocks(w?.blocks),
     bearing: cleanBearing(w?.bearing),
+    geoboard: cleanGeo(w?.geoboard), balance: cleanBalance(w?.balance), chart: cleanChart(w?.chart),
   };
 }
 

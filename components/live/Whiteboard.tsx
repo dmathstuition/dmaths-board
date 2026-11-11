@@ -72,7 +72,7 @@ const STAMP_LOOK: Record<StampId, { label: string; bg: string; icon: BoardIconNa
   star: { label: "Star", bg: "#EAB308", icon: "stamp" }, heart: { label: "Heart", bg: "#EC4899", icon: "heart" },
   smiley: { label: "Smiley", bg: "#F59E0B", icon: "smiley" }, question: { label: "Question", bg: "#0E6E72", icon: "question" },
 };
-type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "bearing" | "graph" | "calc" | "numberLine"
+type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "bearing" | "graph" | "calc" | "numberLine" | "geoboard" | "balance" | "chart"
   | "clock" | "fractions" | "hundred" | "placeValue" | "wordCard" | "sentence" | "spell" | "groups" | "spotlight";
 // The class-tools panel, grouped so the host finds things fast.
 const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: string; icon: BoardIconName }[] }[] = [
@@ -86,6 +86,9 @@ const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: 
     { k: "bearing", label: "Bearings & distance", hint: "Back bearings, journeys, worked steps", icon: "compass" },
     { k: "solid", label: "3D shapes", hint: "Turn, volume, nets", icon: "solid" },
     { k: "blocks", label: "Maths blocks", hint: "Fraction bars, algebra tiles, counters", icon: "blocks" },
+    { k: "geoboard", label: "Geoboard", hint: "Pegs and bands: area, perimeter, angles, symmetry", icon: "geoboard" },
+    { k: "balance", label: "Equation balance", hint: "Do the same to both sides", icon: "balance" },
+    { k: "chart", label: "Chart maker", hint: "Bar, pie, line, histogram — with mean, median, mode, range", icon: "chart" },
     { k: "fractions", label: "Fraction wall", hint: "Shade and compare", icon: "fractions" },
     { k: "hundred", label: "Hundred square", hint: "Patterns and multiples", icon: "hundred" },
     { k: "placeValue", label: "Place value", hint: "Digits in columns", icon: "placevalue" },
