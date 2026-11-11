@@ -15,6 +15,7 @@ import { Compass, SolidPanel, type GeoDraw } from "@/components/live/board/Geome
 import { BlocksLayer, BlocksTray } from "@/components/live/board/MathBlocks";
 import { BearingsPanel } from "@/components/live/board/BearingsPanel";
 import { BalancePanel, ChartPanel, GeoboardPanel } from "@/components/live/board/MathTools";
+import { CircuitPanel, LabelPanel, PeriodicPanel } from "@/components/live/board/ScienceTools";
 
 // The class tools that sit on top of the board: timer, dice, name picker,
 // screen shade, ruler and protractor. Only the host can change them; every
@@ -45,6 +46,9 @@ export default function BoardWidgets({ w, host, onChange, boxW, names, onDraw, m
       {w.geoboard.on && <GeoboardPanel s={w.geoboard} host={host} boxW={boxW} onChange={(geoboard, final) => onChange({ ...w, geoboard }, final)} />}
       {w.balance.on && <BalancePanel s={w.balance} host={host} boxW={boxW} onChange={(balance, final) => onChange({ ...w, balance }, final)} />}
       {w.chart.on && <ChartPanel s={w.chart} host={host} boxW={boxW} onChange={(chart, final) => onChange({ ...w, chart }, final)} />}
+      {w.ptable.on && <PeriodicPanel s={w.ptable} host={host} boxW={boxW} onChange={(ptable, final) => onChange({ ...w, ptable }, final)} />}
+      {w.circuit.on && <CircuitPanel s={w.circuit} host={host} boxW={boxW} onChange={(circuit, final) => onChange({ ...w, circuit }, final)} />}
+      {w.labels.on && <LabelPanel s={w.labels} host={host} boxW={boxW} onChange={(labels, final) => onChange({ ...w, labels }, final)} />}
       {w.bearing.on && <BearingsPanel s={w.bearing} host={host} boxW={boxW} onChange={(bearing, final) => onChange({ ...w, bearing }, final)} />}
       {w.solid.on && <SolidPanel s={w.solid} host={host} boxW={boxW} onChange={(solid, final) => onChange({ ...w, solid }, final)} />}
       {w.compass.on && <Compass c={w.compass} host={host} onChange={(compass, final) => onChange({ ...w, compass }, final)} onDraw={(g) => onDraw?.(g)} />}

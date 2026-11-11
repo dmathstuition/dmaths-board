@@ -820,6 +820,10 @@ html { scroll-behavior: smooth; }
 @keyframes rewardPop { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
 .reward-pop { animation: rewardPop .45s cubic-bezier(.2,.9,.3,1.2); }
 @media (prefers-reduced-motion: reduce) { .reward-pop { animation: none; } }
+/* Current flowing round the circuit builder's wires (components/live/board/ScienceTools). */
+@keyframes circuitFlow { to { stroke-dashoffset: -24; } }
+.circuit-flow { stroke-dasharray: 6 18; stroke-linecap: round; animation: circuitFlow .7s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .circuit-flow { animation: none; } }
 /* A reaction floating up the screen (components/live/board/ClassChat). */
 @keyframes reactFloat { 0% { transform: translateY(0) scale(.6); opacity: 0; } 12% { transform: translateY(-6vh) scale(1.15); opacity: 1; } 100% { transform: translateY(-62vh) scale(1); opacity: 0; } }
 .react-float { animation: reactFloat 2.5s ease-out forwards; }

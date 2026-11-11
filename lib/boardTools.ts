@@ -4,6 +4,7 @@
 
 import { isSolid, type SolidKind } from "@/lib/solids";
 import { DEFAULT_BLOCKS, cleanBlocks, type BlocksState } from "@/lib/mathBlocks";
+import { DEFAULT_CIRCUIT, DEFAULT_LABELS, DEFAULT_PTABLE, cleanCircuit, cleanLabels, cleanPTable, type CircuitState, type LabelState, type PTableState } from "@/lib/scienceTools";
 import { DEFAULT_BALANCE, DEFAULT_CHART, DEFAULT_GEO, cleanBalance, cleanChart, cleanGeo, type BalanceState, type ChartState, type GeoState } from "@/lib/mathTools";
 
 export type Timer = { seconds: number; endsAt: number | null; left: number | null; mode: "down" | "up"; startedAt: number | null };
@@ -64,6 +65,9 @@ export type Widgets = {
   geoboard: GeoState;   // pegs and bands (lib/mathTools.ts)
   balance: BalanceState; // the equation balance
   chart: ChartState;     // the chart maker
+  ptable: PTableState;   // the periodic table (lib/scienceTools.ts)
+  circuit: CircuitState; // the circuit builder
+  labels: LabelState;    // label the diagram
 };
 
 export const DEFAULT_WIDGETS: Widgets = {
@@ -88,6 +92,7 @@ export const DEFAULT_WIDGETS: Widgets = {
   blocks: DEFAULT_BLOCKS,
   bearing: { on: false, x: 0.5, y: 0.03, mode: "bearing", b: 50, d: 50, back: false, parts: false, d1: 8, b1: 40, d2: 6, b2: 120, names: ["H", "A", "B"], step: 0, unit: "km" },
   geoboard: DEFAULT_GEO, balance: DEFAULT_BALANCE, chart: DEFAULT_CHART,
+  ptable: DEFAULT_PTABLE, circuit: DEFAULT_CIRCUIT, labels: DEFAULT_LABELS,
 };
 
 export const WORD_KINDS = ["noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection"] as const;
@@ -141,6 +146,7 @@ export function cleanWidgets(v: unknown): Widgets {
     blocks: cleanBlocks(w?.blocks),
     bearing: cleanBearing(w?.bearing),
     geoboard: cleanGeo(w?.geoboard), balance: cleanBalance(w?.balance), chart: cleanChart(w?.chart),
+    ptable: cleanPTable(w?.ptable), circuit: cleanCircuit(w?.circuit), labels: cleanLabels(w?.labels),
   };
 }
 

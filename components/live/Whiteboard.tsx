@@ -72,7 +72,7 @@ const STAMP_LOOK: Record<StampId, { label: string; bg: string; icon: BoardIconNa
   star: { label: "Star", bg: "#EAB308", icon: "stamp" }, heart: { label: "Heart", bg: "#EC4899", icon: "heart" },
   smiley: { label: "Smiley", bg: "#F59E0B", icon: "smiley" }, question: { label: "Question", bg: "#0E6E72", icon: "question" },
 };
-type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "bearing" | "graph" | "calc" | "numberLine" | "geoboard" | "balance" | "chart"
+type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "bearing" | "graph" | "calc" | "numberLine" | "geoboard" | "balance" | "chart" | "ptable" | "circuit" | "labels"
   | "clock" | "fractions" | "hundred" | "placeValue" | "wordCard" | "sentence" | "spell" | "groups" | "spotlight";
 // The class-tools panel, grouped so the host finds things fast.
 const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: string; icon: BoardIconName }[] }[] = [
@@ -93,6 +93,11 @@ const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: 
     { k: "hundred", label: "Hundred square", hint: "Patterns and multiples", icon: "hundred" },
     { k: "placeValue", label: "Place value", hint: "Digits in columns", icon: "placevalue" },
     { k: "clock", label: "Clock", hint: "Telling the time", icon: "clock" },
+  ] },
+  { title: "Science", items: [
+    { k: "ptable", label: "Periodic table", hint: "Tap an element; colour by family; hide names for a quiz", icon: "ptable" },
+    { k: "circuit", label: "Circuit builder", hint: "Cells, bulbs, switches and meters, with readings", icon: "circuit" },
+    { k: "labels", label: "Label the diagram", hint: "Cells, heart, flower, Bunsen burner — cover the names", icon: "label" },
   ] },
   { title: "English", items: [
     { k: "wordCard", label: "Word card", hint: "Word, class, meaning", icon: "wordcard" },
