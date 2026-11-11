@@ -298,7 +298,7 @@ export const SPIN_COLOURS = [{ name: "Red", colour: "#EF4444" }, { name: "Blue",
 export const MAX_TRIALS = 100_000, MAX_SLICES = 6;
 // slices: how many equal slices of the spinner each colour has. counts: the tally so far. last: what came up last. turn: goes up with every go (so screens can animate).
 export type ChanceState = Panel & { kind: ChanceKind; slices: number[]; counts: number[]; last: number; turn: number };
-export const DEFAULT_CHANCE: ChanceState = { on: false, x: 0.1, y: 0.05, kind: "spinner", slices: [2, 1, 1, 0], counts: [0, 0, 0, 0], last: -1, turn: 0 };
+export const DEFAULT_CHANCE: ChanceState = { on: false, x: 0.1, y: 0.05, kind: "spinner", slices: [2, 1, 1, 0], counts: [0, 0, 0], last: -1, turn: 0 }; // one count for each colour in use
 export type Outcome = { name: string; colour: string; num: number; den: number };
 export function outcomes(s: Pick<ChanceState, "kind" | "slices">): Outcome[] {
   if (s.kind === "coin") return [{ name: "Heads", colour: "#F59E0B", num: 1, den: 2 }, { name: "Tails", colour: "#64748B", num: 1, den: 2 }];
