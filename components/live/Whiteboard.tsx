@@ -22,6 +22,7 @@ import ExamMode from "@/components/live/board/ExamMode";
 import Leaderboard from "@/components/live/board/Leaderboard";
 import PulsePoll from "@/components/live/board/PulsePoll";
 import BuzzRewards from "@/components/live/board/BuzzRewards";
+import TablesDrill from "@/components/live/board/TimesTables";
 import ClassChat from "@/components/live/board/ClassChat";
 import FocusTools from "@/components/live/board/FocusTools";
 import WatchTogether from "@/components/live/board/WatchTogether";
@@ -72,7 +73,7 @@ const STAMP_LOOK: Record<StampId, { label: string; bg: string; icon: BoardIconNa
   star: { label: "Star", bg: "#EAB308", icon: "stamp" }, heart: { label: "Heart", bg: "#EC4899", icon: "heart" },
   smiley: { label: "Smiley", bg: "#F59E0B", icon: "smiley" }, question: { label: "Question", bg: "#0E6E72", icon: "question" },
 };
-type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "bearing" | "graph" | "calc" | "numberLine" | "geoboard" | "balance" | "chart" | "ptable" | "circuit" | "labels" | "transform" | "atom" | "sort"
+type ClassTool = "timer" | "dice" | "picker" | "shade" | "ruler" | "protractor" | "compass" | "solid" | "blocks" | "bearing" | "graph" | "calc" | "numberLine" | "geoboard" | "balance" | "chart" | "ptable" | "circuit" | "labels" | "transform" | "atom" | "sort" | "tsquare"
   | "clock" | "fractions" | "hundred" | "placeValue" | "wordCard" | "sentence" | "spell" | "groups" | "spotlight";
 // The class-tools panel, grouped so the host finds things fast.
 const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: string; icon: BoardIconName }[] }[] = [
@@ -89,6 +90,7 @@ const TOOL_GROUPS: { title: string; items: { k: ClassTool; label: string; hint: 
     { k: "geoboard", label: "Geoboard", hint: "Pegs and bands: area, perimeter, angles, symmetry", icon: "geoboard" },
     { k: "balance", label: "Equation balance", hint: "Do the same to both sides", icon: "balance" },
     { k: "chart", label: "Chart maker", hint: "Bar, pie, line, histogram — with mean, median, mode, range", icon: "chart" },
+    { k: "tsquare", label: "Times-table square", hint: "Tap a fact, light up a table, or hide the answers for a quiz", icon: "tsquare" },
     { k: "transform", label: "Transformations", hint: "Reflect, rotate, translate and enlarge a shape on a grid", icon: "transform" },
     { k: "fractions", label: "Fraction wall", hint: "Shade and compare", icon: "fractions" },
     { k: "hundred", label: "Hundred square", hint: "Patterns and multiples", icon: "hundred" },
@@ -228,6 +230,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const [starsOpen, setStarsOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
   const [toolsLeft, setToolsLeft] = useState(false);     // the class tools menu opens to the right of its button (button near the left edge)
+  const [drillOpen, setDrillOpen] = useState(false);     // the times-table drill (components/live/board/TimesTables)
   const [buzzOpen, setBuzzOpen] = useState(false);       // the buzzer (components/live/board/BuzzRewards)
   const [rewardsOpen, setRewardsOpen] = useState(false); // rewards
   const [chatOpen, setChatOpen] = useState(false);       // class chat and reactions (components/live/board/ClassChat)
@@ -1311,11 +1314,12 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
               ["🎯", "Focus tools", "Lock screens, who's looking away, roll call", () => setFocusOpen(true), awayCount],
               ["🎬", "Watch a video together", "A YouTube video that follows your player", () => setVideoOpen(true), 0],
               ["🌐", "Web browser", "Open a web page full screen, and show it to learners", () => setWebOpen(true), 0],
+              ["✖️", "Times-table drill", "Each learner answers on their own screen; see which facts are weak", () => setDrillOpen(true), 0],
             ] as [string, string, string, () => void, number][]).map(([icon, label, hint, go, n]) => (
               <button key={label} type="button" onClick={() => { setToolsOpen(false); go(); }} title={hint} aria-label={n ? `${label}, ${n} waiting` : label}
                 className="relative flex min-h-[70px] flex-col items-center justify-center gap-1 rounded-xl bg-white p-2 text-center text-[11px] font-bold leading-tight text-ink/80 ring-1 ring-line transition hover:bg-[#F1F8F7] hover:ring-[#A9D6D3]">
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#E2F3F2] text-lg" aria-hidden>{icon}</span>
-                <span aria-hidden>{label.replace("Watch a video together", "Video").replace("Class chat", "Chat").replace("Focus tools", "Focus").replace("Web browser", "Web")}</span>
+                <span aria-hidden>{label.replace("Watch a video together", "Video").replace("Class chat", "Chat").replace("Focus tools", "Focus").replace("Web browser", "Web").replace("Times-table drill", "Tables drill")}</span>
                 {n > 0 && <span aria-hidden className="absolute right-1 top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#C2451C] px-1 text-[11px] font-black text-white">{n}</span>}
               </button>
             ))}
@@ -1673,6 +1677,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
           onOpen={applyLesson} onClose={() => setLessonsOpen(false)} notify={setNotice} />}
         {!readOnly && !lessonId && sessionId && <AskTeacher host={host} myId={myId} myName={myName} open={askOpen} onClose={() => setAskOpen(false)} onCount={setAskCount} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <BuzzRewards sessionId={sessionId} host={host} myId={myId} myName={myName} people={people} buzzOpen={buzzOpen} onBuzzOpen={() => setBuzzOpen(true)} onBuzzClose={() => setBuzzOpen(false)} rewardsOpen={rewardsOpen} onRewardsClose={() => setRewardsOpen(false)} keep={keep} />}
+        {!readOnly && !lessonId && sessionId && <TablesDrill sessionId={sessionId} host={host} myId={myId} myName={myName} people={people} open={drillOpen} onOpen={() => setDrillOpen(true)} onClose={() => setDrillOpen(false)} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <ClassChat host={host} myId={myId} myName={myName} people={people} open={chatOpen} onClose={() => setChatOpen(false)} onCount={setChatCount} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <FocusTools host={host} myId={myId} myName={myName} people={people} open={focusOpen} onClose={() => setFocusOpen(false)} onCount={setAwayCount} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <WatchTogether host={host} open={videoOpen} onOpen={() => setVideoOpen(true)} onClose={() => setVideoOpen(false)} keep={keep} />}

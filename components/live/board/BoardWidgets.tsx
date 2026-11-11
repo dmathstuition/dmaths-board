@@ -17,6 +17,7 @@ import { BearingsPanel } from "@/components/live/board/BearingsPanel";
 import { BalancePanel, ChartPanel, GeoboardPanel } from "@/components/live/board/MathTools";
 import { CircuitPanel, LabelPanel, PeriodicPanel } from "@/components/live/board/ScienceTools";
 import { AtomPanel, SortPanel, TransformPanel } from "@/components/live/board/LessonTools";
+import { TimesSquarePanel } from "@/components/live/board/TimesTables";
 
 // The class tools that sit on top of the board: timer, dice, name picker,
 // screen shade, ruler and protractor. Only the host can change them; every
@@ -47,6 +48,7 @@ export default function BoardWidgets({ w, host, onChange, boxW, names, onDraw, m
       {w.geoboard.on && <GeoboardPanel s={w.geoboard} host={host} boxW={boxW} onChange={(geoboard, final) => onChange({ ...w, geoboard }, final)} />}
       {w.balance.on && <BalancePanel s={w.balance} host={host} boxW={boxW} onChange={(balance, final) => onChange({ ...w, balance }, final)} />}
       {w.chart.on && <ChartPanel s={w.chart} host={host} boxW={boxW} onChange={(chart, final) => onChange({ ...w, chart }, final)} />}
+      {w.tsquare.on && <TimesSquarePanel s={w.tsquare} host={host} boxW={boxW} onChange={(tsquare, final) => onChange({ ...w, tsquare }, final)} />}
       {w.transform.on && <TransformPanel s={w.transform} host={host} boxW={boxW} onChange={(transform, final) => onChange({ ...w, transform }, final)} />}
       {w.atom.on && <AtomPanel s={w.atom} host={host} boxW={boxW} onChange={(atom, final) => onChange({ ...w, atom }, final)} />}
       {w.sort.on && <SortPanel s={w.sort} host={host} boxW={boxW} onChange={(sort, final) => onChange({ ...w, sort }, final)} />}

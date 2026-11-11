@@ -5,6 +5,7 @@
 import { isSolid, type SolidKind } from "@/lib/solids";
 import { DEFAULT_BLOCKS, cleanBlocks, type BlocksState } from "@/lib/mathBlocks";
 import { DEFAULT_ATOM, DEFAULT_SORT, DEFAULT_TRANSFORM, cleanAtom, cleanSort, cleanTransform, type AtomState, type SortState, type TransformState } from "@/lib/lessonTools";
+import { DEFAULT_SQUARE, cleanSquare, type SquareState } from "@/lib/tablesDrill";
 import { DEFAULT_CIRCUIT, DEFAULT_LABELS, DEFAULT_PTABLE, cleanCircuit, cleanLabels, cleanPTable, type CircuitState, type LabelState, type PTableState } from "@/lib/scienceTools";
 import { DEFAULT_BALANCE, DEFAULT_CHART, DEFAULT_GEO, cleanBalance, cleanChart, cleanGeo, type BalanceState, type ChartState, type GeoState } from "@/lib/mathTools";
 
@@ -72,6 +73,7 @@ export type Widgets = {
   transform: TransformState; // the transformations grid (lib/lessonTools.ts)
   atom: AtomState;       // the atom builder
   sort: SortState;       // the card sort
+  tsquare: SquareState;  // the times-table square (lib/tablesDrill.ts)
 };
 
 export const DEFAULT_WIDGETS: Widgets = {
@@ -97,7 +99,7 @@ export const DEFAULT_WIDGETS: Widgets = {
   bearing: { on: false, x: 0.5, y: 0.03, mode: "bearing", b: 50, d: 50, back: false, parts: false, d1: 8, b1: 40, d2: 6, b2: 120, names: ["H", "A", "B"], step: 0, unit: "km" },
   geoboard: DEFAULT_GEO, balance: DEFAULT_BALANCE, chart: DEFAULT_CHART,
   ptable: DEFAULT_PTABLE, circuit: DEFAULT_CIRCUIT, labels: DEFAULT_LABELS,
-  transform: DEFAULT_TRANSFORM, atom: DEFAULT_ATOM, sort: DEFAULT_SORT,
+  transform: DEFAULT_TRANSFORM, atom: DEFAULT_ATOM, sort: DEFAULT_SORT, tsquare: DEFAULT_SQUARE,
 };
 
 export const WORD_KINDS = ["noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection"] as const;
@@ -152,7 +154,7 @@ export function cleanWidgets(v: unknown): Widgets {
     bearing: cleanBearing(w?.bearing),
     geoboard: cleanGeo(w?.geoboard), balance: cleanBalance(w?.balance), chart: cleanChart(w?.chart),
     ptable: cleanPTable(w?.ptable), circuit: cleanCircuit(w?.circuit), labels: cleanLabels(w?.labels),
-    transform: cleanTransform(w?.transform), atom: cleanAtom(w?.atom), sort: cleanSort(w?.sort),
+    transform: cleanTransform(w?.transform), atom: cleanAtom(w?.atom), sort: cleanSort(w?.sort), tsquare: cleanSquare(w?.tsquare),
   };
 }
 

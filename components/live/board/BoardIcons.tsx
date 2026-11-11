@@ -21,6 +21,7 @@ const P: Record<string, string> = {
   balance: "M12 5v15M7 20h10M4 7h16M4 7l-2.5 6h5zM20 7l-2.5 6h5zM12 3v2",
   chart: "M4 20V4M4 20h17M8 20v-6M12.5 20V8M17 20v-10",
   ptable: "M3 5h4v4H3zM17 5h4v4h-4zM3 10h18v9H3zM3 14.5h18M7.5 10v9M12 10v9M16.5 10v9",
+  tsquare: "M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18M5 5l2 2M7 5L5 7",
   transform: "M12 2.5v19M4 17.5l5-10v10zM20 17.5l-5-10v10z",
   atom: "M12 12m-1.6 0a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0M12 12m-9.5 0a9.5 4 0 1 0 19 0a9.5 4 0 1 0-19 0M12 12m-4 0a4 9.5 0 1 0 8 0a4 9.5 0 1 0-8 0",
   sort: "M8.5 3h7v5h-7zM12 8v2.5M6.5 13.5v-3h11v3M3 13.5h7V21H3zM14 13.5h7V21h-7z",
