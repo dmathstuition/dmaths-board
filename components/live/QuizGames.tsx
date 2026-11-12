@@ -250,7 +250,7 @@ function SpaceScene({ g, burst, myId, big }: { g: GameState; burst: number; myId
 }
 
 // ── Treasure hunt ────────────────────────────────────────────────────────
-function Chest({ open, loot, size }: { open: boolean; loot: string; size: number }) {
+export function Chest({ open, loot, size }: { open: boolean; loot: string; size: number }) {
   const full = open && loot && loot !== "empty";
   return (
     <span className="relative inline-block" style={{ width: size, height: size * 0.8 }}>

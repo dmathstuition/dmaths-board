@@ -1197,6 +1197,46 @@ html:not(.dark) .portal-sky { color: #0B1220; }
   .qw-streak, .qw-shoot, .qw-ember { display: none; }
   .qw-meter, .qw-knot { transition: none; }
 }
+/* The learner's own game corner (components/live/QuizMyStage). */
+.qp-fast { animation-duration: .12s !important; }
+.qp-still { animation: none !important; }
+@keyframes qpDash { 0% { transform: translateX(0); } 15% { transform: translateX(-10px); } 100% { transform: translateX(230%); } }
+.qp-dash { animation: qpDash 1.4s cubic-bezier(.5,0,.2,1) both; }
+@keyframes qpSpin { 0% { transform: rotate(0); } 70% { transform: rotate(700deg); } 100% { transform: rotate(720deg); } }
+.qp-spin { animation: qpSpin 1.2s ease-out both; }
+@keyframes qpPuffs { 0% { transform: translateX(0) scale(.6); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateX(-24px) scale(1.4); opacity: 0; } }
+.qp-puffs { animation: qpPuffs .7s ease-out infinite; }
+@keyframes qpLaunch { 0% { transform: translate(-50%, 0); } 20% { transform: translate(-50%, 6px); } 100% { transform: translate(-50%, -96px); } }
+.qp-launch { animation: qpLaunch 1.8s cubic-bezier(.6,0,.4,1) .2s both; }
+.qp-warp { animation-duration: 4s !important; }
+@keyframes qpDig { 0%, 100% { transform: rotate(-35deg); } 50% { transform: rotate(25deg) translateY(4px); } }
+.qp-dig { animation: qpDig .45s ease-in-out infinite; }
+@keyframes qpSand { 0% { transform: translateY(0); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(-12px, -18px); opacity: 0; } }
+.qp-sand { animation: qpSand .45s ease-out infinite; }
+@keyframes qpPull { 0% { transform: translateX(0); } 40% { transform: translateX(-30px); } 60% { transform: translateX(-24px); } 100% { transform: translateX(-34px); } }
+.qp-pull { animation: qpPull 1.1s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes qpSlip { 0% { transform: translateX(0); } 50% { transform: translateX(28px) rotate(2deg); } 100% { transform: translateX(22px); } }
+.qp-slip { animation: qpSlip 1s ease-out both; }
+@keyframes qpCharge { 0%, 100% { filter: drop-shadow(0 0 0 rgba(253,224,71,0)); } 50% { filter: drop-shadow(0 0 12px rgba(253,224,71,1)); } }
+.qp-charge { animation: qpCharge .8s ease-in-out infinite; }
+@keyframes qpShoot { 0% { transform: translateX(0) scale(.6); opacity: 0; } 10% { opacity: 1; } 90% { transform: translateX(190px) scale(1.2); opacity: 1; } 100% { transform: translateX(200px) scale(1.8); opacity: 0; } }
+.qp-shoot { animation: qpShoot .8s cubic-bezier(.5,0,.8,.6) both; }
+@keyframes qpFizzle { 0% { transform: translateX(0) scale(.6); opacity: 0; } 15% { opacity: 1; } 60% { transform: translateX(90px) translateY(-10px) scale(1); opacity: 1; } 100% { transform: translateX(110px) translateY(30px) scale(.2); opacity: 0; } }
+.qp-fizzle { animation: qpFizzle 1s ease-out both; }
+@keyframes qpDodge { 0%, 100% { transform: translate(0, 0); } 30% { transform: translate(-14px, -26px) rotate(-10deg); } 60% { transform: translate(10px, -10px); } }
+.qp-dodge { animation: qpDodge 1s ease-in-out both; }
+@keyframes qpBreathL { 0% { transform: translateX(0) scale(.5); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateX(-140px) translateY(40px) scale(1.6); opacity: 0; } }
+.qp-breath-l { animation: qpBreathL 1s ease-in .3s both; }
+@keyframes qpRaise { 0%, 100% { transform: rotate(-40deg); } 50% { transform: rotate(-48deg) translateY(-3px); } }
+.qp-raise { animation: qpRaise .5s ease-in-out infinite; }
+@keyframes qpSlash { 0% { transform: rotate(-50deg); } 40% { transform: rotate(40deg) translateX(30px); } 100% { transform: rotate(10deg) translateX(20px); } }
+.qp-slash { animation: qpSlash .6s cubic-bezier(.5,0,.2,1) both; }
+@keyframes qpScore { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
+.qp-score { display: inline-block; animation: qpScore .6s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .qp-dash, .qp-spin, .qp-puffs, .qp-launch, .qp-dig, .qp-sand, .qp-pull, .qp-slip, .qp-charge, .qp-shoot, .qp-fizzle, .qp-dodge, .qp-breath-l, .qp-raise, .qp-slash, .qp-score { animation: none; }
+  .qp-puffs, .qp-sand, .qp-shoot, .qp-fizzle, .qp-breath-l { display: none; }
+}
 /* Live quiz game styles (components/live/QuizGames): tug of war, team battle, boss battle, race. */
 .qg-slide { transition: transform 1.2s cubic-bezier(.34,1.56,.64,1); }
 .qg-bar { transition: width 1s cubic-bezier(.16,.84,.44,1) .5s; }
