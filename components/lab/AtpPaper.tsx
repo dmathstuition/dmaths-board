@@ -10,7 +10,7 @@ import { flushSync } from "react-dom";
 import type { ExamQ } from "@/lib/exams";
 import type { Table } from "@/lib/lab/bench/types";
 import { ALL_PRACTICALS } from "@/lib/lab/bench/all";
-import { ATP_SUBJECTS, buildAtp, type AtpFigure, type AtpPaper, type AtpSubject } from "@/lib/lab/atp";
+import { ATP_SUBJECTS, buildAtp, buildPracticalTest, type AtpFigure, type AtpPaper, type AtpSubject } from "@/lib/lab/atp";
 import { BenchDefs, closeup } from "@/components/lab/bench/Apparatus";
 import { sendSlides } from "@/components/live/board/slides";
 
@@ -107,9 +107,16 @@ export default function AtpBuilder({ sessionId, onPaper }: { sessionId: string; 
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const pool = ALL_PRACTICALS.filter((p) => p.subject === subject);
-  async function make() {
-    setNote(null); setBusy("Setting the paper…");
+  async function make(kind: "paper" | "test" = "paper") {
+    setNote(null); setBusy(kind === "test" ? "Setting the practical test…" : "Setting the paper…");
     try {
+      if (kind === "test") {
+        const t = buildPracticalTest(subject, { picks: picks.length ? picks.slice(0, 3) : undefined });
+        if (!t.questions.length) throw new Error("Choose practicals with readings to record");
+        onPaper(t.questions.map(({ fig: _f, ...q }) => q), t);
+        setNote(`✓ ${t.title}: ${t.used.map((s) => pool.find((p) => p.slug === s)?.title ?? s).join(" and ")} — ${t.marks} marks, ${t.minutes} minutes. Each learner does the practical on their own bench (their own samples) and records every reading; readings and calculations are marked against their own bench, and the written answers come to you.`);
+        return;
+      }
       const paper = buildAtp(subject, { picks: picks.length ? picks : undefined, zoomable: canZoom });
       if (!paper.questions.length) throw new Error("Those practicals don't give enough questions — choose others");
       const qs = await paperQuestions(paper, sessionId, setBusy);
@@ -122,14 +129,16 @@ export default function AtpBuilder({ sessionId, onPaper }: { sessionId: string; 
   return (
     <section aria-label="IGCSE practical paper" className="mt-4 rounded-xl bg-[#F0F9FF] p-3 ring-1 ring-[#BAE6FD]">
       <p className="text-xs font-black text-[#075985]">🧪 IGCSE practical paper — Alternative to Practical (Paper 6 style)</p>
-      <p className="mt-0.5 text-[11px] font-semibold text-[#075985]/80">Made from the lab&apos;s practicals, with new readings every time: read instruments from diagrams, complete the results table, plot the graph, work out the gradient, evaluate the method, and plan an experiment. One hour, about 40 marks.</p>
+      <p className="mt-0.5 text-[11px] font-semibold text-[#075985]/80"><b>📝 The paper</b> (Alternative to Practical): read instruments from diagrams, complete the results table, plot the graph, work out the gradient, evaluate, plan — one hour, about 40 marks. <b>🔬 The practical test</b>: each learner does the practical itself on their own bench during the exam, records their own readings and hands it in — marked against their own results.</p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label="Science">
         {(Object.keys(ATP_SUBJECTS) as AtpSubject[]).map((s) => (
           <button key={s} type="button" aria-pressed={subject === s} onClick={() => { setSubject(s); setPicks([]); }}
             className={`min-h-[40px] rounded-xl px-3 text-xs font-black ring-1 ${subject === s ? "bg-[#0369A1] text-white ring-[#0369A1]" : "bg-white text-[#075985] ring-[#BAE6FD]"}`}>{ATP_SUBJECTS[s].label} {ATP_SUBJECTS[s].code}</button>
         ))}
         <button type="button" onClick={() => setChoose((v) => !v)} aria-expanded={choose} className="min-h-[40px] rounded-xl bg-white px-3 text-xs font-black text-[#075985] ring-1 ring-[#BAE6FD]">{picks.length ? `${picks.length} practical${picks.length === 1 ? "" : "s"} chosen` : "Choose the practicals (optional)"}</button>
-        <button type="button" onClick={make} disabled={!!busy} className="min-h-[40px] rounded-xl bg-[#0369A1] px-4 text-xs font-black text-white disabled:opacity-60">{busy ? "Making the paper…" : "Make the paper"}</button>
+        <button type="button" onClick={() => make("paper")} disabled={!!busy} className="min-h-[40px] rounded-xl bg-[#0369A1] px-4 text-xs font-black text-white disabled:opacity-60">{busy ? "Making it…" : "📝 Make the paper"}</button>
+        <button type="button" onClick={() => make("test")} disabled={!!busy} title="Learners do the practical on the bench during the exam and record their own readings"
+          className="min-h-[40px] rounded-xl bg-[#065F46] px-4 text-xs font-black text-white disabled:opacity-60">🔬 Practical test — do it on the bench</button>
       </div>
       {choose && (
         <fieldset className="mt-2 grid gap-1 rounded-lg bg-white p-2 ring-1 ring-[#BAE6FD] sm:grid-cols-2">
@@ -139,7 +148,7 @@ export default function AtpBuilder({ sessionId, onPaper }: { sessionId: string; 
               <input type="checkbox" checked={picks.includes(p.slug)} onChange={(e) => setPicks((cur) => (e.target.checked ? [...cur, p.slug].slice(0, 4) : cur.filter((x) => x !== p.slug)))} className="h-4 w-4 accent-[#0369A1]" />{p.title}
             </label>
           ))}
-          <p className="text-[11px] text-ink/55 sm:col-span-2">Up to 4. Leave them all unticked and the paper picks practicals with a graph to plot.</p>
+          <p className="text-[11px] text-ink/55 sm:col-span-2">Up to 4 for the paper (3 for a practical test). Leave them all unticked and practicals are picked for you.</p>
         </fieldset>
       )}
       {(busy || note) && <p role="status" className="mt-2 text-xs font-bold text-[#075985]">{busy ?? note}</p>}

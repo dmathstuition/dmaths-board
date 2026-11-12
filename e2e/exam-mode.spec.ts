@@ -2,8 +2,11 @@ import { readFile } from "fs/promises";
 import { writeFileSync } from "fs";
 import { test, expect, type Browser, type BrowserContext } from "@playwright/test";
 import { SID, agree, classServer, realtimeHub } from "./helpers";
+import { benchLines, withMarks } from "../lib/lab/benchExam";
+import { practicalFor } from "../lib/lab/bench/all";
+import { seeded } from "../lib/lab/bench/run";
 import { keptOf, redoExtraMs, redoPaper, triesOf, withoutTries } from "../lib/examRedo";
-import { cleanExamQuestions, cleanPageAnswer, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageDone, pagesToMark, shownQ, slimAnswers, workingKey, type ExamQ } from "../lib/exams";
+import { benchGivenText, benchGot, cleanExamQuestions, cleanPageAnswer, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageDone, pagesToMark, shownQ, slimAnswers, workingKey, type ExamQ } from "../lib/exams";
 
 // Exam mode with a stand-in for /api/board/exams that keeps the exam in memory
 // and marks with the real marking code.
@@ -44,7 +47,8 @@ function examServer() {
         } : null };
         if (e && !e.submitted && exam.status === "open") { out.paper = learnerPaper(exam.id, tries.length ? `${me.id}:${tries.length}` : me.id, qs, exam.inOrder); out.personalFrom = exam.questions.length; }
         if (e && exam.status === "closed") { const m = markPaper(qs, e.answers, e.marks ?? {});
-          out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = qs.map((q, i) => ({ q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks })); }
+          out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = qs.map((q, i) => ({ q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks,
+            ...(q.kind === "bench" ? { given: [benchGivenText(e.answers[String(i)]), ...benchLines(q.bench!.slug, e.answers[String(i)] as any)].join("\n"), mark: benchGot(q, e.answers[String(i)]) } : {}) })); }
         return r.fulfill({ json: out });
       }
       const b = JSON.parse(r.request().postData() ?? "{}");
@@ -93,7 +97,7 @@ function examServer() {
         if (qsOf(e)[b.n]?.kind === "page") {
           if (pageDone(e.answers[String(b.n)])) return r.fulfill({ status: 409, json: { error: "You've handed in that page." } });
           e.answers[String(b.n)] = { ...cleanPageAnswer(b.value), ...(b.action === "page-done" ? { done: new Date().toISOString() } : {}) };
-        } else e.answers[String(b.n)] = b.value;
+        } else { const q = qsOf(e)[b.n]; e.answers[String(b.n)] = q?.kind === "bench" ? withMarks(q.bench!.slug, b.value) : b.value; } // the server marks a bench
         return r.fulfill({ json: { ok: true } });
       }
       if (b.action === "flag") { e.flags++; return r.fulfill({ json: { ok: true } }); }
@@ -706,4 +710,68 @@ test("an IGCSE practical paper from the lab: figures, a results table, a graph p
   await exam.getByRole("button", { name: "Hand in", exact: true }).click();
   await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
   await expect(exam.getByText(`3 / ${total}`)).toBeVisible({ timeout: 15_000 }); // the graph's 3 marks; the rest left blank
+});
+
+test("a practical test: each learner does the practical on their own bench, records their readings, hands it in, and it's marked against their own bench", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const SHOTS = process.env.LAB_SHOTS;
+  const { teacher, learner } = await openClass(browser);
+  await teacher.getByRole("button", { name: "Exam mode" }).click();
+  const panel = teacher.getByRole("dialog", { name: "Exam mode" });
+  const atp = panel.getByRole("region", { name: "IGCSE practical paper" });
+  await atp.getByRole("button", { name: "Physics 0625" }).click();
+  await atp.getByRole("button", { name: /Choose the practicals/ }).click();
+  await atp.getByLabel("Heating curve of water").check();
+  await atp.getByRole("button", { name: /Practical test — do it on the bench/ }).click();
+  await expect(atp.getByRole("status")).toContainText("✓ IGCSE Physics (0625) — Practical Test");
+  await expect(panel.getByText(/Learners do this practical on their own bench/)).toBeVisible();
+  await panel.getByRole("button", { name: /Start the exam \(\d+ questions, 45 min\)/ }).click();
+
+  // This learner's own samples: the same ones their phone sets out.
+  const p = practicalFor("heating-curve")!;
+  let h = 2166136261; for (const ch of "exam-1|learner|heating-curve") { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  const s0 = p.init(seeded(h >>> 0));
+  const first = p.steps[0].action.type === "record" ? p.steps[0].action.fields[0] : null;
+
+  const exam = learner.getByRole("dialog", { name: /^Exam: IGCSE Physics/ });
+  await expect(exam.getByRole("button", { name: "Start the exam" })).toBeVisible({ timeout: 20_000 });
+  await exam.getByRole("button", { name: "Start the exam" }).click();
+  await expect(exam.getByRole("group", { name: /Lab bench: Heating curve/ })).toBeVisible({ timeout: 30_000 });
+  // An exam: no help, no checking, no restart, no worked-out results.
+  await expect(exam.getByRole("button", { name: "Do this step for me" })).toHaveCount(0);
+  await expect(exam.getByRole("button", { name: "Restart" })).toHaveCount(0);
+  await expect(exam.getByRole("tab", { name: "Results" })).toHaveCount(0);
+  // Step by step: read the thermometer (right), switch on, wait, then two more readings (wrong).
+  const record = async (fields: { label: string; v: string; options?: string[] }[]) => {
+    for (const f of fields) {
+      if (f.options) await exam.getByRole("radiogroup", { name: f.label }).getByRole("radio", { name: f.options[f.options.length - 1] }).click();
+      else await exam.getByRole("textbox", { name: f.label, exact: true }).fill(f.v);
+    }
+    await exam.getByRole("button", { name: "Record it" }).click();
+  };
+  for (let i = 0; i < p.steps.length; i++) {
+    const a = p.steps[i].action;
+    await expect(exam.getByText(new RegExp(`^Step ${i + 1} of ${p.steps.length}`))).toBeVisible({ timeout: 20_000 });
+    if (a.type === "record") await record(a.fields.map((f) => ({ label: f.label, options: f.options, v: i === 0 && f === first ? f.answer(s0, {}) : "57" })));
+    else if (a.type === "tap") await exam.getByRole("button", { name: a.label }).click();
+    else if (a.type === "wait") await exam.getByRole("button", { name: new RegExp(a.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).click();
+    if (i === 0 && SHOTS) await learner.screenshot({ path: `${SHOTS}/test-bench-phone.png` });
+  }
+  await expect(exam.getByText("✓ You've done every step")).toBeVisible({ timeout: 30_000 });
+  // Leave the question and come back: the bench is as they left it.
+  await exam.getByRole("button", { name: "Next →" }).click();
+  await exam.getByRole("button", { name: "← Back" }).click();
+  await expect(exam.getByText("✓ You've done every step")).toBeVisible({ timeout: 20_000 });
+  await learner.waitForTimeout(900);
+  await exam.getByRole("navigation", { name: "Questions" }).getByRole("button").last().click();
+  await exam.getByRole("button", { name: "Hand in", exact: true }).click();
+  await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
+  await expect(exam.getByText(/^1 \/ \d+$/)).toBeVisible({ timeout: 15_000 }); // the one right reading
+
+  // The results: each reading marked against their own bench.
+  await panel.getByRole("button", { name: "End exam" }).click();
+  await expect(exam.getByRole("list", { name: "Your answers" })).toBeVisible({ timeout: 20_000 });
+  await expect(exam.getByText(/Your practical: 1 \/ \d+/)).toBeVisible();
+  await expect(exam.getByText(new RegExp(`✓ ${first!.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`))).toBeVisible();
+  if (SHOTS) await learner.screenshot({ path: `${SHOTS}/test-results-phone.png`, fullPage: true });
 });

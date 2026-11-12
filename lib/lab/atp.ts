@@ -214,3 +214,29 @@ export function buildAtp(subject: AtpSubject, o: { seed?: number; picks?: string
   const { label, code } = ATP_SUBJECTS[subject];
   return { title: `IGCSE ${label} (${code}) — Alternative to Practical`, subject, minutes: ATP_MINUTES, marks: qs.reduce((a, q) => a + q.marks, 0), questions: qs, figures: figs, used: picked.map((p) => p.slug) };
 }
+
+// ── A practical test (IGCSE Paper 5 style): learners do it on the bench ──
+// Each practical is a "bench" question — done on the learner's own bench,
+// every reading and calculation marked against their own results — then the
+// questions that follow a real practical test: conclusion, method, safety.
+export function buildPracticalTest(subject: AtpSubject, o: { picks?: string[]; seed?: number; count?: number } = {}): AtpPaper {
+  const r = seeded(o.seed ?? Math.floor(Math.random() * 1e9));
+  const pool = ALL_PRACTICALS.filter((p) => p.subject === subject && benchMarks(p) >= 3);
+  const chosen = o.picks?.length ? pool.filter((p) => o.picks!.includes(p.slug))
+    : [...pool].map((p) => ({ p, k: (p.graph ? 1 : 0) + r() })).sort((a, b) => b.k - a.k).slice(0, o.count ?? 2).map((x) => x.p);
+  const qs: AtpQ[] = [];
+  chosen.forEach((p, i) => {
+    const k = i + 1;
+    qs.push({ q: `${k}  ${p.title}\n\nAim: ${p.aim}\n\nDo this practical on your bench, step by step. Read every instrument carefully and record each reading in the notebook — nothing is checked as you go. Your readings and calculations are marked against your own apparatus.`.slice(0, 400),
+      kind: "bench", options: [], answer: "", marks: Math.min(40, benchMarks(p)), bench: { slug: p.slug } });
+    let part = 0;
+    const lab = () => `${k}(${LETTERS[part++]})`;
+    const ref = (() => { let s = p.init(seeded(7)), v: Record<string, string> = {}; for (const st of p.steps) ({ s, values: v } = doStep(st, s, v)); return p.conclusion(s, v); })();
+    qs.push({ q: `${lab()}  Using your results, state a conclusion for this experiment.`, kind: "written", options: [], answer: `For example: ${ref}`.slice(0, 400), marks: 2 });
+    for (const x of examFor(p.slug).filter((x) => !/^\s*-?[\d.]+\s*\S*\s*$/.test(x.right)).slice(0, 2)) qs.push({ q: `${lab()}  ${x.q}`, kind: "written", options: [], answer: `${x.right}. ${x.why}`.slice(0, 400), marks: 1 });
+    if (p.safety.length) qs.push({ q: `${lab()}  Suggest one safety precaution you took, and say why.`, kind: "written", options: [], answer: `Any one: ${p.safety.join("; ")}`.slice(0, 400), marks: 1 });
+  });
+  const { label, code } = ATP_SUBJECTS[subject];
+  return { title: `IGCSE ${label} (${code}) — Practical Test`, subject, minutes: chosen.length >= 3 ? 90 : chosen.length === 2 ? 60 : 45, marks: qs.reduce((a, q) => a + q.marks, 0), questions: qs, figures: [], used: chosen.map((p) => p.slug) };
+}
+const benchMarks = (p: Practical) => p.steps.reduce((a, st) => a + (st.action.type === "record" ? st.action.fields.length : 0), 0);

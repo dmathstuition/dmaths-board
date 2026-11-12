@@ -15,6 +15,8 @@ import { downloadExamCsv, downloadExamReports } from "@/lib/examDownloads";
 import dynamic from "next/dynamic";
 // The IGCSE practical paper maker draws the lab's apparatus: loaded only when the builder opens.
 const AtpBuilder = dynamic(() => import("@/components/lab/AtpPaper"), { ssr: false });
+// A practical test's bench: loaded only when an exam has one.
+const BenchQuestion = dynamic(() => import("@/components/live/board/BenchQuestion"), { ssr: false, loading: () => <p className="mt-3 text-sm font-bold text-ink/60">Setting out your bench…</p> });
 import GraphPlot from "@/components/live/board/GraphPlot";
 import { shownAnswer } from "@/lib/exams";
 import { EXAM_MINUTES, EXAM_TOPICS, MAX_PAGE_MARKS, MAX_WRITTEN, clockLeft, isHandMarked, keepsOrder, needsMarking, pageDone, workingKey, spokenSpelling, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
@@ -253,7 +255,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
   const setQ = (i: number, q: Partial<ExamQ>) => setQs((cur) => cur.map((x, k) => (k === i ? { ...x, ...q } : x)));
   async function start() {
     if (isHandMarked(qs) && qs.some((q) => q.kind !== "page")) { setNote("A paper you mark by hand can only have its pages — clear the other questions, or switch the paper to answer boxes."); return; }
-    const empty = qs.findIndex((q) => q.kind !== "choice" && q.kind !== "page" && q.kind !== "written" && !String(q.answer).trim());
+    const empty = qs.findIndex((q) => q.kind !== "choice" && q.kind !== "page" && q.kind !== "written" && q.kind !== "bench" && !String(q.answer).trim());
     const noText = qs.findIndex((q) => q.kind === "written" && !q.q.trim());
     if (noText >= 0) { setNote(`Question ${noText + 1} has no question written yet.`); return; }
     if (empty >= 0) { setNote(`Question ${empty + 1} has no answer yet — type the answer (from the mark scheme), or remove it.`); return; }
@@ -525,7 +527,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
                     {q.img && <a href={q.img} target="_blank" rel="noreferrer" title="Open the page" className="shrink-0"><img src={q.img} alt={`The page for question ${i + 1}`} loading="lazy" className="h-14 w-10 rounded object-cover ring-1 ring-slate-200" /></a>}
                     <input value={q.q} maxLength={400} onChange={(e) => setQ(i, { q: e.target.value })} aria-label={`Question ${i + 1}`} className={field} />
                     <select value={q.marks} onChange={(e) => setQ(i, { marks: Number(e.target.value) })} aria-label={`Marks for question ${i + 1}`} className="rounded-lg bg-slate-50 px-1 py-2 text-xs font-black ring-1 ring-slate-200">
-                      {Array.from({ length: q.kind === "page" ? MAX_PAGE_MARKS : 5 }, (_, k) => k + 1).map((m) => <option key={m} value={m}>{m} mark{m === 1 ? "" : "s"}</option>)}
+                      {Array.from({ length: q.kind === "page" ? MAX_PAGE_MARKS : Math.max(5, q.marks) }, (_, k) => k + 1).map((m) => <option key={m} value={m}>{m} mark{m === 1 ? "" : "s"}</option>)}
                     </select>
                     <button type="button" onClick={() => setQs((cur) => cur.filter((_, k) => k !== i))} aria-label={`Remove question ${i + 1}`} className="rounded-lg px-2 py-2 text-xs font-black text-red-600 hover:bg-red-50">✕</button>
                   </div>
@@ -540,6 +542,8 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
                     </div>
                   ) : q.kind === "page" ? (
                     <p className="mt-2 pl-5 text-xs font-bold text-ink/60">✍️ Learners write on this page and hand it in — you mark it.</p>
+                  ) : q.kind === "bench" ? (
+                    <p className="mt-2 pl-5 text-xs font-bold text-ink/60">🔬 Learners do this practical on their own bench (their own samples) and record their readings — each one marked against their own bench ({q.marks} mark{q.marks === 1 ? "" : "s"}).</p>
                   ) : q.kind === "graph" ? (
                     <p className="mt-2 pl-5 text-xs font-bold text-ink/60">📈 Learners plot the points{q.grid?.curve ? "" : " and draw the line of best fit"} on graph paper ({q.grid?.y} against {q.grid?.x}) — marked automatically.</p>
                   ) : q.kind === "written" ? (
@@ -979,7 +983,7 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
           {data?.personalFrom != null && q.n >= data.personalFrom && <span className="ml-2 rounded-md bg-amber-100 px-1.5 py-0.5 normal-case tracking-normal text-amber-900">⭐ Your own word — listen on your phone</span>}</p>
         {q.img && <PaperPage key={q.img} src={q.img} label={`The page for ${q.q}`} />}
         <div className="mt-2 flex items-start gap-2">
-          <p className="flex-1 whitespace-pre-wrap text-xl font-black leading-snug">{q.q}</p>
+          <p className={`flex-1 whitespace-pre-wrap leading-snug ${q.kind === "bench" ? "text-base font-bold" : "text-xl font-black"}`}>{q.q}</p>
           {q.kind !== "spell" && <Speak text={`${q.q}. ${q.kind === "choice" ? q.options.map((o, k) => `Option ${String.fromCharCode(65 + k)}: ${o.text}.`).join(" ") : ""}`} />}
         </div>
         {kept.has(q.n) && <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-black text-emerald-800">✓ You got this right last time — it&apos;s kept.</p>}
@@ -998,6 +1002,8 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
               );
             })}
           </div>
+        ) : q.kind === "bench" && q.bench ? (
+          <BenchQuestion key={q.n} slug={q.bench.slug} examId={exam.id} myId={entry?.id ?? "learner"} saved={answers[String(q.n)]} onSave={(b) => answer(q.n, b, true)} />
         ) : q.kind === "graph" && q.grid ? (
           <GraphPlot grid={q.grid} value={answers[String(q.n)]} readOnly={kept.has(q.n)} onChange={(j) => answer(q.n, j, true)} />
         ) : q.kind === "written" ? (
@@ -1064,9 +1070,10 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
             <li key={i} className={`rounded-xl p-3 ring-1 ${r.right ? "bg-emerald-50 ring-emerald-200" : "bg-red-50 ring-red-200"}`}>
               <p className="text-sm font-black">{r.right ? "✓" : "✗"} {i + 1}. {r.q}</p>
               <p className="mt-0.5 text-xs font-semibold text-ink/70">
-                {r.kind === "graph" ? <>Your graph: {String(r.given ?? "").trim() || "nothing plotted"} · <b>{r.mark ?? 0} / {r.marks}</b>{r.mark !== r.marks && !!String(r.answer ?? "").trim() && <span className="block text-emerald-800">{String(r.answer)}</span>}</>
+                {r.kind === "bench" ? <>Your practical: <b>{r.mark ?? 0} / {r.marks}</b><span className="block whitespace-pre-wrap text-ink/70">{String(r.given ?? "").trim() || "Not started"}</span></>
+                : r.kind === "graph" ? <>Your graph: {String(r.given ?? "").trim() || "nothing plotted"} · <b>{r.mark ?? 0} / {r.marks}</b>{r.mark !== r.marks && !!String(r.answer ?? "").trim() && <span className="block text-emerald-800">{String(r.answer)}</span>}</>
                 : r.kind === "written" ? <>You wrote: {String(r.given ?? "").trim() || "no answer"} · <b>{r.mark == null ? "not marked yet" : `${r.mark} / ${r.marks}`}</b>{!!String(r.answer ?? "").trim() && r.mark !== r.marks && <span className="block text-emerald-800">A full answer includes: {String(r.answer)}</span>}</> : r.kind === "page" ? (r.given == null ? "Not marked yet" : `Your teacher's mark: ${r.given} / ${r.marks}`) : <>You: {r.given == null || r.given === "" ? "no answer" : r.kind === "choice" ? r.options[Number(r.given)] : String(r.given)}</>}
-                {!r.right && r.kind !== "page" && r.kind !== "written" && r.kind !== "graph" && <> · <span className="font-black text-emerald-800">Answer: {r.kind === "choice" ? r.options[Number(r.answer)] : shownAnswer(r.answer)}</span></>}
+                {!r.right && r.kind !== "page" && r.kind !== "written" && r.kind !== "graph" && r.kind !== "bench" && <> · <span className="font-black text-emerald-800">Answer: {r.kind === "choice" ? r.options[Number(r.answer)] : shownAnswer(r.answer)}</span></>}
               </p>
             </li>
           ))}

@@ -24,7 +24,11 @@ import { cleanAnswerStrokes } from "@/lib/answerBoards";
 // expected, as JSON ({"p":[[x,y],…],"m":gradient,"c":intercept}). Marked
 // automatically: the plots, then the line.
 export type Grid = { x: string; y: string; x0: number; x1: number; y0: number; y1: number; curve?: boolean }; // curve: join the points with a smooth curve (no straight line to mark)
-export type ExamQ = { q: string; kind: "choice" | "typed" | "spell" | "page" | "written" | "graph"; options: string[]; answer: number | string; marks: number; img?: string; hear?: boolean; method?: boolean; grid?: Grid };
+// kind "bench": a practical test — the learner does the practical (bench.slug)
+// on their own bench and records their readings; marked against their own
+// bench by the server (lib/lab/benchExam.ts), which keeps the mark as `got`.
+export type ExamQ = { q: string; kind: "choice" | "typed" | "spell" | "page" | "written" | "graph" | "bench"; options: string[]; answer: number | string; marks: number; img?: string; hear?: boolean; method?: boolean; grid?: Grid; bench?: { slug: string } };
+export const MAX_BENCH_MARKS = 40;
 export const MAX_EXAM_QUESTIONS = 60;
 export const MAX_PAGE_MARKS = 20;
 export const MAX_WRITTEN = 1500; // a written answer, in characters
@@ -46,6 +50,11 @@ export function cleanExamQuestions(v: unknown): ExamQ[] {
     const img = isSlideUrl(x?.img) ? { img: x.img as string } : {};
     if (x?.kind === "page") {
       if (img.img) out.push({ q, kind: "page", options: [], answer: "", marks: Math.max(1, Math.min(MAX_PAGE_MARKS, Math.round(Number(x?.marks) || 1))), img: img.img });
+      continue;
+    }
+    if (x?.kind === "bench") {
+      const slug = str(x?.bench?.slug, 60).trim();
+      if (/^[a-z0-9-]+$/.test(slug)) out.push({ q, kind: "bench", options: [], answer: "", marks: Math.max(1, Math.min(MAX_BENCH_MARKS, Math.round(Number(x?.marks) || 1))), bench: { slug } });
       continue;
     }
     if (x?.kind === "graph") {
@@ -108,14 +117,14 @@ export const shownQ = (q: ExamQ) => (q.kind === "spell" ? gapped(q) : q.q);
 
 // What a learner's phone gets while the exam is open: no answers (a spelling
 // word only goes to the phone when the teacher lets learners hear it there).
-export type LearnerQ = { n: number; q: string; kind: ExamQ["kind"]; options: { i: number; text: string }[]; marks: number; img?: string; say?: string; method?: boolean; grid?: Grid };
+export type LearnerQ = { n: number; q: string; kind: ExamQ["kind"]; options: { i: number; text: string }[]; marks: number; img?: string; say?: string; method?: boolean; grid?: Grid; bench?: { slug: string } };
 export function learnerPaper(examId: string, studentId: string, qs: ExamQ[], inOrder = false): LearnerQ[] {
   const { order, opts } = learnerOrder(examId, studentId, qs, keepsOrder(qs, inOrder));
   return order.map((n) => {
     const x = qs[n];
     return {
       n, q: shownQ(x), kind: x.kind, marks: x.marks, options: opts[n].map((i) => ({ i, text: x.options[i] })),
-      ...(x.img ? { img: x.img } : {}), ...(x.grid ? { grid: x.grid } : {}), ...(x.kind === "spell" && x.hear ? { say: spokenSpelling(x, n + 1) } : {}), ...(x.method ? { method: true } : {}),
+      ...(x.img ? { img: x.img } : {}), ...(x.grid ? { grid: x.grid } : {}), ...(x.bench ? { bench: x.bench } : {}), ...(x.kind === "spell" && x.hear ? { say: spokenSpelling(x, n + 1) } : {}), ...(x.method ? { method: true } : {}),
     };
   });
 }
@@ -217,6 +226,25 @@ export function graphAnswerText(q: Pick<ExamQ, "answer" | "grid">): string {
 
 // A typed answer as a person reads it: the first form, a range as "23.40 to 23.50".
 export const shownAnswer = (a: unknown) => String(a ?? "").split("|")[0].trim().replace(/^(-?[\d.]+)\.\.(-?[\d.]+)$/, "$1 to $2");
+// ── Practical tests ──
+// The marks the server worked out for a learner's bench (never the learner's own say).
+export function benchGot(q: Pick<ExamQ, "marks">, given: unknown): number {
+  const g = given && typeof given === "object" ? (given as { got?: unknown }).got : null;
+  return Math.max(0, Math.min(q.marks, Math.round(Number(g) || 0)));
+}
+// A learner's own copy while the exam is open: their bench without its mark.
+export function hideBenchMarks(qs: Pick<ExamQ, "kind">[], answers: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...answers };
+  qs.forEach((q, i) => { const v = out[String(i)]; if (q.kind === "bench" && v && typeof v === "object") { const { got: _g, ...rest } = v as Record<string, unknown>; out[String(i)] = rest; } });
+  return out;
+}
+export function benchGivenText(v: unknown): string {
+  const g = v && typeof v === "object" ? (v as { step?: number; of?: number; values?: Record<string, string> }) : null;
+  if (!g) return "";
+  const n = Object.values(g.values ?? {}).filter((x) => String(x ?? "").trim()).length;
+  return `Did ${Math.min(Number(g.step) || 0, Number(g.of) || 0)} of ${Number(g.of) || 0} steps · recorded ${n} reading${n === 1 ? "" : "s"}`;
+}
+
 export const cleanGiven = (v: unknown): string | number | null =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 && v < 10 ? v : typeof v === "string" ? v.slice(0, 120) : null;
 
@@ -289,6 +317,7 @@ export const spelledRight = (given: string, word: string) => !!spellTidy(given) 
 export function isRight(q: ExamQ, given: unknown): boolean {
   if (given == null || q.kind === "page" || q.kind === "written") return false;
   if (q.kind === "graph") return graphMarks(q, given) === q.marks;
+  if (q.kind === "bench") return benchGot(q, given) === q.marks;
   if (q.kind === "choice") return Number(given) === q.answer;
   if (q.kind === "spell") return spelledRight(String(given), String(q.answer));
   return typedRight(String(given), String(q.answer));
@@ -300,10 +329,10 @@ export function reviewItems(qs: ExamQ[], answers: Record<string, unknown>, pageM
   return qs.map((q, i) => {
     const v = answers?.[String(i)], mark = pageMarks?.[String(i)];
     const given = q.kind === "page" ? (pageBlank(v) ? "" : "Written on the page") : q.kind === "written" ? String(v ?? "").trim()
-      : q.kind === "choice" ? (v == null || v === "" ? "" : q.options[Number(v)] ?? "") : q.kind === "graph" ? graphGivenText(v) : String(v ?? "").trim();
-    const answer = q.kind === "page" ? "" : q.kind === "graph" ? graphAnswerText(q) : q.kind === "written" ? String(q.answer ?? "").trim() : q.kind === "choice" ? q.options[Number(q.answer)] ?? "" : shownAnswer(q.answer);
+      : q.kind === "choice" ? (v == null || v === "" ? "" : q.options[Number(v)] ?? "") : q.kind === "graph" ? graphGivenText(v) : q.kind === "bench" ? benchGivenText(v) : String(v ?? "").trim();
+    const answer = q.kind === "page" ? "" : q.kind === "graph" ? graphAnswerText(q) : q.kind === "bench" ? "Each reading marked against your own bench" : q.kind === "written" ? String(q.answer ?? "").trim() : q.kind === "choice" ? q.options[Number(q.answer)] ?? "" : shownAnswer(q.answer);
     const right = q.kind !== "page" && isRight(q, v);
-    const got = q.kind === "page" || q.kind === "written" ? Math.min(q.marks, Math.max(0, Number(mark) || 0)) : q.kind === "graph" ? graphMarks(q, v) : right ? q.marks : q.method ? Math.min(teacherMax(q), Math.max(0, Number(mark) || 0)) : 0;
+    const got = q.kind === "page" || q.kind === "written" ? Math.min(q.marks, Math.max(0, Number(mark) || 0)) : q.kind === "graph" ? graphMarks(q, v) : q.kind === "bench" ? benchGot(q, v) : right ? q.marks : q.method ? Math.min(teacherMax(q), Math.max(0, Number(mark) || 0)) : 0;
     const pending = q.kind === "page" ? mark == null && !pageBlank(v) : q.kind === "written" ? mark == null && !writtenBlank(v) : !!q.method && !right && mark == null && !workingBlank(answers?.[workingKey(i)]);
     return { q: shownQ(q), kind: q.kind, given, answer, got, marks: q.marks, right: got === q.marks && q.marks > 0, ...(pending ? { pending: true } : {}) };
   });
@@ -312,7 +341,7 @@ export function reviewItems(qs: ExamQ[], answers: Record<string, unknown>, pageM
 // pageMarks: the teacher's marks for pages (added up with everything marked automatically).
 export function markPaper(qs: ExamQ[], answers: Record<string, unknown>, pageMarks: Record<string, number> = {}): { score: number; total: number; right: boolean[] } {
   const given = (q: ExamQ, i: number) => Math.max(0, Math.min(teacherMax(q), Math.round(Number(pageMarks?.[String(i)]) || 0)));
-  const got = qs.map((q, i) => (q.kind === "page" || q.kind === "written" ? given(q, i) : q.kind === "graph" ? graphMarks(q, answers?.[String(i)]) : isRight(q, answers?.[String(i)]) ? q.marks : q.method ? given(q, i) : 0));
+  const got = qs.map((q, i) => (q.kind === "page" || q.kind === "written" ? given(q, i) : q.kind === "graph" ? graphMarks(q, answers?.[String(i)]) : q.kind === "bench" ? benchGot(q, answers?.[String(i)]) : isRight(q, answers?.[String(i)]) ? q.marks : q.method ? given(q, i) : 0));
   return { score: got.reduce((a, b) => a + b, 0), total: qs.reduce((s, q) => s + q.marks, 0), right: qs.map((q, i) => q.marks > 0 && got[i] === q.marks) };
 }
 
