@@ -162,6 +162,18 @@ export const EXAM: Record<string, ExamQ[]> = {
     Q("Archimedes' principle says the upthrust equals…", "The weight of the fluid displaced", ["The weight of the object", "The volume of the object", "The mass of the can"], "This is why the two values match."),
     Q("Weight in air 1.50 N, upthrust 0.60 N. The relative density is…", "2.5", ["0.4", "0.9", "2.1"], "Relative density = weight in air ÷ upthrust."),
   ],
+  "reading-instruments": [
+    Q("A thermometer has numbered marks at 20 °C and 30 °C with 10 spaces between them. One small division is…", "1 °C", ["10 °C", "0.1 °C", "2 °C"], "(30 − 20) ÷ 10 spaces = 1 °C."),
+    Q("Why do many meters have a mirror strip behind the needle?", "To avoid parallax: line the needle up with its reflection", ["To make it brighter", "To protect the needle", "To double the reading"], "When the needle hides its reflection, your eye is straight in front."),
+    Q("A burette reads 12.30 cm³ at the start and 35.75 cm³ at the end. The volume run out is…", "23.45 cm³", ["48.05 cm³", "35.75 cm³", "12.30 cm³"], "Final − initial: burette numbers go down the tube."),
+    Q("For water in a measuring cylinder you read…", "The bottom of the meniscus", ["The top of the meniscus", "Where the water touches the glass", "Any part of it"], "Water curves up at the glass; the bottom of the curve is the level."),
+  ],
+  sonometer: [
+    Q("How do you know the wire is resonating with the fork?", "The paper rider is thrown off the wire", ["The fork stops", "The wire breaks", "The bridge moves by itself"], "At resonance the wire vibrates with a large amplitude."),
+    Q("A higher-frequency fork needs…", "A shorter length of wire", ["A longer length of wire", "The same length", "A heavier wire"], "L ∝ 1/f for the same tension."),
+    Q("The wire between the bridges vibrates as half a wavelength. With f = 256 Hz and L = 0.30 m, the wave speed is…", "153.6 m/s", ["76.8 m/s", "85.3 m/s", "0.0012 m/s"], "v = fλ = f × 2L = 256 × 0.60."),
+    Q("Increasing the tension in the wire makes the resonant length for a fork…", "Longer, because the wave speed increases", ["Shorter", "No different", "Zero"], "v = √(T/μ); larger v means a longer L = v/2f."),
+  ],
   "terminal-velocity": [
     Q("Why start timing below the first band, not at the surface?", "The ball needs time to reach terminal velocity", ["The oil is thicker at the top", "So the ball goes faster", "The bands are easier to see"], "It accelerates at first, then travels at a steady speed."),
     Q("At terminal velocity the forces on the ball are…", "Balanced: weight = drag + upthrust", ["Unbalanced", "Weight only", "Zero weight"], "No resultant force means no acceleration."),

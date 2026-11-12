@@ -11,6 +11,8 @@ const PRACTICALS = [
   { tile: "Micrometer Screw Gauge", look: ["Read the zero error", "Read the micrometer (one end)"], graph: null },
   { tile: "Outside & Inside Callipers", look: ["Set the outside callipers on the pipe", "Read where the right point is"], graph: null },
   { tile: "Archimedes' Principle", look: ["Read its weight in air", "Read its weight in water"], graph: null },
+  { tile: "Reading Instruments Drill", look: ["Read the thermometer", "Read the ammeter", "Read the voltmeter", "Read the burette"], graph: null },
+  { tile: "The Sonometer", look: ["Move the bridge until the rider jumps off", "Record the resonant length (256 Hz)"], graph: null },
 ];
 
 for (const pr of PRACTICALS) {
@@ -24,7 +26,7 @@ for (const pr of PRACTICALS) {
     await agree(p);
     await p.getByRole("button", { name: "Laboratory" }).click();
     const lab = p.getByRole("dialog", { name: "Laboratory" });
-    await lab.getByPlaceholder(/Search/).fill(pr.tile.split(" ")[pr.tile.startsWith("Reading") ? 1 : 0]);
+    await lab.getByPlaceholder(/Search/).fill(pr.tile.split(" ")[/^(Reading|The) /.test(pr.tile) ? 1 : 0]);
     await lab.getByRole("button", { name: pr.tile, exact: true }).click();
     const bench = lab.getByRole("group", { name: /Lab bench/ });
     await expect(bench).toBeVisible({ timeout: 30_000 });

@@ -95,6 +95,10 @@ export const LAB: LabEntry[] = [
     blurb: "Close it with the ratchet, read the sleeve and thimble, measure a wire in three places and find its cross-sectional area." },
   { slug: "callipers", title: "Outside & Inside Callipers", subject: "physics", emoji: "🦵", level: "JSS 1 – SS 2", status: "new", practical: true,
     blurb: "Carry a pipe's outside and inside diameters to a metre rule with callipers, and work out the thickness of its wall." },
+  { slug: "reading-instruments", title: "Reading Instruments Drill", subject: "physics", emoji: "🌡️", level: "JSS 1 – SS 3", status: "new", practical: true,
+    blurb: "Read a thermometer, ammeter, voltmeter, measuring cylinder and burette — work out each small division and avoid parallax. New readings every time." },
+  { slug: "sonometer", title: "The Sonometer", subject: "physics", emoji: "🎻", level: "SS 1 – SS 3", status: "new", practical: true,
+    blurb: "Strike tuning forks, slide the bridge until the paper rider jumps off, plot L against 1/f and find the wave speed and the wire's mass per metre." },
   { slug: "archimedes", title: "Archimedes' Principle", subject: "physics", emoji: "⚖️", level: "JSS 3 – SS 3", status: "new", practical: true,
     blurb: "Weigh a stone in air and in water with a spring balance, catch the water from a eureka can and compare upthrust with the water's weight." },
   // ── Chemistry ──

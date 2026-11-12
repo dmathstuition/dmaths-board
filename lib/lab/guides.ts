@@ -716,6 +716,37 @@ export const GUIDES: Record<string, LabGuide> = {
     ],
     conclusion: "The upthrust equals the weight of water displaced. That is Archimedes' principle. The weight in air divided by the upthrust is the stone's relative density.",
   },
+  "reading-instruments": {
+    aim: "Read five common instruments correctly.",
+    steps: [
+      "For each instrument, find what one small division is worth: the difference between two numbered marks, divided by the number of spaces between them.",
+      "Read the thermometer at the top of the red thread.",
+      "Read the ammeter and voltmeter where the needle points, looking straight at it.",
+      "Read the measuring cylinder at the bottom of the meniscus.",
+      "Read the burette downwards from zero, to the nearest half division.",
+    ],
+    tips: [
+      "Keep your eye level with the mark to avoid parallax error.",
+      "On a meter, line the needle up with its reflection in the mirror strip.",
+    ],
+    conclusion: "Every reading starts with knowing what one small division is worth. Read at eye level, and read the bottom of a meniscus.",
+  },
+  "sonometer": {
+    aim: "Find how the resonant length of a stretched wire depends on frequency, and find the speed of waves on it.",
+    steps: [
+      "Strike the two hundred and fifty six hertz tuning fork and stand it on the sonometer box.",
+      "Move the bridge slowly until the paper rider jumps off the wire. That is resonance.",
+      "Read the length of wire between the bridges.",
+      "Repeat with the other tuning forks.",
+      "Plot length against one over frequency. Twice the gradient is the speed of the waves.",
+      "Use the tension and the speed to find the mass per unit length of the wire.",
+    ],
+    tips: [
+      "Strike the forks on a rubber pad, not the bench.",
+      "Approach resonance slowly, from short lengths.",
+    ],
+    conclusion: "The resonant length is proportional to one over the frequency. The wire between the bridges is half a wavelength, so the speed is two times frequency times length.",
+  },
   "terminal-velocity": {
     aim: "Find the terminal velocity of ball bearings falling through oil.",
     steps: [
