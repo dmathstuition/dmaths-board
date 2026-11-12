@@ -1145,6 +1145,47 @@ html:not(.dark) .portal-sky { color: #0B1220; }
 @keyframes quizBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 .quiz-bob { animation: quizBob 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .quiz-rise, .quiz-pop, .quiz-grow, .quiz-bob { animation: none; } }
+/* Live quiz game styles (components/live/QuizGames): tug of war, team battle, boss battle, race. */
+.qg-slide { transition: transform 1.2s cubic-bezier(.34,1.56,.64,1); }
+.qg-bar { transition: width 1s cubic-bezier(.16,.84,.44,1) .5s; }
+.qg-car { transform: translateY(-50%); transition: left 1.4s cubic-bezier(.22,1,.36,1); }
+@keyframes qgTwang { 0%, 100% { transform: scaleY(1); } 25% { transform: scaleY(2.4); } 50% { transform: scaleY(.5); } 75% { transform: scaleY(1.5); } }
+.qg-twang { animation: qgTwang .7s ease-out; }
+@keyframes qgHeave { 0%, 100% { transform: translateX(0); } 30% { transform: translateX(var(--qg-heave, -8px)); } 60% { transform: translateX(0); } 80% { transform: translateX(var(--qg-heave, -8px)); } }
+.qg-heave { animation: qgHeave 1s ease-in-out; }
+@keyframes qgFloat { 0% { transform: translateY(6px); opacity: 0; } 15% { opacity: 1; } 70% { opacity: 1; } 100% { transform: translateY(-38px); opacity: 0; } }
+.qg-float { animation: qgFloat 1.8s ease-out both; }
+@keyframes qgFlyRight { 0% { transform: translateX(0) scale(.6); opacity: 0; } 12% { opacity: 1; } 85% { transform: translateX(330px) scale(1.1); opacity: 1; } 100% { transform: translateX(340px) scale(1.8); opacity: 0; } }
+@keyframes qgFlyLeft { 0% { transform: translateX(0) scale(.6); opacity: 0; } 12% { opacity: 1; } 85% { transform: translateX(-330px) scale(1.1); opacity: 1; } 100% { transform: translateX(-340px) scale(1.8); opacity: 0; } }
+.qg-fly-right { animation: qgFlyRight .8s cubic-bezier(.5,0,.8,.6) both; }
+.qg-fly-left { animation: qgFlyLeft .8s cubic-bezier(.5,0,.8,.6) both; }
+@keyframes qgShake { 0%, 100% { transform: translateX(0); } 15% { transform: translateX(-10px) rotate(-3deg); } 35% { transform: translateX(9px) rotate(3deg); } 55% { transform: translateX(-6px); } 75% { transform: translateX(4px); } }
+.qg-shake { animation: qgShake .55s ease-out .55s both; }
+@keyframes qgFlash { 0%, 100% { opacity: 0; } 30% { opacity: .75; } }
+.qg-flash { opacity: 0; animation: qgFlash .5s ease-out .55s both; }
+@keyframes qgBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.qg-bob { animation: qgBob 2.2s ease-in-out infinite; }
+@keyframes qgDefeat { 0% { transform: rotate(0) scale(1); opacity: 1; } 30% { transform: rotate(8deg) scale(1.08); } 100% { transform: rotate(-30deg) scale(.35); opacity: .15; } }
+.qg-defeat { animation: qgDefeat 1.4s ease-in .4s both; }
+@keyframes qgGloat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+.qg-gloat { animation: qgGloat .9s ease-in-out infinite; }
+@keyframes qgBreath { 0% { transform: translateY(-40px) scale(.6); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(30px) scale(1.7); opacity: 0; } }
+.qg-breath { animation: qgBreath .9s ease-in .2s both; }
+@keyframes qgBreak { 0%, 100% { transform: scale(1); } 20% { transform: scale(1.5) rotate(-12deg); } 45% { transform: scale(.8) rotate(10deg); } 70% { transform: scale(1.15); } }
+.qg-break { animation: qgBreak .7s ease-out both; transform-box: fill-box; transform-origin: 50% 60%; }
+@keyframes qgPop { 0% { transform: scale(.3); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
+.qg-pop { animation: qgPop .5s cubic-bezier(.16,.84,.44,1) both; transform-box: fill-box; transform-origin: 50% 50%; }
+@keyframes qgZoom { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px) rotate(-4deg); } 60% { transform: translateX(5px) rotate(2deg); } }
+.qg-zoom { animation: qgZoom .9s ease-out .3s; }
+@keyframes qgPuff { 0% { transform: translate(0, -50%) scale(.5); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(-18px, -50%) scale(1.4); opacity: 0; } }
+.qg-puff { animation: qgPuff 1s ease-out .3s both; }
+@media (prefers-reduced-motion: reduce) {
+  .qg-slide, .qg-bar, .qg-car { transition: none; }
+  .qg-twang, .qg-heave, .qg-float, .qg-fly-right, .qg-fly-left, .qg-shake, .qg-bob, .qg-gloat, .qg-breath, .qg-break, .qg-pop, .qg-zoom, .qg-puff { animation: none; }
+  .qg-flash, .qg-fly-right, .qg-fly-left, .qg-breath, .qg-puff { display: none; }
+  .qg-defeat { animation: none; opacity: .2; }
+}
+
 
 /* ── Low-data mode (lib/lowData.tsx) ─────────────────────────────
    No animation, transitions, blur or decorative extras — less work for the

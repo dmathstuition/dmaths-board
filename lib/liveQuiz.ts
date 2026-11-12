@@ -151,7 +151,25 @@ export function viewFor(quiz: QuizRow, answers: AnswerRow[], names: Map<string, 
       of: board.length,
       behind: ahead && revealed ? { name: ahead.name, by: ahead.points - board[myRank].points } : null,
     },
-    ...(viewer.host ? { questions: quiz.questions } : {}),
+    ...(viewer.host ? { questions: quiz.questions, game: gameFeed(quiz, answers, names) } : {}),
   };
 }
 export type QuizView = ReturnType<typeof viewFor>;
+
+// For the teacher's screen only: the answers to questions the class has
+// already seen revealed, and who answered — what a game style is drawn from
+// (lib/quizGames.ts). Nothing from the question still being answered.
+export function revealedCount(quiz: Pick<QuizRow, "status" | "current" | "questions">): number {
+  const n = quiz.questions.length;
+  if (quiz.status === "reveal" || quiz.status === "leaderboard") return Math.min(n, quiz.current + 1);
+  if (quiz.status === "ended") return Math.min(n, Math.max(0, quiz.current + 1));
+  return Math.max(0, Math.min(n, quiz.current));
+}
+function gameFeed(quiz: QuizRow, answers: AnswerRow[], names: Map<string, string>) {
+  const round = revealedCount(quiz);
+  return {
+    round,
+    scored: answers.filter((a) => a.idx < round).map((a) => ({ idx: a.idx, id: a.student_id, points: a.points, correct: a.correct })),
+    players: [...new Set(answers.map((a) => a.student_id))].map((id) => ({ id, name: names.get(id) ?? "Learner" })),
+  };
+}

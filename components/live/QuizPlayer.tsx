@@ -5,6 +5,8 @@ import { useLive } from "@/components/live/LiveChannel";
 import type { QuizView } from "@/lib/liveQuiz";
 import { ANSWER_STYLE, Shape, useCountdown } from "@/components/live/QuizBits";
 import { Podium } from "@/components/live/QuizHostStage";
+import { GameScene, MyTeam } from "@/components/live/QuizGames";
+import { cleanGame, modeInfo, type GameState } from "@/lib/quizGames";
 import { clockSynced, useServerClock } from "@/lib/serverClock";
 
 export function ordinal(n: number) {
@@ -42,7 +44,12 @@ export default function QuizPlayer({ sessionId, myName, myId = "", onState, onDi
     const j = await r.json().catch(() => ({}));
     setQuiz(keepMine(j.quiz, mineRef.current)); if (j.serverNow) setOffset(j.serverNow - Date.now());
   }, [sessionId]);
-  const send = useLive({ "quiz-changed": () => load() });
+  // The game style the teacher picked, drawn from what the teacher's screen sends (lib/quizGames.ts).
+  const [gameIn, setGameIn] = useState<GameState | null>(null);
+  const send = useLive({
+    "quiz-changed": () => load(),
+    "quiz-game": (p) => { if (p?.host) setGameIn(cleanGame(p.game)); },
+  });
   // Realtime pings bring changes straight away; polling is the safety net —
   // quick while a quiz is running, slow otherwise, and off in a hidden tab.
   const running = !!quiz && quiz.status !== "ended";
@@ -79,6 +86,7 @@ export default function QuizPlayer({ sessionId, myName, myId = "", onState, onDi
   // A new question scrolls the quiz into view, so a phone never opens on the
   // header with the answers below the fold.
   const boxRef = useRef<HTMLDivElement>(null);
+  const seen = useRef<{ now: GameState | null; before: GameState | null }>({ now: null, before: null });
   const asking = quiz?.status === "question" ? quiz.current : -1;
   useEffect(() => {
     if (asking < 0) return;
@@ -89,12 +97,16 @@ export default function QuizPlayer({ sessionId, myName, myId = "", onState, onDi
 
   if (!quiz) return null;
   const me = quiz.me;
+  const game = gameIn && gameIn.quizId === quiz.id && gameIn.mode !== "classic" ? gameIn : null;
+  // The round before, so the scene can move on from where it was.
+  if (game && (seen.current.now?.quizId !== game.quizId || seen.current.now?.round !== game.round)) seen.current = { before: seen.current.now?.quizId === game.quizId ? seen.current.now : null, now: game };
+  const scene = game && <div className="mt-5 w-full"><GameScene key={`${game.quizId}-${game.mode}`} g={game} from={seen.current.before} myId={myId} sound /></div>;
   const shell = "relative flex min-h-[70vh] flex-col overflow-hidden rounded-[1.75rem] p-4 text-white sm:min-h-[520px] sm:p-6";
   const stage = `${shell} quiz-stage`;
   const top = (
     <div className="flex items-center justify-between text-sm font-black text-white/80">
       <span>{quiz.status === "lobby" || quiz.status === "ended" ? quiz.title : `${quiz.current + 1} of ${quiz.total}`}</span>
-      <span className="rounded-full bg-white/15 px-3 py-1">{myName} · {me?.points ?? 0}</span>
+      <span className="flex items-center gap-1.5"><MyTeam g={game} myId={myId} className="!py-0.5 !text-xs" /><span className="rounded-full bg-white/15 px-3 py-1">{myName} · {me?.points ?? 0}</span></span>
     </div>
   );
 
@@ -106,6 +118,9 @@ export default function QuizPlayer({ sessionId, myName, myId = "", onState, onDi
           <p className="quiz-pop font-display text-4xl font-black">You&apos;re in!</p>
           <p className="mt-2 text-lg font-bold text-white/80">See your name on the screen?</p>
           <div className="quiz-bob mx-auto mt-6 flex w-fit gap-2">{[0, 1, 2, 3].map((k) => <span key={k} className="rounded-lg p-2" style={{ background: ANSWER_STYLE[k].color }}><Shape i={k} className="h-6 w-6" /></span>)}</div>
+          {game && <p className="quiz-pop mt-6 text-2xl font-black">{modeInfo(game.mode).emoji} {modeInfo(game.mode).name}</p>}
+          {game && <p className="mt-1 text-sm font-bold text-white/80">{modeInfo(game.mode).hint}</p>}
+          {game && <MyTeam g={game} myId={myId} className="quiz-pop mt-3 inline-block !px-5 !py-2 !text-xl" />}
           <p className="mt-6 text-sm text-white/70">{quiz.total} question{quiz.total === 1 ? "" : "s"} · answer fast for more points · keep a streak for bonus 🔥</p>
         </div>
       </div>
@@ -186,6 +201,7 @@ export default function QuizPlayer({ sessionId, myName, myId = "", onState, onDi
           <p className="mt-4 font-bold text-white/85">
             {me?.rank === 1 ? "You're on top of the leaderboard! 👑" : me?.behind ? `${me.behind.by} points behind ${me.behind.name}` : me?.rank ? `${ordinal(me.rank)} of ${me.of}` : ""}
           </p>
+          {scene}
         </div>
       </div>
     );
@@ -195,6 +211,7 @@ export default function QuizPlayer({ sessionId, myName, myId = "", onState, onDi
   return (
     <div className={stage}>
       {top}
+      {scene}
       <Podium rows={quiz.leaderboard} title={quiz.title} me={myName} />
       <p className="mt-4 text-center text-lg font-black">{me?.rank ? `You finished ${ordinal(me.rank)} with ${me.points} points` : "Thanks for playing!"}</p>
       {onDismiss && <button type="button" onClick={onDismiss} className="mx-auto mt-4 min-h-[48px] rounded-2xl bg-white px-6 font-black text-violet-800">Back to the board</button>}

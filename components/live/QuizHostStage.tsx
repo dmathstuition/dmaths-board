@@ -1,6 +1,6 @@
 "use client";
 import type { HostBase } from "@/lib/liveSession";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Confetti from "@/components/ui/Confetti";
 import { useLive } from "@/components/live/LiveChannel";
@@ -8,6 +8,9 @@ import { CONFIDENCE_LABELS, confidence } from "@/lib/confidence";
 import type { QuizView } from "@/lib/liveQuiz";
 import { formatCode } from "@/lib/liveSession";
 import { ANSWER_STYLE, Leaderboard, Shape, secondsLeft, useCountdown } from "@/components/live/QuizBits";
+import { GAME_STEP, GameScene, ModePicker, TeamsPreview } from "@/components/live/QuizGames";
+import { assignTeams, computeGame, isMode, modeInfo, shuffleTeams, type GameMode, type Player, type Scored } from "@/lib/quizGames";
+import { useClassScale } from "@/lib/classScale";
 import { clockSynced, useServerClock } from "@/lib/serverClock";
 import { UK_SETS, UK_STAGE_LABEL, quizQuestions, type UKStage } from "@/lib/ukPrimary";
 
@@ -57,6 +60,48 @@ export default function QuizHostStage({ sessionId, code, people, base, onActive 
 
   const active = !!quiz && quiz.status !== "ended";
   useEffect(() => { onActive?.(active); }, [active, onActive]);
+
+  // ── Game style (lib/quizGames.ts): picked in the lobby, kept on this device for this quiz ──
+  type Setup = { quizId: string; mode: GameMode; teams: string[][] };
+  const [setup, setSetupState] = useState<Setup | null>(null);
+  const storeKey = (id: string) => `dm-quiz-game:${id}`;
+  useEffect(() => {
+    if (!quiz?.id || setup?.quizId === quiz.id) return;
+    let saved: Setup | null = null;
+    try { const j = JSON.parse(localStorage.getItem(storeKey(quiz.id)) ?? "null"); if (j && isMode(j.mode) && Array.isArray(j.teams)) saved = { quizId: quiz.id, mode: j.mode, teams: j.teams }; } catch { /* private window */ }
+    setSetupState(saved ?? { quizId: quiz.id, mode: "classic", teams: [[], []] });
+  }, [quiz?.id, setup?.quizId]);
+  const setSetup = (next: Setup) => { setSetupState(next); try { localStorage.setItem(storeKey(next.quizId), JSON.stringify({ mode: next.mode, teams: next.teams })); } catch { /* private window */ } };
+  const mode: GameMode = setup && quiz && setup.quizId === quiz.id ? setup.mode : "classic";
+  const feed = (quiz as { game?: { round: number; scored: Scored[]; players: Player[] } } | null)?.game;
+  // Everyone in the class now, and anyone who has answered (even if they've dropped out since).
+  const players = useMemo<Player[]>(() => {
+    const out = new Map<string, Player>();
+    for (const p of people) if (p.online) out.set(p.id, { id: p.id, name: p.name });
+    for (const p of feed?.players ?? []) if (!out.has(p.id)) out.set(p.id, { id: p.id, name: people.find((x) => x.id === p.id)?.name ?? p.name });
+    return [...out.values()];
+  }, [people, feed?.players]);
+  const teams = useMemo(() => assignTeams(players, setup?.teams), [players, setup?.teams]);
+  useEffect(() => { // newcomers join a team, and stay on it
+    if (!setup || !modeInfo(setup.mode).teams || JSON.stringify(teams) === JSON.stringify(setup.teams)) return;
+    setSetup({ ...setup, teams });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teams]);
+  const gameArgs = quiz ? { quizId: quiz.id, mode, scored: feed?.scored ?? [], players, teams, total: quiz.total, ended: quiz.status === "ended" } : null;
+  const game = useMemo(() => (gameArgs ? computeGame({ ...gameArgs, round: feed?.round ?? 0 }) : null), [JSON.stringify(gameArgs), feed?.round]); // eslint-disable-line react-hooks/exhaustive-deps
+  const before = useMemo(() => (gameArgs && (feed?.round ?? 0) > 0 ? computeGame({ ...gameArgs, ended: false, round: (feed?.round ?? 1) - 1 }) : null), [JSON.stringify(gameArgs), feed?.round]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Every learner's screen draws the same game: send it, and send it again every few seconds.
+  const scale = useClassScale();
+  const gameRef = useRef(game); gameRef.current = game;
+  const gameSig = game ? JSON.stringify(game) : "";
+  useEffect(() => {
+    if (!game) return;
+    send("quiz-game", { host: true, game });
+    if (game.ended) return;
+    const t = setInterval(() => send("quiz-game", { host: true, game: gameRef.current }), 4000 * scale);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameSig, send, scale]);
 
   async function act(body: Record<string, unknown>) {
     setBusy(true);
@@ -152,7 +197,7 @@ export default function QuizHostStage({ sessionId, code, people, base, onActive 
     <div className={stage}>
       {/* Top strip: PIN always visible for latecomers */}
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-bold text-white/80">
-        <span className="truncate">{quiz.title}</span>
+        <span className="truncate">{quiz.title}{mode !== "classic" && <span className="ml-2 rounded-full bg-amber-300 px-2.5 py-0.5 text-xs font-black text-[#3b2600]">{modeInfo(mode).emoji} {modeInfo(mode).name}</span>}</span>
         <span className="flex items-center gap-2">
           {quiz.status !== "lobby" && quiz.status !== "ended" && <span className="rounded-full bg-white/15 px-3 py-1">{quiz.current + 1} / {quiz.total}</span>}
           <span className="rounded-full bg-white px-3 py-1 font-black text-violet-800">PIN {formatCode(code)}</span>
@@ -168,6 +213,8 @@ export default function QuizHostStage({ sessionId, code, people, base, onActive 
             {here.map((p, i) => <li key={p.id} className="quiz-pop rounded-xl bg-white/15 px-4 py-2 text-lg font-black" style={{ animationDelay: `${i * 40}ms` }}>{p.name}</li>)}
             {!here.length && <li className="quiz-bob text-white/60">Waiting for learners to join…</li>}
           </ul>
+          {setup && <ModePicker mode={mode} onPick={(m) => setSetup({ ...setup, mode: m })} />}
+          {game && modeInfo(mode).teams && <TeamsPreview teams={game.teams} onShuffle={() => setSetup({ ...setup!, teams: shuffleTeams(players) })} />}
         </div>
       )}
 
@@ -214,13 +261,21 @@ export default function QuizHostStage({ sessionId, code, people, base, onActive 
         </div>
       )}
 
-      {quiz.status === "leaderboard" && (
+      {quiz.status === "leaderboard" && mode === "classic" && (
         <div className="mx-auto mt-6 max-w-2xl">
           <p className="mb-4 text-center font-display text-4xl font-black">Scoreboard</p>
           <Leaderboard rows={quiz.leaderboard.slice(0, 5)} big />
         </div>
       )}
+      {quiz.status === "leaderboard" && mode !== "classic" && game && (
+        <div className="mx-auto mt-5 max-w-3xl">
+          <p className="mb-3 text-center font-display text-3xl font-black">{modeInfo(mode).emoji} {modeInfo(mode).name}</p>
+          <GameScene key={`${quiz.id}-${mode}`} g={game} from={before} big sound />
+          {mode !== "race" && <div className="mx-auto mt-4 max-w-xl"><p className="mb-1.5 text-sm font-black text-white/70">Top scorers</p><Leaderboard rows={quiz.leaderboard.slice(0, 3)} /></div>}
+        </div>
+      )}
 
+      {quiz.status === "ended" && mode !== "classic" && game && <div className="mx-auto mt-4 max-w-3xl"><GameScene key={`end-${quiz.id}`} g={game} big sound /></div>}
       {quiz.status === "ended" && <Podium rows={quiz.leaderboard} title={quiz.title} />}
 
       {err && <p className="mt-4 rounded-xl bg-red-500/20 px-3 py-2 text-sm font-bold" role="alert">{err}</p>}
@@ -231,7 +286,7 @@ export default function QuizHostStage({ sessionId, code, people, base, onActive 
         {quiz.status === "question" && <button type="button" disabled={busy} onClick={() => act({ action: "reveal", quizId: quiz.id })} className="min-h-[48px] rounded-2xl bg-white/15 px-6 font-black hover:bg-white/25">Skip timer</button>}
         {(quiz.status === "reveal" || quiz.status === "leaderboard") && (
           <button type="button" disabled={busy} onClick={next} className="min-h-[52px] rounded-2xl bg-white px-8 text-lg font-black text-violet-800 shadow-lg">
-            {quiz.status === "reveal" ? (quiz.current + 1 >= quiz.total ? "Podium 🏆" : "Scoreboard →") : "Next question →"}
+            {quiz.status === "reveal" ? (quiz.current + 1 >= quiz.total ? "Podium 🏆" : GAME_STEP[mode]) : "Next question →"}
           </button>
         )}
         {quiz.status === "ended" && <button type="button" onClick={() => setDismissed(quiz.id)} className="min-h-[48px] rounded-2xl bg-white px-6 font-black text-violet-800">Play another quiz</button>}
