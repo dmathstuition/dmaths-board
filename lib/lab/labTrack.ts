@@ -12,13 +12,15 @@ export type LabProgress = {
   shown: number;       // readings filled in for them ("show me the answer")
   readings: LabReading[];
   exam: { score: number; of: number } | null;
+  obs?: LabObs[];      // observations written so far (lib/lab/observe.ts)
 };
+export type LabObs = { t: string; ok: boolean }; // the observation, and whether it reads as a good one
 // What the teacher keeps for each learner.
 export type LabEntry = LabProgress & { by: string; name: string; v: number; at: number /* when heard, teacher's clock */ };
 
 const str = (x: unknown, n: number) => String(x ?? "").replace(/[\u0000-\u001f]/g, " ").slice(0, n);
 const int = (x: unknown, lo: number, hi: number) => { const n = Math.round(Number(x)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : lo; };
-export const MAX_READINGS = 40;
+export const MAX_READINGS = 40, MAX_OBS = 30;
 
 // A report as it arrives over the network: anything could be in it.
 export function cleanProgress(p: any): (LabProgress & { by: string; name: string; v: number }) | null {
@@ -33,6 +35,8 @@ export function cleanProgress(p: any): (LabProgress & { by: string; name: string
       .filter((r: any) => r && typeof r === "object")
       .map((r: any) => ({ l: str(r.l, 60), v: str(r.v, 40), ...(r.s ? { s: true } : {}) })),
     exam: exam && exam.score <= exam.of ? exam : null,
+    obs: (Array.isArray(p.obs) ? p.obs : []).slice(-MAX_OBS).filter((o: any) => o && typeof o === "object" && String(o.t ?? "").trim())
+      .map((o: any) => ({ t: str(o.t, 400).trim(), ok: !!o.ok })),
   };
 }
 

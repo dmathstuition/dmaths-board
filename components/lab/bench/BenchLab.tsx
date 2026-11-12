@@ -11,8 +11,12 @@ import { checkField, doStep, tablesOf, targetOf } from "@/lib/lab/bench/run";
 import { examFor, type ExamQ } from "@/lib/lab/bench/exam";
 import { HELP_AFTER, useLabReport } from "@/components/lab/bench/labReport";
 import { SUBJECTS } from "@/lib/lab/catalog";
+import { ObservePrompt, ObservationsPage } from "@/components/lab/bench/Observe";
+import { checkObservation, type Observation } from "@/lib/lab/observe";
+const checkObs = (t: string) => { const c = checkObservation(t); return { ok: c.ok, tips: c.tips }; };
 import { Apparatus, BenchDefs, Front, Lens, Room, W, closeup, dims, hasFront, hasShadow, mouth } from "@/components/lab/bench/Apparatus";
 
+type Tab = "protocol" | "results" | "obs" | "about";
 type Run = { id: number; s: any; step: number; values: Record<string, string>; notes: Record<number, string>; shown: string[] };
 type Exam = { picks: Record<number, string>; marked: boolean };
 type Move = { id: string; x: number; y: number; tilt: number; instant?: boolean };
@@ -37,7 +41,8 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
   const [holding, setHolding] = useState(false);
   const [setVal, setSetVal] = useState<number | null>(null);
   const [hint, setHint] = useState<string | null>(null);
-  const [tab, setTab] = useState<"protocol" | "results" | "about">("protocol");
+  const [tab, setTab] = useState<Tab>("protocol");
+  const [obs, setObs] = useState<Observation[]>([]); // what the learner wrote they saw
   const [sure, setSure] = useState(false);
   const [misses, setMisses] = useState(0);              // wrong tries on this step (for the teacher's tracker)
   const stepAt = useRef(Date.now());
@@ -45,7 +50,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
   // The questions, in a new order each run (run.id changes when it restarts).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const questions = useMemo(() => shuffle(examFor(p.slug)).map((q) => ({ q, options: shuffle([q.right, ...q.wrong]) })), [p.slug, run.id]);
-  const { name, report, learner } = useLabReport();
+  const { name, report, learner, demo, watch } = useLabReport();
   // Learners have a real go first: the step is done for them only after HELP_AFTER wrong tries.
   const canHelp = !learner || misses >= HELP_AFTER;
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
@@ -61,9 +66,23 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
   useEffect(() => {
     setHint(null); setPicked(false); setMisses(0); stepAt.current = Date.now();
     const a = p.steps[run.step]?.action;
-    setSetVal(a?.type === "set" ? lastSet.current[a.item] ?? a.start ?? a.min : null);
+    if (!watch) setSetVal(a?.type === "set" ? lastSet.current[a.item] ?? a.start ?? a.min : null);
     if (run.step >= p.steps.length) setTab("results");
-  }, [run.step, p.steps]);
+  }, [run.step, p.steps]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Watching the teacher: the bench shows the teacher's, as it changes.
+  const frame = watch?.frame && watch.frame.slug === p.slug ? watch.frame : null;
+  useEffect(() => {
+    if (!frame) return;
+    setRun({ id: frame.id, s: frame.s, step: frame.step, values: frame.values, notes: frame.notes, shown: frame.shown });
+    setMove(frame.move ? { ...frame.move, instant: false } : null); setPour(frame.pour); setHolding(frame.holding);
+    if (frame.setVal != null) setSetVal(frame.setVal);
+  }, [frame]);
+  // Showing the class: every change on the bench goes out (the panel sends at most a few a second).
+  useEffect(() => {
+    demo?.({ slug: p.slug, id: run.id, step: run.step, s: run.s, values: run.values, notes: run.notes, shown: run.shown,
+      move: move ? { id: move.id, x: move.x, y: move.y, tilt: move.tilt } : null, pour, holding, setVal });
+  }, [demo, p.slug, run, move, pour, holding, setVal]);
 
   // While a dial is being turned, the bench shows what it would do.
   const shownState = step?.action.type === "set" && setVal != null && step.apply ? step.apply(run.s, setVal) : run.s;
@@ -209,7 +228,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
   function restart() {
     if (!sure) { setSure(true); setTimeout(() => alive.current && setSure(false), 3500); return; }
     cancelAnimationFrame(raf.current); holdingRef.current = false;
-    setSure(false); setHolding(false); setBusy(false); setMove(null); setPour(null); lastSet.current = {};
+    setSure(false); setHolding(false); setBusy(false); setMove(null); setPour(null); lastSet.current = {}; setObs([]);
     setRun(fresh(p)); setTab("protocol"); setExam({ picks: {}, marked: false });
   }
 
@@ -224,12 +243,13 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
         .map((f) => ({ l: f.label, v: `${r.values[f.key]}${f.unit ? ` ${f.unit}` : ""}`, ...(r.shown.includes(f.key) ? { s: true } : {}) }));
       report({ slug: p.slug, step: Math.min(r.step, p.steps.length), total: p.steps.length, title: p.steps[r.step]?.title ?? "Finished", done: r.step >= p.steps.length,
         misses, onStep: Math.round((Date.now() - stepAt.current) / 1000), shown: r.shown.length, readings: readings.slice(-40),
-        exam: examScore != null ? { score: examScore, of: questions.length } : null });
+        exam: examScore != null ? { score: examScore, of: questions.length } : null,
+        obs: obs.filter((o) => o.text).slice(-30).map((o) => ({ t: `${o.free ? "Note" : p.steps[o.step]?.title ?? "Note"}: ${o.text}`, ok: o.ok })) });
     };
     send();
     const t = setInterval(send, 10_000);
     return () => clearInterval(t);
-  }, [report, p, run.step, run.values, run.shown, misses, examScore, questions.length]);
+  }, [report, p, run.step, run.values, run.shown, misses, examScore, questions.length, obs]);
 
   // ── The write-up, as a PDF to print or keep ──
   async function writeup() {
@@ -240,7 +260,8 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
       const r = runRef.current;
       const bytes = await makeWriteup({ p, s: r.s, values: r.values, notes: r.notes, step: r.step, shown: r.shown, name,
         date: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }),
-        exam: exam.marked ? questions.map((x, i) => ({ q: x.q, picked: exam.picks[i] ?? null })) : null });
+        exam: exam.marked ? questions.map((x, i) => ({ q: x.q, picked: exam.picks[i] ?? null })) : null,
+        mine: obs.filter((o) => o.text).map((o) => o.text) });
       downloadPdf(bytes, `${p.title} - write-up`);
       setPdfBusy(null);
     } catch (e) {
@@ -255,12 +276,18 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
   const mag = step?.magnify ? byId(step.magnify) : undefined;
   const zoom = mag ? closeup(mag) : null;
   const zoomAt = step?.magnifyAt ?? (mag ? { x: Math.max(170, Math.min(1230, mag.x + (mag.x < 700 ? 330 : -330))), y: 175 } : null);
-  const lastNote = run.notes[run.step - 1];
+  const lastIdx = run.step - 1, lastNote = run.notes[lastIdx];
+  // A learner doing it themselves writes what they saw before going on.
+  const observing = !!learner && !watch;
+  const savedObs = obs.find((o) => o.step === lastIdx && !o.free);
+  const pending = observing && !done && !!lastNote && !savedObs;
+  const locked = !!watch || pending; // nothing on the bench to do: watching, or an observation to write first
+  const saveObs = (o: Observation) => setObs((x) => (o.free ? [...x, o] : [...x.filter((y) => y.free || y.step !== o.step), o])); // one per step, any number of notes
   const place = (it: ItemView) => (move?.id === it.id ? move : { x: it.x, y: it.y, tilt: it.tilt ?? 0, instant: false });
   const drawItem = (it: ItemView) => {
     const pos = place(it), { h } = dims(it);
-    const draggable = !busy && a?.type === "drag" && a.item === it.id;
-    const droppable = picked && target?.id === it.id;
+    const draggable = !busy && !locked && a?.type === "drag" && a.item === it.id;
+    const droppable = picked && !locked && target?.id === it.id;
     return (
       <g key={it.id} data-item={it.id}
         role={draggable || droppable ? "button" : undefined}
@@ -288,7 +315,7 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
       className={kind === "do" ? "bench-pulse" : undefined} pointerEvents="none" />;
   };
   // Tap / hold steps: the apparatus itself is the button too.
-  const zone = actor && (a?.type === "tap" || a?.type === "hold") ? (() => {
+  const zone = actor && !locked && (a?.type === "tap" || a?.type === "hold") ? (() => {
     const { w, h } = dims(actor);
     return <rect x={actor.x - w / 2 - 10} y={actor.y - h - 10} width={w + 20} height={h + 20} fill="transparent" style={{ cursor: "pointer", touchAction: "none" }}
       onClick={a.type === "tap" ? tapIt : undefined}
@@ -308,16 +335,16 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
           <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-200 sm:w-36"><div className="h-full rounded-full bg-[#0E6E72] transition-all" style={{ width: `${progress}%` }} /></div>
           <span className="text-xs font-black tabular-nums text-slate-500">{Math.min(run.step, p.steps.length)}/{p.steps.length}</span>
         </div>
-        <button type="button" onClick={restart} className={`min-h-[40px] rounded-xl px-3 text-xs font-black ${sure ? "bg-red-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+        {!watch && <button type="button" onClick={restart} className={`min-h-[40px] rounded-xl px-3 text-xs font-black ${sure ? "bg-red-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
           {sure ? "Sure? Start again" : "Restart"}
-        </button>
+        </button>}
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_330px]">
         <div className="min-w-0 space-y-3">
           <div className="elab-panel overflow-hidden" style={{ padding: 0 }}>
             <svg ref={svg} viewBox={`0 ${VIEW.y} ${W} ${VIEW.h}`} className="block h-auto w-full select-none" role="group" aria-label={`Lab bench: ${p.title}`}
-              style={{ fontFamily: "system-ui, sans-serif" }} onPointerMove={moved} onPointerUp={up} onPointerCancel={() => { drag.current = null; setMove(null); }}>
+              style={{ fontFamily: "system-ui, sans-serif", pointerEvents: watch ? "none" : undefined }} onPointerMove={moved} onPointerUp={up} onPointerCancel={() => { drag.current = null; setMove(null); }}>
               <BenchDefs />
               <Room />
               {order.filter((x) => move?.id !== x.id).map(drawItem)}
@@ -339,7 +366,13 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
           </div>
 
           <section aria-live="polite" className="rounded-2xl bg-white p-3 shadow ring-1 ring-slate-200 sm:p-4">
-            {done ? (
+            {done && watch ? (
+              <div>
+                <p className="text-base font-black text-[#0A4F52]">✓ Your teacher has finished the practical</p>
+                <p className="mt-1 text-sm text-slate-700">{p.conclusion(run.s, run.values)}</p>
+                <p className="mt-2 text-sm font-bold text-slate-700">Your turn is next — get ready to do it yourself, step by step, and write what you see.</p>
+              </div>
+            ) : done ? (
               <div>
                 <p className="text-base font-black text-[#0A4F52]">✓ Practical complete</p>
                 <p className="mt-1 text-sm text-slate-700">{p.conclusion(run.s, run.values)}</p>
@@ -351,12 +384,17 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
                 {pdfBusy && <p role="status" className="mt-2 text-sm font-bold text-[#0A4F52]">{pdfBusy}</p>}
                 {questions.length > 0 && <ExamCard questions={questions} exam={exam} setExam={setExam} />}
               </div>
+            ) : pending ? (
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-wide text-[#0E6E72]">✓ Step {run.step} of {p.steps.length} done: {p.steps[lastIdx]?.title}</p>
+                <ObservePrompt subject={p.subject} note={lastNote} step={lastIdx} saved={undefined} onSave={saveObs} />
+              </div>
             ) : step && (
               <div>
-                <p className="text-[11px] font-black uppercase tracking-wide text-[#0E6E72]">Step {run.step + 1} of {p.steps.length}</p>
+                <p className="text-[11px] font-black uppercase tracking-wide text-[#0E6E72]">Step {run.step + 1} of {p.steps.length}{watch ? " · your teacher is doing it" : ""}</p>
                 <h3 className="text-base font-black sm:text-lg">{step.title}</h3>
                 <p className="mt-0.5 text-sm text-slate-600">{step.how}</p>
-                <div className="mt-3">
+                {watch ? <p className="mt-3 rounded-xl bg-[#E0F2FE] p-2.5 text-sm font-bold text-[#075985]">👀 Watch how your teacher does this step — you&apos;ll do it yourself next.</p> : <div className="mt-3">
                   {a?.type === "drag" && (
                     <p className="text-sm font-bold text-slate-700">
                       {picked ? <>Now tap the <span className="text-[#047857]">{lower(nameOf(target))}</span> (green outline). <button type="button" onClick={() => setPicked(false)} className="ml-1 underline">Cancel</button></>
@@ -398,9 +436,9 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
                     <RecordForm key={run.step} fields={a.fields} s={run.s} values={run.values} graph={graph} tries={learner ? HELP_AFTER : 3} canShow={canHelp}
                       onDone={(v, shown) => finish(run.s, { ...run.values, ...v }, shown)} onMiss={() => setMisses((m) => m + 1)} />
                   )}
-                </div>
+                </div>}
                 {hint && <p role="alert" className="mt-2 text-sm font-bold text-amber-700">{hint}</p>}
-                {a?.type !== "record" && canHelp && (
+                {a?.type !== "record" && canHelp && !watch && (
                   <button type="button" onClick={doForMe} disabled={busy || holding} className="mt-3 min-h-[36px] rounded-lg px-2 text-xs font-black text-slate-500 underline decoration-dotted hover:text-slate-800 disabled:opacity-50">
                     Do this step for me
                   </button>
@@ -410,11 +448,15 @@ export default function BenchLab({ practical: p }: { practical: Practical }) {
                 )}
               </div>
             )}
-            {lastNote && !done && <p className="mt-3 rounded-xl bg-[#EEF7F6] p-2.5 text-sm text-[#0A4F52]"><b>What you see:</b> {lastNote}</p>}
+            {lastNote && !done && !pending && (watch
+              ? <p className="mt-3 rounded-xl bg-[#EEF7F6] p-2.5 text-sm text-[#0A4F52]">📝 <b>What happened:</b> {lastNote}</p>
+              : observing ? <ObservePrompt subject={p.subject} note={lastNote} step={lastIdx} saved={savedObs} onSave={saveObs} />
+              : <p className="mt-3 rounded-xl bg-[#EEF7F6] p-2.5 text-sm text-[#0A4F52]"><b>What you see:</b> {lastNote}</p>)}
           </section>
         </div>
 
-        <Notebook p={p} run={run} tab={tab} setTab={setTab} graph={graph} onWriteup={writeup} />
+        <Notebook p={p} run={run} tab={tab} setTab={setTab} graph={graph} onWriteup={writeup}
+          obs={watch ? null : obs} onAddObs={(t) => saveObs({ ...checkObs(t), step: Math.max(0, run.step - 1), text: t, free: true })} />
       </div>
     </div>
   );
@@ -499,14 +541,15 @@ function RecordForm({ fields, s, values, graph, onDone, onMiss, tries: most = 3,
 }
 
 // ── The lab notebook ──
-function Notebook({ p, run, tab, setTab, graph, onWriteup }: { p: Practical; run: Run; tab: "protocol" | "results" | "about"; setTab: (t: "protocol" | "results" | "about") => void; graph: Graph | null; onWriteup: () => void }) {
+function Notebook({ p, run, tab, setTab, graph, onWriteup, obs, onAddObs }: { p: Practical; run: Run; tab: Tab; setTab: (t: Tab) => void; graph: Graph | null; onWriteup: () => void;
+  obs: Observation[] | null; onAddObs: (text: string) => void }) {
   const list = useRef<HTMLOListElement>(null);
   useEffect(() => { // keep the current step in view (without scrolling the page)
     const box = list.current, li = box?.querySelector<HTMLElement>("[data-current]");
     if (box && li) box.scrollTop = Math.max(0, li.offsetTop - box.offsetTop - 60);
   }, [run.step, tab]);
   const done = run.step >= p.steps.length;
-  const tabs: [typeof tab, string][] = [["protocol", "Protocol"], ["results", "Results"], ["about", "Aim & safety"]];
+  const tabs: [Tab, string][] = [["protocol", "Protocol"], ["results", "Results"], ...(obs ? [["obs", `Observations${obs.some((o) => o.text) ? ` · ${obs.filter((o) => o.text).length}` : ""}`] as [Tab, string]] : []), ["about", "Aim & safety"]];
   return (
     <aside className="flex max-h-[720px] min-h-[320px] flex-col overflow-hidden rounded-2xl bg-[#FFFDF7] shadow ring-1 ring-slate-200" aria-label="Lab notebook">
       <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2">
@@ -558,6 +601,7 @@ function Notebook({ p, run, tab, setTab, graph, onWriteup }: { p: Practical; run
           </button>
         </div>
       )}
+      {tab === "obs" && obs && <ObservationsPage subject={p.subject} obs={obs} onAdd={onAddObs} stepOf={(i) => (p.steps[i] ? `After step ${i + 1}: ${p.steps[i].title}` : "Note")} />}
       {tab === "about" && (
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 text-sm text-slate-700">
           <div><p className="font-black text-slate-900">Aim</p><p>{p.aim}</p></div>

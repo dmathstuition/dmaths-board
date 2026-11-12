@@ -14,6 +14,7 @@ export type WriteupInput = {
   shown: string[];         // readings filled in for them
   name?: string; date: string; school?: string;
   exam?: { q: ExamQ; picked: string | null }[] | null; // their answers, once marked
+  mine?: string[];         // observations they wrote themselves
 };
 
 const A4: [number, number] = [595.28, 841.89];
@@ -189,7 +190,8 @@ export async function makeWriteup(o: WriteupInput): Promise<Uint8Array> {
   if (g && g.points.length) graph(c, g);
 
   const seen = Object.entries(o.notes).sort((a, b) => Number(a[0]) - Number(b[0])).map(([, v]) => v);
-  if (seen.length) { heading(c, "Observations"); seen.forEach((s) => text(c, `-  ${s}`, { x: M + 4, width: W - 4, size: 9.5 })); }
+  if (o.mine?.length) { heading(c, "My observations"); o.mine.forEach((s) => text(c, `-  ${s}`, { x: M + 4, width: W - 4, size: 9.5 })); }
+  if (seen.length) { heading(c, o.mine?.length ? "From the protocol" : "Observations"); seen.forEach((s) => text(c, `-  ${s}`, { x: M + 4, width: W - 4, size: 9.5 })); }
   const answers = o.p.steps.slice(0, o.step).flatMap((st) => (st.action.type === "record" ? st.action.fields : [])).filter((f) => f.options && o.values[f.key] != null);
   if (answers.length) { heading(c, "Findings"); answers.forEach((f) => text(c, `${f.label}: ${o.values[f.key]}${o.shown.includes(f.key) ? "  (given)" : ""}`, { size: 9.5 })); }
 

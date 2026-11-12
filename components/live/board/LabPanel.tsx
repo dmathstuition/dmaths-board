@@ -1,6 +1,6 @@
 "use client";
 import { useClassScale } from "@/lib/classScale";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLive } from "@/components/live/LiveChannel";
 import { BoardIcon } from "@/components/live/board/BoardIcons";
 import { EXPERIMENTS } from "@/components/lab/experimentRegistry";
@@ -14,6 +14,7 @@ import { START_EVENT } from "@/components/lab/room/LabRoom";
 import { RoomClassContext, type RoomClass } from "@/components/lab/room/roomContext";
 import PlansPanel from "@/components/lab/room/PlansPanel";
 import { addPlan, cleanAssignment, cleanReply, cleanReport, type Assignment, type PlanReport, type Reply } from "@/lib/lab/room/planShare";
+import { QUICK_HELP, cleanFrame, cleanMode, cleanNudge, cleanTask, type DemoFrame, type LabMode, type Nudge } from "@/lib/lab/demo";
 import { addReport, cleanProgress, summary, type LabEntry as TrackEntry, type LabProgress } from "@/lib/lab/labTrack";
 
 // The E-Laboratory on the board. The teacher picks an experiment and works it
@@ -22,10 +23,18 @@ import { addReport, cleanProgress, summary, type LabEntry as TrackEntry, type La
 // tools (it's saved and replayed like a slide). "Let learners try it" opens the
 // same experiment on every learner's own device to explore.
 //
-// Messages: "lab-open" (teacher → all, signed): { slug } or { slug: null },
-// re-sent every few seconds while open so late joiners catch up; and
+// A practical runs like a real lab lesson (lib/lab/demo.ts): "👀 Watch me" —
+// the teacher does it and every learner sees the teacher's bench, live; then
+// "✋ Their turn" — each learner does it on their own phone, with the task the
+// teacher gave, while the teacher follows everyone's progress and observations
+// and can send one learner a word of help.
+//
+// Messages: "lab-open" (teacher → all, signed): { slug, mode, task } or
+// { slug: null }, re-sent every few seconds while open so late joiners catch
+// up; "lab-demo" (teacher → all, signed): the teacher's bench while they show
+// it; "lab-nudge" (teacher → all, signed, { to }): help for one learner; and
 // "lab-progress" (learner → teacher): where a learner trying it is up to —
-// step, readings, wrong tries — for the teacher's live tracker.
+// step, readings, observations, wrong tries — for the teacher's live tracker.
 
 export const BOARD_LAB: LabEntry[] = LAB.filter((e) => e.status !== "soon" && e.slug in EXPERIMENTS);
 const entryFor = (slug: string | null) => BOARD_LAB.find((e) => e.slug === slug) ?? null;
@@ -87,8 +96,18 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
   keep?: KeepStore; // the board's store: an open experiment survives going in or out of full screen
 }) {
   const [slug, setSlug] = useKeptState<string | null>(keep, "lab:slug", null);
-  const [shared, setShared] = useKeptState(keep, "lab:shared", false);     // teacher: learners may try it
+  const [mode, setMode] = useKeptState<LabMode | null>(keep, "lab:mode", null); // teacher: learners watch, or try it themselves
+  const shared = mode !== null;
+  const setShared = useCallback((on: boolean) => setMode(on ? "try" : null), [setMode]);
+  const [task, setTask] = useKeptState(keep, "lab:task", "");               // teacher: the task for their turn
+  const [taskDraft, setTaskDraft] = useState(task);
   const [theirs, setTheirs] = useKeptState<string | null>(keep, "lab:theirs", null); // learner: what the teacher opened
+  const [theirMode, setTheirMode] = useKeptState<LabMode>(keep, "lab:theirMode", "try"); // learner
+  const [theirTask, setTheirTask] = useKeptState(keep, "lab:theirTask", "");            // learner
+  const [hadTurn, setHadTurn] = useKeptState(keep, "lab:hadTurn", false);             // learner: their own bench has started
+  const [frame, setFrame] = useState<DemoFrame | null>(null);                         // learner: the teacher's bench
+  const [nudge, setNudge] = useState<Nudge | null>(null);                             // learner: help from the teacher
+  const [nudges, setNudges] = useKeptState<Record<string, Nudge>>(keep, "lab:nudges", {}); // teacher: help sent
   const [hidden, setHidden] = useKeptState(keep, "lab:hidden", false);     // learner: back on the class board
   const theirsRef = useKeptRef<string | null>(keep, "lab:theirs", null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -106,7 +125,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
   }, []);
   const [shooting, setShooting] = useState(false); // full size while a picture is taken
   const scale = shooting ? 1 : (zoom ?? fit);
-  const sharedRef = useRef({ slug, shared }); sharedRef.current = { slug, shared };
+  const sharedRef = useRef({ slug, mode, task }); sharedRef.current = { slug, mode, task };
 
   const [track, setTrack] = useKeptState<Record<string, TrackEntry>>(keep, "lab:track", {}); // teacher: each learner's progress
   const [tracking, setTracking] = useKeptState(keep, "lab:tracking", false);           // teacher: looking at the tracker
@@ -121,9 +140,13 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
     "lab-open": (p) => {
       if (host || !p?.host) return;
       const s = typeof p.slug === "string" && entryFor(p.slug) ? p.slug : null;
-      if (s && s !== theirsRef.current) setHidden(false);
-      theirsRef.current = s; setTheirs(s);
+      if (s && s !== theirsRef.current) { setHidden(false); setHadTurn(false); setFrame(null); }
+      const m = cleanMode(p.mode);
+      if (s && m === "try") setHadTurn(true);
+      theirsRef.current = s; setTheirs(s); setTheirMode(m); setTheirTask(cleanTask(p.task));
     },
+    "lab-demo": (p) => { if (host || !p?.host) return; const f = cleanFrame(p); if (f) setFrame(f); },
+    "lab-nudge": (p) => { if (host || !p?.host) return; const n = cleanNudge(p); if (n && n.to === myId) setNudge(n); },
     "lab-progress": (p) => { if (host) setTrack((m) => addReport(m, cleanProgress(p), Date.now())); },
     // Lab rooms: the practical set for the class, plans handed in, and replies.
     "lab-assign": (p) => { if (host || !p?.host) return; const a = cleanAssignment(p.assign); setAssigned((cur) => (JSON.stringify(cur) === JSON.stringify(a) ? cur : a)); },
@@ -154,12 +177,31 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
   const trackSum = summary(trackList, now, quiet);
   useEffect(() => {
     if (!host || !live) return;
-    const tell = () => send("lab-open", { host: true, slug: sharedRef.current.shared ? sharedRef.current.slug : null });
+    const r = sharedRef.current;
+    const tell = () => send("lab-open", { host: true, slug: r.mode ? r.slug : null, mode: r.mode ?? "try", task: r.mode === "try" ? r.task : "" });
     tell();
-    if (!shared) return;
+    if (!mode) return;
     const t = setInterval(tell, 4000 * repeat);
     return () => clearInterval(t);
-  }, [host, live, shared, slug, send, repeat]);
+  }, [host, live, mode, task, slug, send, repeat]);
+
+  // Teacher showing the class: their bench goes out a few times a second at
+  // most, and again now and then so a phone that joins late catches up.
+  const demoOut = useRef<{ last: number; timer: ReturnType<typeof setTimeout> | null; f: DemoFrame | null }>({ last: 0, timer: null, f: null });
+  const sendDemo = useCallback((f: DemoFrame) => {
+    const d = demoOut.current, gap = 250 * repeat;
+    d.f = f;
+    const go = () => { d.timer = null; d.last = Date.now(); if (d.f) send("lab-demo", { host: true, ...d.f }); };
+    if (Date.now() - d.last >= gap) go(); else if (!d.timer) d.timer = setTimeout(go, gap - (Date.now() - d.last));
+  }, [send, repeat]);
+  useEffect(() => {
+    if (!host || !live || mode !== "watch") return;
+    const t = setInterval(() => { const d = demoOut.current; if (d.f) send("lab-demo", { host: true, ...d.f }); }, 3000 * repeat);
+    return () => clearInterval(t);
+  }, [host, live, mode, send, repeat]);
+  useEffect(() => () => { if (demoOut.current.timer) clearTimeout(demoOut.current.timer); }, []);
+  const teacherCtx = useMemo<LabReport>(() => ({ demo: mode === "watch" && live ? sendDemo : undefined }), [mode, live, sendDemo]);
+  const help = (to: string, text: string) => { const n = { to, text, at: Date.now() }; send("lab-nudge", { host: true, ...n }); setNudges((m) => ({ ...m, [to]: n })); };
 
   // Teacher: the practical set for the class goes out now and then (phones that join late see it).
   useEffect(() => {
@@ -209,7 +251,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
       setBusy(`Couldn't put it on the board (${e instanceof Error ? e.message : e}) — try again.`);
     }
   }
-  function end() { setSlug(null); setShared(false); setTracking(false); setTrack({}); setBusy(null); onClose(); }
+  function end() { setSlug(null); setShared(false); setTask(""); setTaskDraft(""); setTracking(false); setTrack({}); setBusy(null); onClose(); }
 
   // Esc hides the lab (and never reaches the board behind it).
   const showing = host ? open : !!theirs && !hidden;
@@ -230,6 +272,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
     const entry = entryFor(mine ?? theirs);
     if (!entry) return null;
     const Experiment = EXPERIMENTS[entry.slug];
+    const watching = !mine && theirMode === "watch" && !!entry.practical;
     if (hidden) {
       return (
         <button type="button" onClick={() => setHidden(false)} className="fixed left-1/2 top-2 z-[96] flex max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-full bg-[#0B1220] px-4 py-2.5 text-sm font-black text-white shadow-2xl ring-1 ring-white/20">
@@ -241,13 +284,33 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
       <div role="dialog" aria-label={`Experiment: ${entry.title}`} data-board-overlay className="fixed inset-0 z-[96] flex flex-col bg-[#060B16]">
         <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2 text-white">
           <span className="text-xl" aria-hidden>{entry.emoji}</span>
-          <p className="min-w-0 flex-1 truncate text-sm font-black">{entry.title} <span className="font-semibold text-white/50">· try it yourself</span></p>
+          <p className="min-w-0 flex-1 truncate text-sm font-black">{entry.title} <span className="font-semibold text-white/50">· {watching ? "watch your teacher" : "try it yourself"}</span></p>
           {!entry.room && <ZoomButtons scale={scale} onZoom={setZoom} />}
           {mine && <button type="button" onClick={() => setOwn(null)} className="min-h-[40px] shrink-0 rounded-xl bg-white/10 px-3 text-xs font-black text-white">Back to the lab room</button>}
           <button type="button" onClick={() => setHidden(true)} className="min-h-[40px] shrink-0 rounded-xl bg-white px-3 text-xs font-black text-[#0B1220]">Back to the class board</button>
         </div>
+        {nudge && (
+          <div role="status" aria-label="From your teacher" className="flex items-center gap-2 bg-[#FDE68A] px-3 py-2 text-sm font-bold text-[#422006]">
+            <span className="min-w-0 flex-1">💬 Your teacher: {nudge.text}</span>
+            <button type="button" onClick={() => setNudge(null)} className="min-h-[36px] shrink-0 rounded-lg bg-[#422006] px-3 text-xs font-black text-white">OK</button>
+          </div>
+        )}
+        {watching ? (
+          <p role="status" aria-label="Watch your teacher" className="bg-[#0E6E72] px-3 py-2 text-sm font-bold text-white">👀 Watch your teacher do the practical. Look at each step and how the results are written down — your turn is next.</p>
+        ) : !mine && theirTask ? (
+          <p role="status" aria-label="Your task" className="bg-[#38BDF8]/20 px-3 py-2 text-sm font-bold text-[#BAE6FD]">📌 Your task: {theirTask}</p>
+        ) : null}
         <div className="elab min-h-0 flex-1 overflow-auto overscroll-contain p-2 sm:p-4">
-          <div className="mx-auto max-w-6xl" style={{ zoom: entry.room ? 1 : scale }}><LabReportContext.Provider value={reportCtx}><RoomClassContext.Provider value={roomClass}><Experiment /></RoomClassContext.Provider></LabReportContext.Provider></div>
+          {watching && (
+            <div className="mx-auto max-w-6xl" style={{ zoom: scale }}>
+              {frame && frame.slug === entry.slug
+                ? <LabReportContext.Provider value={{ learner: true, watch: { frame } }}><Experiment /></LabReportContext.Provider>
+                : <p className="mt-10 text-center text-sm font-bold text-white/70">Waiting for your teacher to start the practical…</p>}
+            </div>
+          )}
+          {(!watching || hadTurn) && (
+            <div className={`mx-auto max-w-6xl ${watching ? "hidden" : ""}`} style={{ zoom: entry.room ? 1 : scale }}><LabReportContext.Provider value={reportCtx}><RoomClassContext.Provider value={roomClass}><Experiment /></RoomClassContext.Provider></LabReportContext.Provider></div>
+          )}
         </div>
       </div>
     );
@@ -261,7 +324,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
     return (
       <div className="fixed left-1/2 top-2 z-[95] flex max-w-[92vw] -translate-x-1/2 items-center gap-1 rounded-full bg-[#0B1220] p-1 text-white shadow-2xl ring-1 ring-white/20">
         <button type="button" onClick={onOpen} className="flex min-h-[40px] min-w-0 items-center gap-2 rounded-full px-3 text-sm font-black hover:bg-white/10">
-          <BoardIcon name="flask" /> <span className="truncate">{entryFor(slug)?.title ?? "Lab"}{shared ? " · learners trying it" : ""}{shared && trackSum.stuck ? ` · ${trackSum.stuck} stuck` : ""}</span>
+          <BoardIcon name="flask" /> <span className="truncate">{entryFor(slug)?.title ?? "Lab"}{mode === "watch" ? " · learners watching" : shared ? " · learners trying it" : ""}{shared && trackSum.stuck ? ` · ${trackSum.stuck} stuck` : ""}</span>
         </button>
         <button type="button" onClick={end} aria-label="End the experiment" title="End the experiment"
           className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-white/10 px-3 text-xs font-black hover:bg-red-500/80"><BoardIcon name="close" className="h-4 w-4" /> End</button>
@@ -288,9 +351,15 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
           <button type="button" onClick={() => put("apparatus")} disabled={taking} className={`${chip} bg-[#38BDF8] text-[#0B1220]`}>Put the apparatus on the board</button>
           <button type="button" onClick={() => put("all")} disabled={taking} className={`${chip} bg-white/10 hover:bg-white/15`}>Put the whole screen on the board</button>
           {live && (
-            <label className={`${chip} bg-white/5`}>
-              <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} className="h-4 w-4 accent-[#38BDF8]" /> Let learners try it
-            </label>
+            <div role="group" aria-label="Learners' phones" className="flex shrink-0 items-center gap-1 rounded-xl bg-white/5 p-1">
+              <span className="px-1 text-[11px] font-black text-white/50">Learners:</span>
+              {entry.practical && (
+                <button type="button" onClick={() => setMode(mode === "watch" ? null : "watch")} aria-pressed={mode === "watch"} title="Learners watch your bench, live, while you do it"
+                  className={`min-h-[34px] whitespace-nowrap rounded-lg px-2.5 text-xs font-black ${mode === "watch" ? "bg-[#FDE047] text-[#0B1220]" : "hover:bg-white/10"}`}>👀 Watch me</button>
+              )}
+              <button type="button" onClick={() => setMode(mode === "try" ? null : "try")} aria-pressed={mode === "try"} title="Each learner does it on their own phone"
+                className={`min-h-[34px] whitespace-nowrap rounded-lg px-2.5 text-xs font-black ${mode === "try" ? "bg-[#38BDF8] text-[#0B1220]" : "hover:bg-white/10"}`}>✋ Their turn</button>
+            </div>
           )}
           {live && (shared || trackList.length > 0) && (
             <button type="button" onClick={() => setTracking(!tracking)} aria-pressed={tracking} className={`${chip} ${tracking ? "bg-white text-[#0B1220]" : "bg-white/10 hover:bg-white/15"}`}>
@@ -305,6 +374,20 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
           )}
           <button type="button" onClick={() => { setSlug(null); setShared(false); setTracking(false); setViewPlans(false); }} className={`${chip} bg-white/5 hover:bg-white/10`}>Change experiment</button>
         </div>
+      )}
+      {entry && live && mode === "watch" && (
+        <p className="bg-[#FDE047]/15 px-3 py-1.5 text-xs font-bold text-[#FEF08A] sm:px-4">👀 Learners are watching your bench live. Go slowly and say what you&apos;re doing at each step — and how you write down what you see. Then press <b>✋ Their turn</b>.</p>
+      )}
+      {entry && live && mode === "try" && (
+        <form aria-label="Task for learners" onSubmit={(e) => { e.preventDefault(); setTask(taskDraft.trim()); }} className="flex flex-wrap items-center gap-2 border-b border-white/10 px-2 py-1.5 sm:px-3">
+          <label className="flex min-w-0 flex-1 items-center gap-2 text-xs font-black">
+            <span className="shrink-0">📌 Task</span>
+            <input value={taskDraft} onChange={(e) => setTaskDraft(e.target.value)} maxLength={400} placeholder="e.g. Do it yourself. Write an observation after each step and give units with every reading."
+              className="h-9 min-w-0 flex-1 rounded-lg bg-white/10 px-3 text-sm font-semibold text-white placeholder:text-white/35" />
+          </label>
+          <button type="submit" disabled={taskDraft.trim() === task} className="min-h-[36px] rounded-lg bg-white px-3 text-xs font-black text-[#0B1220] disabled:opacity-40">{task ? "Change the task" : "Give the task"}</button>
+          {task && <span className="w-full text-[11px] font-bold text-white/55">Learners see: “{task}”</span>}
+        </form>
       )}
       {busy && <p role="status" className="bg-[#38BDF8]/15 px-4 py-2 text-sm font-bold text-[#BAE6FD]">{busy}</p>}
       {!entry ? (
@@ -384,9 +467,9 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
       ) : (
         <div className="relative min-h-0 flex-1">
           <div className="elab absolute inset-0 isolate overflow-auto overscroll-contain p-2 sm:p-4">
-            <div ref={stage} className="mx-auto max-w-6xl" style={{ zoom: entry?.room ? 1 : scale }}>{Experiment && <RoomClassContext.Provider value={roomClass}><Experiment /></RoomClassContext.Provider>}</div>
+            <div ref={stage} className="mx-auto max-w-6xl" style={{ zoom: entry?.room ? 1 : scale }}>{Experiment && <LabReportContext.Provider value={teacherCtx}><RoomClassContext.Provider value={roomClass}><Experiment /></RoomClassContext.Provider></LabReportContext.Provider>}</div>
           </div>
-          {tracking && live && <LabTracker entries={trackList} quiet={quiet} onClose={() => setTracking(false)} />}
+          {tracking && live && <LabTracker entries={trackList} quiet={quiet} onClose={() => setTracking(false)} onHelp={help} sent={nudges} quick={QUICK_HELP} />}
           {viewPlans && <PlansPanel plans={plans} replies={replies} assignment={assign} onReply={reply} onClose={() => setViewPlans(false)} />}
         </div>
       )}

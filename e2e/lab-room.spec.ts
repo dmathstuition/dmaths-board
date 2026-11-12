@@ -132,7 +132,7 @@ test("lab room shared with learners: a learner plans on their phone and starts t
   const lab = teacher.getByRole("dialog", { name: "Laboratory" });
   await lab.getByRole("region", { name: "Lab rooms" }).getByRole("button", { name: "Biology Lab Room" }).click();
   await expect(room(teacher)).toBeVisible({ timeout: 30_000 });
-  await lab.getByLabel("Let learners try it").check();
+  await lab.getByRole("button", { name: "✋ Their turn" }).click();
 
   const mine = learner.getByRole("dialog", { name: /Experiment: Biology Lab Room/ });
   await expect(mine).toBeVisible({ timeout: 20_000 });

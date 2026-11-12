@@ -30,7 +30,7 @@ test("an experiment goes on the board and learners can try it", async ({ browser
   await expect(lab.getByRole("group", { name: /Lab bench/ })).toBeVisible({ timeout: 30_000 });
 
   // Learners can open it on their own phones.
-  await lab.getByLabel("Let learners try it").check();
+  await lab.getByRole("button", { name: "✋ Their turn" }).click();
   await expect(learner.getByRole("dialog", { name: /Experiment: Simple Pendulum/ })).toBeVisible({ timeout: 20_000 });
   await expect(learner.getByRole("group", { name: /Lab bench/ })).toBeVisible({ timeout: 30_000 });
   // Learners do it themselves: no "Do this step for me" until they've tried 5 times.
