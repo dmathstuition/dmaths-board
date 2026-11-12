@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ALL_PRACTICALS, practicalFor } from "@/lib/lab/bench/all";
 import { doStep, seeded } from "@/lib/lab/bench/run";
-import { benchFields, benchLines, cleanBenchSave, markBench, withMarks, type BenchSave } from "@/lib/lab/benchExam";
+import { benchFields, benchForTeacher, benchLines, cleanBenchSave, markBench, withMarks, type BenchSave } from "@/lib/lab/benchExam";
 import { buildPracticalTest } from "@/lib/lab/atp";
 import { benchGot, cleanExamQuestions, hideBenchMarks, learnerPaper, markPaper, reviewItems } from "@/lib/exams";
 
@@ -77,5 +77,21 @@ describe("a practical test, marked against the learner's own bench", () => {
       expect(t.questions.some((q) => /state a conclusion/.test(q.q))).toBe(true);
       expect(cleanExamQuestions(t.questions.map(({ fig: _f, ...q }) => q))).toHaveLength(t.questions.length);
     }
+  });
+});
+
+describe("the teacher's view of a practical", () => {
+  it("is short — the readings marked, not the whole bench — and agrees with the mark", () => {
+    const qs = [{ kind: "typed" }, { kind: "bench", bench: { slug: "titration" } }];
+    const full = doIt("titration", 12, [benchFields("titration")[0].f.key]);
+    const out = benchForTeacher(qs, { 0: "5", 1: { ...full, obs: ["It turned pink"] } });
+    const sum = out[1] as { step: number; of: number; got: number; lines: string[]; obs: string[] };
+    expect(out[0]).toBe("5");
+    expect(sum.got).toBe(markBench("titration", full).got);
+    expect(sum.lines).toHaveLength(benchFields("titration").length);
+    expect(sum.lines[0]).toMatch(/^✗ /);
+    expect(sum.obs).toEqual(["It turned pink"]);
+    expect(JSON.stringify(sum).length).toBeLessThan(JSON.stringify(full).length / 3);
+    expect(benchGot({ marks: 99 }, sum)).toBe(sum.got); // marks still add up from the summary
   });
 });

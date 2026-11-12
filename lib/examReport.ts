@@ -71,7 +71,7 @@ const answerText = (q: ExamQ, v: unknown): string => {
   if (v == null || v === "") return "";
   if (q.kind === "choice") { const i = Number(v); return Number.isInteger(i) && q.options[i] != null ? q.options[i] : ""; }
   if (q.kind === "graph") return graphGivenText(v);
-  if (q.kind === "bench") return benchGivenText(v);
+  if (q.kind === "bench") return benchGivenText(v).replace(/\n/g, "; ").slice(0, 900); // every reading, marked
   return String(v).slice(0, 200);
 };
 const correctText = (q: ExamQ) => (q.kind === "page" || q.kind === "written" ? "Marked by the teacher" : q.kind === "choice" ? q.options[Number(q.answer)] ?? "" : q.kind === "graph" ? graphAnswerText(q) : q.kind === "bench" ? "Marked against their own bench" : shownAnswer(q.answer));

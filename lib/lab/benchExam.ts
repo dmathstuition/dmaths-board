@@ -73,3 +73,19 @@ export function benchLines(slug: string, save: BenchSave | null): string[] {
   return benchFields(slug).filter(({ f }) => save.values[f.key] != null && save.values[f.key] !== "")
     .map(({ f }) => `${m.right[f.key] ? "✓" : "✗"} ${f.label}: ${save.values[f.key]}${f.unit ? ` ${f.unit}` : ""}`);
 }
+
+// What the teacher's screen gets for each learner's practical: how far they
+// are, the mark, and every reading marked — not the whole bench (it's big,
+// and the teacher's list is fetched every few seconds).
+export type BenchSummary = { step: number; of: number; got: number; lines: string[]; obs: string[] };
+export function benchForTeacher(qs: { kind: string; bench?: { slug: string } }[], answers: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...answers };
+  qs.forEach((q, i) => {
+    if (q.kind !== "bench" || !q.bench) return;
+    const raw = out[String(i)], save = cleanBenchSave(raw);
+    if (!save) return;
+    const sum: BenchSummary = { step: save.step, of: save.of, got: markBench(q.bench.slug, save).got, lines: benchLines(q.bench.slug, save), obs: save.obs ?? [] };
+    out[String(i)] = sum;
+  });
+  return out;
+}

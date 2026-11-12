@@ -14,7 +14,7 @@ const MINT = rgb(0.886, 0.953, 0.949), RULE = rgb(0.867, 0.906, 0.906), GREEN = 
 // The standard PDF fonts only have Western characters: write maths symbols in words.
 const SWAP: Record<string, string> = {
   "−": "-", "–": "-", "—": "-", "√": "sqrt", "θ": "theta", "π": "pi", "∠": "angle ", "≈": "~", "≤": "<=", "≥": ">=", "≠": "!=",
-  "’": "'", "‘": "'", "“": '"', "”": '"', "…": "...", "³": "^3", "→": "->", "₂": "2", "₁": "1", "α": "alpha", "β": "beta", "Δ": "delta", "∞": "infinity",
+  "’": "'", "‘": "'", "“": '"', "”": '"', "…": "...", "³": "^3", "→": "->", "₂": "2", "₁": "1", "α": "alpha", "β": "beta", "Δ": "delta", "∞": "infinity", "✓": "(right)", "✗": "(wrong)",
 };
 export function safe(s: string): string {
   return String(s ?? "").replace(/[^\x20-\x7E\xA0-\xFF]/g, (c) => SWAP[c] ?? (c === "\n" ? " " : "?"));

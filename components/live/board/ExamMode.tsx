@@ -134,6 +134,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
   const [ask, askBox] = useAsk();
   const [pick, setPick] = useState<Set<string>>(new Set());
   const [redoFor, setRedoFor] = useState<Entry[] | null>(null);
+  const [readingsOf, setReadingsOf] = useState<string | null>(null); // a learner's practical readings, open
   const [done, setDone] = useState<string | null>(null);
   const [sayText, setSayText] = useState("");
   const [said, setSaid] = useState<{ id: string; text: string; examId: string } | null>(null);
@@ -643,6 +644,10 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
                           {e.submitted
                             ? <button type="button" onClick={() => setRedoFor([e])} aria-label={`Send ${e.name} back to redo`} className="whitespace-nowrap rounded-lg bg-orange-50 px-2.5 py-1.5 text-[11px] font-black text-[#C2451C] ring-1 ring-orange-200">🔁 Redo</button>
                             : running && <button type="button" onClick={() => collect(e)} aria-label={`Hand in ${e.name}'s paper now`} className="whitespace-nowrap rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-black text-ink/70">📥 Collect</button>}
+                          {exam?.questions?.some((q) => q.kind === "bench") && (
+                            <button type="button" onClick={() => setReadingsOf(e.id)} aria-label={`${e.name}'s practical readings`}
+                              className="whitespace-nowrap rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] font-black text-emerald-800 ring-1 ring-emerald-200">🔬 Readings</button>
+                          )}
                           <button type="button" onClick={() => reports(e)} disabled={!!pdfBusy} aria-label={`Download ${e.name}'s report (PDF)`}
                             className="whitespace-nowrap rounded-lg bg-[#E2F3F2] px-2.5 py-1.5 text-[11px] font-black text-[#0A4F52] disabled:opacity-50">{pdfBusy === e.id ? "Making…" : "📄 Report"}</button>
                         </span>
@@ -697,6 +702,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
           </div>
         )}
       </div>
+      {readingsOf && exam?.questions && (() => { const e = entries.find((x) => x.id === readingsOf); return e ? <ReadingsSheet e={e} qs={exam.questions} running={running} onClose={() => setReadingsOf(null)} /> : null; })()}
       {redoFor && exam && <RedoSheet list={redoFor} minutes={exam.minutes} running={running} review={exam.review} onCancel={() => setRedoFor(null)} onSend={sendBack} />}
       {askBox}
     </div>
@@ -704,6 +710,57 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
 }
 
 // Send one learner — or many — back to do the paper again.
+// A learner's practical, as the teacher sees it — live while they work: how far
+// they've got, their mark, and every reading they recorded, marked against
+// their own bench (lib/lab/benchExam.ts → benchForTeacher).
+function ReadingsSheet({ e, qs, running, onClose }: { e: Entry; qs: ExamQ[]; running: boolean; onClose: () => void }) {
+  const benches = qs.map((q, i) => ({ q, i })).filter(({ q }) => q.kind === "bench");
+  return (
+    <div role="dialog" aria-modal="true" aria-label={`${e.name}'s practical readings`} className="fixed inset-0 z-[150] flex items-end justify-center bg-black/50 p-3 sm:items-center">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-2xl bg-white text-ink shadow-2xl">
+        <div className="flex items-center gap-2 border-b border-line p-4">
+          <p className="min-w-0 flex-1 text-base font-black">🔬 {e.name}&apos;s practical{e.submitted ? "" : running ? <span className="ml-2 text-xs font-bold text-ink/55">· live, still working</span> : ""}</p>
+          <button type="button" onClick={onClose} className="min-h-[40px] rounded-xl bg-slate-100 px-3 text-xs font-black">Close</button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          {benches.map(({ q, i }) => {
+            const v = (e.answers?.[String(i)] ?? null) as { step?: number; of?: number; got?: number; lines?: string[]; obs?: string[] } | null;
+            const title = q.q.split("\n")[0].replace(/^\d+\s+/, "");
+            const pct = v?.of ? Math.round((Math.min(v.step ?? 0, v.of) / v.of) * 100) : 0;
+            return (
+              <section key={i} aria-label={title}>
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <p className="min-w-0 flex-1 text-sm font-black">Q{i + 1} · {title}</p>
+                  <p className="text-sm font-black text-[#0A4F52]">{v?.got ?? 0} / {q.marks}</p>
+                </div>
+                {!v ? <p className="mt-1 text-sm text-ink/55">Not started yet.</p> : (<>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#0E6E72]" style={{ width: `${pct}%` }} /></div>
+                    <span className="text-[11px] font-black tabular-nums text-ink/55">step {Math.min(v.step ?? 0, v.of ?? 0)} of {v.of}</span>
+                  </div>
+                  {v.lines?.length ? (
+                    <ul className="mt-2 grid gap-1" aria-label="Readings">
+                      {v.lines.map((l, k) => {
+                        const ok = l.startsWith("✓");
+                        return <li key={k} className={`rounded-lg px-2.5 py-1.5 text-sm font-semibold ${ok ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-900"}`}><span className="font-black">{ok ? "✓" : "✗"}</span> {l.slice(2)}</li>;
+                      })}
+                    </ul>
+                  ) : <p className="mt-2 text-sm text-ink/55">No readings recorded yet.</p>}
+                  {!!v.obs?.length && (<>
+                    <p className="mt-2 text-[11px] font-black uppercase tracking-wider text-ink/50">Observations</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">{v.obs.map((o, k) => <li key={k}>{o}</li>)}</ul>
+                  </>)}
+                </>)}
+              </section>
+            );
+          })}
+          <p className="text-[11px] font-semibold text-ink/50">Each reading is marked against {e.name}&apos;s own bench — their own samples — at the moment they recorded it. A calculation from a wrong reading still counts if it&apos;s worked out right.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RedoSheet({ list, minutes, running, review, onCancel, onSend }: { list: Entry[]; minutes: number; running: boolean; review: boolean; onCancel: () => void; onSend: (list: Entry[], mode: RedoMode, mins: number) => Promise<void> }) {
   const [mode, setMode] = useState<RedoMode>("wrong");
   const times = [...new Set([...REDO_MINUTES.filter((m) => m < minutes), minutes])].slice(-5);

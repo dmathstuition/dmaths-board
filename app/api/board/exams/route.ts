@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { sessionViewer } from "@/lib/sessionAccess";
 import { rateLimit } from "@/lib/ratelimit";
-import { benchLines, withMarks } from "@/lib/lab/benchExam";
+import { benchForTeacher, benchLines, withMarks } from "@/lib/lab/benchExam";
 import { AI_EXAM_SYSTEM, GRACE_MS, aiExamPrompt, cleanAiExam, cleanExamQuestions, benchGot, benchGivenText, hideBenchMarks, cleanGiven, cleanGraphGiven, graphAnswerText, graphGivenText, graphMarks, MAX_BOOKLET, MAX_WRITTEN, cleanPageAnswer, cleanPageMarks, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageBlank, pageDone, pagesToMark, shownQ, slimAnswers, teacherMax, workingKey, type ExamQ } from "@/lib/exams";
 import { isWarmUp, missedSpellings } from "@/lib/sats";
 import { nameKey } from "@/lib/stars";
@@ -144,7 +144,7 @@ export async function GET(req: Request) {
           answered: qs.filter((q, i) => { const v = (r.answers ?? {})[String(i)]; return q.kind === "page" ? pageDone(v) : v != null && v !== ""; }).length,
           flags: r.flags, flagLog: (r.flag_log ?? []).slice(-10), submitted: !!r.submitted_at, score: r.submitted_at ? m.score : null, total: m.total,
           live: r.submitted_at ? null : m.score, // what they'd get now
-          answers: hand ? slimAnswers(qs, withoutTries(r.answers), -1, true) : withoutTries(r.answers), // the writing is fetched one page at a time
+          answers: benchForTeacher(qs, hand ? slimAnswers(qs, withoutTries(r.answers), -1, true) : withoutTries(r.answers)), // the writing is fetched one page at a time; a practical comes as its readings
           tries: triesOf(r.answers), // earlier tries, when sent back to redo
           startedAt: r.started_at ?? null, submittedAt: r.submitted_at ?? null, // for the teacher's reports
           ...(hand ? { pageMarks: marks, toMark: pagesToMark(qs, r.answers ?? {}, marks, !!r.submitted_at) } : {}),

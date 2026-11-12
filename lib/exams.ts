@@ -239,10 +239,11 @@ export function hideBenchMarks(qs: Pick<ExamQ, "kind">[], answers: Record<string
   return out;
 }
 export function benchGivenText(v: unknown): string {
-  const g = v && typeof v === "object" ? (v as { step?: number; of?: number; values?: Record<string, string> }) : null;
+  const g = v && typeof v === "object" ? (v as { step?: number; of?: number; values?: Record<string, string>; lines?: string[] }) : null;
   if (!g) return "";
-  const n = Object.values(g.values ?? {}).filter((x) => String(x ?? "").trim()).length;
-  return `Did ${Math.min(Number(g.step) || 0, Number(g.of) || 0)} of ${Number(g.of) || 0} steps · recorded ${n} reading${n === 1 ? "" : "s"}`;
+  const n = g.lines ? g.lines.length : Object.values(g.values ?? {}).filter((x) => String(x ?? "").trim()).length;
+  const head = `Did ${Math.min(Number(g.step) || 0, Number(g.of) || 0)} of ${Number(g.of) || 0} steps · recorded ${n} reading${n === 1 ? "" : "s"}`;
+  return g.lines?.length ? [head, ...g.lines].join("\n") : head; // the teacher's copy lists every reading, marked
 }
 
 export const cleanGiven = (v: unknown): string | number | null =>

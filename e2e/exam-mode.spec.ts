@@ -2,7 +2,7 @@ import { readFile } from "fs/promises";
 import { writeFileSync } from "fs";
 import { test, expect, type Browser, type BrowserContext } from "@playwright/test";
 import { SID, agree, classServer, realtimeHub } from "./helpers";
-import { benchLines, withMarks } from "../lib/lab/benchExam";
+import { benchForTeacher, benchLines, withMarks } from "../lib/lab/benchExam";
 import { practicalFor } from "../lib/lab/bench/all";
 import { seeded } from "../lib/lab/bench/run";
 import { keptOf, redoExtraMs, redoPaper, triesOf, withoutTries } from "../lib/examRedo";
@@ -31,7 +31,7 @@ function examServer() {
         if (who === "teacher") return r.fulfill({ json: { exam: { ...meta(), questions: exam.questions }, entries: [...entries].map(([id, e]) => {
           const qs = qsOf(e), m = markPaper(qs, e.answers, e.marks ?? {});
           return { id, name: e.name, extraMs: e.extraMs, ...(e.extraQs.length ? { extraQs: e.extraQs } : {}), answered: Object.keys(e.answers).filter((k) => /^\d+$/.test(k)).length, flags: e.flags, flagLog: [], submitted: e.submitted, score: e.submitted ? m.score : null, total: m.total, live: e.submitted ? null : m.score,
-            answers: hand ? slimAnswers(qs, withoutTries(e.answers)) : withoutTries(e.answers), tries: triesOf(e.answers), startedAt: new Date(Date.now() - 300_000).toISOString(), submittedAt: e.submitted ? new Date().toISOString() : null,
+            answers: benchForTeacher(qs, hand ? slimAnswers(qs, withoutTries(e.answers)) : withoutTries(e.answers)), tries: triesOf(e.answers), startedAt: new Date(Date.now() - 300_000).toISOString(), submittedAt: e.submitted ? new Date().toISOString() : null,
             ...(hand ? { pageMarks: e.marks ?? {}, toMark: pagesToMark(qs, e.answers, e.marks ?? {}, e.submitted) } : {}) };
         }) } });
         const e = entries.get(me.id);
@@ -756,6 +756,15 @@ test("a practical test: each learner does the practical on their own bench, reco
     else if (a.type === "tap") await exam.getByRole("button", { name: a.label }).click();
     else if (a.type === "wait") await exam.getByRole("button", { name: new RegExp(a.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).click();
     if (i === 0 && SHOTS) await learner.screenshot({ path: `${SHOTS}/test-bench-phone.png` });
+    if (i === 0) {
+      // The teacher follows it live: the reading just recorded, marked against this learner's bench.
+      await panel.getByRole("button", { name: "Emmanuel's practical readings" }).click({ timeout: 20_000 });
+      const sheet = teacher.getByRole("dialog", { name: "Emmanuel's practical readings" });
+      await expect(sheet.getByRole("list", { name: "Readings" }).getByRole("listitem")).toHaveCount(1, { timeout: 20_000 });
+      await expect(sheet.getByText(new RegExp(`${first!.label}: ${first!.answer(s0, {})} °C`))).toBeVisible();
+      await expect(sheet.getByText(/live, still working/)).toBeVisible();
+      await sheet.getByRole("button", { name: "Close" }).click();
+    }
   }
   await expect(exam.getByText("✓ You've done every step")).toBeVisible({ timeout: 30_000 });
   // Leave the question and come back: the bench is as they left it.
@@ -767,6 +776,16 @@ test("a practical test: each learner does the practical on their own bench, reco
   await exam.getByRole("button", { name: "Hand in", exact: true }).click();
   await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
   await expect(exam.getByText(/^1 \/ \d+$/)).toBeVisible({ timeout: 15_000 }); // the one right reading
+  // The teacher's view of it: every reading, ticked or crossed, and how far they got.
+  await panel.getByRole("button", { name: "Emmanuel's practical readings" }).click();
+  const sheet = teacher.getByRole("dialog", { name: "Emmanuel's practical readings" });
+  await expect(sheet.getByText(`step ${p.steps.length} of ${p.steps.length}`)).toBeVisible({ timeout: 20_000 });
+  const lines = sheet.getByRole("list", { name: "Readings" }).getByRole("listitem");
+  await expect(lines).toHaveCount(p.steps.reduce((n, st) => n + (st.action.type === "record" ? st.action.fields.length : 0), 0));
+  await expect(lines.filter({ hasText: "✓" })).toHaveCount(1);
+  await expect(sheet.getByText(/^1 \/ \d+$/)).toBeVisible();
+  if (SHOTS) await sheet.screenshot({ path: `${SHOTS}/teacher-readings.png` });
+  await sheet.getByRole("button", { name: "Close" }).click();
 
   // The results: each reading marked against their own bench.
   await panel.getByRole("button", { name: "End exam" }).click();
