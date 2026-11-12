@@ -5,27 +5,25 @@
 // bench and plan a practical — checked against the real practical, with a risk
 // assessment — then start it. Works without an account: the plan is kept on
 // this device.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LAB, SUBJECTS, type LabSubject } from "@/lib/lab/catalog";
 import { ROOMS, SECTIONS, type Item } from "@/lib/lab/room/inventory";
 import { NEEDS, checkPlan, emptyPlan, riskAssessment, safetyItem, type Plan } from "@/lib/lab/room/plans";
-import { Apparatus, BenchDefs, dims } from "@/components/lab/bench/Apparatus";
+import { BenchDefs } from "@/components/lab/bench/Apparatus";
 import TryIt from "@/components/lab/room/TryIt";
+import { ItemPic } from "@/components/lab/room/ItemPic";
+import BenchArea from "@/components/lab/room/BenchArea";
+import { RoomScene } from "@/components/lab/room/Anim";
+import { emptyBench, type BenchState } from "@/lib/lab/room/bench";
+export { ItemPic };
 
 export const START_EVENT = "lab-room-start"; // detail: a practical's slug (the lab opens it)
 const SUBS = Object.keys(SUBJECTS) as LabSubject[];
-type Saved = { picked: string[]; pos: Record<string, { x: number; y: number }>; plan: Plan };
+type Saved = { picked: string[]; pos: Record<string, { x: number; y: number }>; plan: Plan; bench: BenchState };
 const KEY = (s: LabSubject) => `dm-lab-room:${s}`;
-const load = (s: LabSubject): Saved => { try { const j = JSON.parse(localStorage.getItem(KEY(s)) ?? "null"); if (j && Array.isArray(j.picked)) return { picked: j.picked, pos: j.pos ?? {}, plan: { ...emptyPlan(), ...j.plan } }; } catch { /* storage blocked */ } return { picked: [], pos: {}, plan: emptyPlan() }; };
+const load = (s: LabSubject): Saved => { try { const j = JSON.parse(localStorage.getItem(KEY(s)) ?? "null"); if (j && Array.isArray(j.picked)) return { picked: j.picked, pos: j.pos ?? {}, plan: { ...emptyPlan(), ...j.plan }, bench: j.bench?.slots ? { ...emptyBench(), ...j.bench } : emptyBench() }; } catch { /* storage blocked */ } return { picked: [], pos: {}, plan: emptyPlan(), bench: emptyBench() }; };
 const chip = "min-h-[36px] shrink-0 rounded-full px-3 text-xs font-black";
 const field = "w-full rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold text-white placeholder:text-white/35 focus:outline-none focus:ring-2 focus:ring-[#38BDF8]";
-
-export function ItemPic({ item, size = 64 }: { item: Item; size?: number }) {
-  if (!item.bench) return <span aria-hidden className="flex items-center justify-center" style={{ width: size, height: size, fontSize: size * 0.55 }}>{item.icon}</span>;
-  const it = { id: item.id, kind: item.bench.kind, x: 0, y: 0, props: item.bench.props ?? {} }, { w, h } = dims(it);
-  if (w / h > 4 || h / w > 6) return <span aria-hidden className="flex items-center justify-center" style={{ width: size, height: size, fontSize: size * 0.55 }}>{item.icon}</span>; // too long and thin to see small
-  return <svg aria-hidden viewBox={`${-w / 2 - 12} ${-h - 12} ${w + 24} ${h + 24}`} style={{ width: size, height: size }}><Apparatus it={it} /></svg>;
-}
 
 export default function LabRoom({ subject: first = "physics" }: { subject?: LabSubject }) {
   const [subject, setSubject] = useState<LabSubject>(first);
@@ -48,6 +46,7 @@ export default function LabRoom({ subject: first = "physics" }: { subject?: LabS
   return (
     <section aria-label="Lab room" className="relative text-white">
       <svg width="0" height="0" className="absolute" aria-hidden><BenchDefs /></svg>
+      <div className="mb-3 overflow-hidden rounded-2xl ring-1 ring-white/10"><RoomScene subject={subject} /></div>
       <div className="flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label="Which lab" className="flex gap-1.5 overflow-x-auto">
           {SUBS.map((s) => <button key={s} type="button" role="tab" aria-selected={subject === s} onClick={() => setSubject(s)} className={`${chip} ${subject === s ? "text-[#0B1220]" : "bg-white/10 text-white/80"}`} style={subject === s ? { background: SUBJECTS[s].color } : undefined}>{SUBJECTS[s].label} lab</button>)}
@@ -64,9 +63,9 @@ export default function LabRoom({ subject: first = "physics" }: { subject?: LabS
         {list.slice(0, more).map((x) => {
           const on = saved.picked.includes(x.id);
           return (
-            <li key={x.id} className={`flex flex-col rounded-2xl p-2 ring-1 transition ${on ? "bg-[#38BDF8]/15 ring-[#38BDF8]" : "bg-white/5 ring-white/10 hover:ring-white/30"}`}>
+            <li key={x.id} className={`lr-card flex flex-col rounded-2xl border-b-[6px] border-[#8B5E34] p-2 ring-1 transition hover:-translate-y-0.5 ${on ? "bg-[#38BDF8]/15 ring-[#38BDF8]" : "bg-white/5 ring-white/10 hover:ring-white/30"}`}>
               <button type="button" onClick={() => setOpen(x.id)} aria-label={`About the ${x.name}`} className="flex flex-1 flex-col items-center gap-1 text-center">
-                <ItemPic item={x} />
+                <span className="lr-bob"><ItemPic item={x} /></span>
                 <span className="text-xs font-black leading-tight">{x.name}</span>
                 <span className="line-clamp-2 text-[11px] text-white/50">{x.about}</span>
               </button>
@@ -80,7 +79,7 @@ export default function LabRoom({ subject: first = "physics" }: { subject?: LabS
 
       {/* My bench: always at hand */}
       <div className="fixed inset-x-2 bottom-3 z-[100] mx-auto flex max-w-xl items-center gap-2 rounded-2xl bg-[#0B1220]/95 p-2 shadow-2xl ring-1 ring-white/15 backdrop-blur">
-        <span className="ml-1 text-sm font-black">🧰 My bench · {picked.length}</span>
+        <span key={picked.length} className="lr-bump ml-1 text-sm font-black">🧰 My bench · {picked.length}</span>
         <span className="min-w-0 flex-1 truncate text-xs text-white/50">{picked.map((x) => x.name).join(", ") || "Pick the apparatus you need"}</span>
         <button type="button" onClick={() => setPlanning(true)} className="min-h-[40px] rounded-xl px-3 text-sm font-black text-[#0B1220]" style={{ background: colour }}>Plan my practical</button>
       </div>
@@ -94,7 +93,7 @@ export default function LabRoom({ subject: first = "physics" }: { subject?: LabS
 function ItemSheet({ item, on, onToggle, onClose }: { item: Item; on: boolean; onToggle: () => void; onClose: () => void }) {
   return (
     <div role="dialog" aria-modal="true" aria-label={item.name} className="fixed inset-0 z-[130] flex items-end justify-center bg-black/60 p-2 sm:items-center" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-[#111A2E] p-4 text-white shadow-2xl ring-1 ring-white/15">
+      <div className="lr-pop max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-[#111A2E] p-4 text-white shadow-2xl ring-1 ring-white/15">
         <div className="flex items-start gap-3">
           <ItemPic item={item} size={84} />
           <div className="min-w-0 flex-1">
@@ -127,11 +126,11 @@ function Planner({ subject, saved, save, picked, onOpen, onClose }: { subject: L
     <div role="dialog" aria-modal="true" aria-label="Plan my practical" className="fixed inset-0 z-[125] overflow-y-auto bg-[#060B16] p-2 text-white sm:p-4">
       <div className="mx-auto max-w-3xl">
         <div className="flex items-center gap-2">
-          <h3 className="flex-1 text-lg font-black">🧰 Plan my {SUBJECTS[subject].label.toLowerCase()} practical</h3>
+          <h3 className="flex-1 text-lg font-black">🧰 Experiment & plan · {SUBJECTS[subject].label.toLowerCase()}</h3>
           <button type="button" onClick={onClose} className="min-h-[40px] rounded-xl bg-white/10 px-3 text-sm font-black">Back to the shelves</button>
         </div>
 
-        <Bench items={picked} pos={saved.pos} onMove={(id, p) => save((s) => ({ ...s, pos: { ...s.pos, [id]: p } }))} onRemove={(id) => save((s) => ({ ...s, picked: s.picked.filter((x) => x !== id) }))} onOpen={onOpen} />
+        <BenchArea items={picked} pos={saved.pos} bench={saved.bench} onBench={(b) => save((s) => ({ ...s, bench: b }))} onMove={(id, p) => save((s) => ({ ...s, pos: { ...s.pos, [id]: p } }))} onRemove={(id) => save((s) => ({ ...s, picked: s.picked.filter((x) => x !== id) }))} onOpen={onOpen} />
 
         <section aria-label="Which practical" className="mt-4 rounded-2xl bg-white/5 p-3 ring-1 ring-white/10">
           <label className="block text-xs font-black text-white/70">Which practical are you planning?
@@ -181,38 +180,16 @@ function Planner({ subject, saved, save, picked, onOpen, onClose }: { subject: L
 
         <div className="mt-4 flex flex-wrap gap-2 pb-8">
           {target && <button type="button" disabled={!check?.ready} onClick={() => window.dispatchEvent(new CustomEvent(START_EVENT, { detail: target.slug }))} className="min-h-[48px] rounded-xl bg-emerald-500 px-4 text-sm font-black text-[#0B1220] disabled:opacity-40">▶ Start the practical</button>}
-          <button type="button" onClick={() => printPlan(subject, plan, picked, risk.rows)} className="min-h-[48px] rounded-xl bg-white/10 px-4 text-sm font-black">🖨 Print / save as PDF</button>
-          <button type="button" onClick={() => { if (window.confirm("Clear this plan and your bench?")) save(() => ({ picked: [], pos: {}, plan: emptyPlan() })); }} className="min-h-[48px] rounded-xl px-4 text-sm font-black text-red-300">Clear</button>
+          <button type="button" onClick={() => printPlan(subject, plan, picked, risk.rows, saved.bench.log)} className="min-h-[48px] rounded-xl bg-white/10 px-4 text-sm font-black">🖨 Print / save as PDF</button>
+          <button type="button" onClick={() => { if (window.confirm("Clear this plan and your bench?")) save(() => ({ picked: [], pos: {}, plan: emptyPlan(), bench: emptyBench() })); }} className="min-h-[48px] rounded-xl px-4 text-sm font-black text-red-300">Clear</button>
         </div>
       </div>
     </div>
   );
 }
 
-// The bench: drag the apparatus where you want it (tap one to look at it again).
-function Bench({ items, pos, onMove, onRemove, onOpen }: { items: Item[]; pos: Saved["pos"]; onMove: (id: string, p: { x: number; y: number }) => void; onRemove: (id: string) => void; onOpen: (id: string) => void }) {
-  const box = useRef<HTMLDivElement>(null), drag = useRef<{ id: string; dx: number; dy: number; moved: boolean } | null>(null);
-  const at = (it: Item, i: number) => pos[it.id] ?? { x: 4 + (i % 6) * 16, y: 8 + Math.floor(i / 6) * 34 };
-  return (
-    <div ref={box} aria-label="My bench" className="relative mt-3 h-72 overflow-hidden rounded-2xl ring-1 ring-white/15" style={{ background: "linear-gradient(#1E293B 0 62%, #CBD5E1 62% 64%, #94A3B8 64%)", touchAction: "none" }}>
-      {!items.length && <p className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-white/60">Your bench is empty — go back to the shelves and pick the apparatus you need.</p>}
-      {items.map((it, i) => { const p = at(it, i); return (
-        <div key={it.id} className="absolute flex w-24 cursor-grab select-none flex-col items-center rounded-xl bg-[#0B1220]/70 p-1 ring-1 ring-white/20" style={{ left: `${p.x}%`, top: `${p.y}%` }}
-          onPointerDown={(e) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); drag.current = { id: it.id, dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); }}
-          onPointerMove={(e) => { const d = drag.current, b = box.current?.getBoundingClientRect(); if (!d || d.id !== it.id || !b) return; d.moved = true;
-            onMove(it.id, { x: Math.max(0, Math.min(88, ((e.clientX - d.dx - b.left) / b.width) * 100)), y: Math.max(0, Math.min(70, ((e.clientY - d.dy - b.top) / b.height) * 100)) }); }}
-          onPointerUp={() => { const d = drag.current; drag.current = null; if (d && !d.moved) onOpen(it.id); }}>
-          <ItemPic item={it} size={48} />
-          <span className="line-clamp-2 text-center text-[10px] font-black leading-tight">{it.name}</span>
-          <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => onRemove(it.id)} aria-label={`Take the ${it.name} off the bench`} className="absolute -right-1.5 -top-1.5 h-6 w-6 rounded-full bg-red-500 text-xs font-black">×</button>
-        </div>
-      ); })}
-    </div>
-  );
-}
-
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-function printPlan(subject: LabSubject, plan: Plan, items: Item[], risk: { hazard: string; control: string }[]) {
+function printPlan(subject: LabSubject, plan: Plan, items: Item[], risk: { hazard: string; control: string }[], seen: { at: number; text: string }[] = []) {
   const w = window.open("", "_blank");
   if (!w) return;
   w.document.write(`<!doctype html><meta charset="utf-8"><title>${esc(plan.title || "Practical plan")}</title><style>body{font:14px/1.5 system-ui,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#111}h1{font-size:22px}h2{font-size:15px;margin-top:18px;border-bottom:1px solid #ccc}td,th{border:1px solid #ccc;padding:4px 6px;text-align:left}table{border-collapse:collapse;width:100%}</style>
@@ -222,6 +199,7 @@ function printPlan(subject: LabSubject, plan: Plan, items: Item[], risk: { hazar
 <h2>Apparatus</h2><ul>${items.map((i) => `<li>${esc(i.name)}${i.props.find((p) => p[0] === "Smallest division") ? ` (to ${esc(i.props.find((p) => p[0] === "Smallest division")![1])})` : ""}</li>`).join("") || "<li>—</li>"}</ul>
 <h2>Method</h2><ol>${plan.method.filter((m) => m.trim()).map((m) => `<li>${esc(m)}</li>`).join("") || "<li>—</li>"}</ol>
 <h2>Risk assessment</h2><table><tr><th>Hazard</th><th>Control</th></tr>${risk.map((r) => `<tr><td>${esc(r.hazard)}</td><td>${esc(r.control)}</td></tr>`).join("") || "<tr><td colspan=2>—</td></tr>"}</table>
+${seen.length ? `<h2>Observations</h2><ol>${seen.map((o) => `<li>${esc(o.text)}</li>`).join("")}</ol>` : ""}
 <script>setTimeout(()=>print(),300)</script>`);
   w.document.close();
 }

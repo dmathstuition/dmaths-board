@@ -1339,3 +1339,47 @@ html[data-text-size="2"] { font-size: 112.5%; }
 html[data-text-size="3"] { font-size: 125%; }
 html[data-easy-read="1"] body, html[data-easy-read="1"] body * { font-family: var(--font-easy), Verdana, sans-serif !important; letter-spacing: 0.01em; word-spacing: 0.06em; }
 html[data-easy-read="1"] body p, html[data-easy-read="1"] body li { line-height: 1.6; }
+
+/* Lab rooms (components/lab/room): a laboratory that moves. */
+@keyframes lrBubble { 0% { transform: translateY(0) scale(.6); opacity: 0; } 15% { opacity: .9; } 100% { transform: translateY(-46px) scale(1.1); opacity: 0; } }
+@keyframes lrFlame { 0%, 100% { transform: scaleY(1) scaleX(1); } 30% { transform: scaleY(1.12) scaleX(.94); } 60% { transform: scaleY(.92) scaleX(1.05); } }
+@keyframes lrDrop { 0% { transform: translateY(-40px); opacity: 0; } 20% { opacity: 1; } 80% { transform: translateY(18px); opacity: 1; } 100% { transform: translateY(24px); opacity: 0; } }
+@keyframes lrSettle { 0% { transform: translateY(-30px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+@keyframes lrSteam { 0% { transform: translate(0, 0) scale(.6); opacity: 0; } 30% { opacity: .55; } 100% { transform: translate(6px, -38px) scale(1.4); opacity: 0; } }
+@keyframes lrGlow { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
+@keyframes lrSpin { to { transform: rotate(360deg); } }
+@keyframes lrShake { 0%, 100% { transform: rotate(0) translate(0); } 20% { transform: rotate(-18deg) translate(-3px, -6px); } 40% { transform: rotate(14deg) translate(3px, -10px); } 60% { transform: rotate(-10deg) translate(-2px, -4px); } 80% { transform: rotate(6deg); } }
+@keyframes lrFlow { to { stroke-dashoffset: -24; } }
+@keyframes lrPop { 0% { transform: scale(.92) translateY(10px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
+@keyframes lrFlash { 0% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes lrFloat { 0% { transform: translateY(0); opacity: 0; } 30% { opacity: .5; } 100% { transform: translateY(-60px) translateX(12px); opacity: 0; } }
+@keyframes lrSwing { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
+@keyframes lrSway { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+@keyframes lrBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes lrBump { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+@keyframes lrPour { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -30; } }
+@keyframes lrRing { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
+.lr-bubble { animation: lrBubble 1.6s ease-in infinite; transform-box: fill-box; }
+.lr-flame { animation: lrFlame .35s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+.lr-drop { animation: lrDrop .9s ease-in forwards; transform-box: fill-box; }
+.lr-settle { animation: lrSettle 1.4s ease-out both; transform-box: fill-box; }
+.lr-steam { animation: lrSteam 2.2s ease-out infinite; transform-box: fill-box; }
+.lr-glow { animation: lrGlow 1.4s ease-in-out infinite; }
+.lr-spin { animation: lrSpin .6s linear infinite; transform-box: fill-box; transform-origin: center; }
+.lr-shake { animation: lrShake .6s ease-in-out; transform-box: fill-box; transform-origin: center; }
+.lr-flow { stroke-dasharray: 4 8; animation: lrFlow .8s linear infinite; }
+.lr-pop { animation: lrPop .22s ease-out both; }
+.lr-flash { animation: lrFlash .25s ease-out forwards; }
+.lr-float { animation: lrFloat 6s ease-in-out infinite; }
+.lr-swing { animation: lrSwing 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 0; }
+.lr-sway { animation: lrSway 4s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+.lr-card:hover .lr-bob, .lr-card:focus-within .lr-bob { animation: lrBob 1s ease-in-out infinite; }
+.lr-bump { animation: lrBump .35s ease-out; }
+.lr-pour { stroke-dasharray: 6 4; animation: lrPour .5s linear infinite; }
+.lr-ring { animation: lrRing .12s linear infinite; transform-box: fill-box; transform-origin: 50% 0; }
+.lr-fill { transition: fill .7s ease, y .7s ease, height .7s ease, opacity .5s ease; }
+.lr-move { transition: transform .6s cubic-bezier(.3, 1.4, .5, 1); transform-box: fill-box; }
+@media (prefers-reduced-motion: reduce) {
+  .lr-bubble, .lr-flame, .lr-drop, .lr-settle, .lr-steam, .lr-glow, .lr-spin, .lr-shake, .lr-flow, .lr-pop, .lr-float, .lr-swing, .lr-sway, .lr-bump, .lr-pour, .lr-ring, .lr-card:hover .lr-bob { animation: none !important; }
+  .lr-fill, .lr-move { transition: none !important; }
+}

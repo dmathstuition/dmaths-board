@@ -148,3 +148,49 @@ test("lab room shared with learners: a learner plans on their phone and starts t
   await learner.getByRole("button", { name: "Back to the lab room" }).click();
   await expect(room(learner)).toBeVisible({ timeout: 20_000 });
 });
+
+test("free bench: apparatus react — a precipitate, heating to boiling, a lamp lighting", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const p = await openLab(browser);
+  const lab = p.getByRole("dialog", { name: "Laboratory" });
+  await lab.getByRole("region", { name: "Lab rooms" }).getByRole("button", { name: "Chemistry Lab Room" }).click();
+  await expect(room(p)).toBeVisible({ timeout: 30_000 });
+  await expect(room(p).getByRole("img", { name: "The chemistry laboratory" })).toBeVisible();
+  const pick = async (search: string, name: string) => { await room(p).getByPlaceholder(/Search/).fill(search); await room(p).getByRole("button", { name: `Pick the ${name}`, exact: true }).click(); };
+  for (const [q, n] of [["copper(II) sulfate", "Copper(II) sulfate"], ["sodium hydroxide", "Sodium hydroxide"], ["test tube", "Test tube"], ["distilled", "Distilled water"], ["beaker", "Beaker"], ["bunsen", "Bunsen burner"], ["thermometer", "Thermometer"]]) await pick(q, n);
+  await room(p).getByRole("button", { name: "Plan my practical" }).click();
+  const plan = p.getByRole("dialog", { name: "Plan my practical" });
+  const tile = (id: string) => plan.locator(`[data-bench-item="chemistry-${id}"]`);
+  const use = async (a: string, b: string) => { await tile(a).click({ position: { x: 46, y: 30 } }); await tile(b).click({ position: { x: 46, y: 30 } }); };
+  // Copper(II) sulfate, then sodium hydroxide: a light blue precipitate.
+  await use("copper-ii-sulfate", "test-tube");
+  await expect(plan.getByRole("status", { name: "What happened" })).toContainText("Copper(II) sulfate poured in");
+  await use("sodium-hydroxide", "test-tube");
+  await expect(plan.getByRole("status", { name: "What happened" })).toContainText("light blue");
+  await p.waitForTimeout(1200);
+  if (SHOTS) await plan.getByLabel("My bench").screenshot({ path: `${SHOTS}/bench-ppt.png` });
+  // Water in a beaker, on the Bunsen, thermometer in: it heats to 100 °C and boils.
+  await use("distilled-water", "beaker");
+  await use("beaker", "bunsen-burner");
+  await use("thermometer", "beaker");
+  await plan.getByRole("toolbar", { name: "Bench controls" }).getByRole("button", { name: "×20" }).click();
+  await expect(tile("thermometer")).toContainText("100 °C", { timeout: 60_000 });
+  await expect(plan.getByRole("region", { name: "My observations" })).toContainText("boiling at 100 °C");
+  if (SHOTS) await plan.getByLabel("My bench").screenshot({ path: `${SHOTS}/bench-boil.png` });
+  // Trying something silly is explained, not ignored.
+  await tile("sodium-hydroxide").click({ position: { x: 46, y: 30 } }); await tile("bunsen-burner").getByText("Bunsen burner").click(); // the beaker on it covers its top
+  await expect(plan.getByRole("status", { name: "What happened" })).toContainText("Nothing happens");
+
+  // Physics: a cell, switch, lamp and ammeter — close the switch and the lamp lights.
+  await plan.getByRole("button", { name: "Back to the shelves" }).click();
+  await room(p).getByRole("tab", { name: "Physics lab" }).click();
+  for (const [q, n] of [["batteries", "Batteries"], ["switch", "Switch"], ["electric bulb", "Electric bulb"], ["ammeter", "Ammeter"]]) { await room(p).getByPlaceholder(/Search/).fill(q); await room(p).getByRole("button", { name: `Pick the ${n}`, exact: true }).click(); }
+  await room(p).getByRole("button", { name: "Plan my practical" }).click();
+  const ph = (id: string) => plan.locator(`[data-bench-item="physics-${id}"]`);
+  const join = async (a: string, b: string) => { await ph(a).click({ position: { x: 46, y: 30 } }); await ph(b).click({ position: { x: 46, y: 30 } }); };
+  await join("switch", "batteries"); await join("electric-bulb", "switch"); await join("ammeter", "electric-bulb");
+  await expect(plan.getByText("The switch is open")).toBeVisible();
+  await ph("switch").getByRole("button", { name: "Close it" }).click();
+  await expect(ph("ammeter")).toContainText(/0\.\d\d A/, { timeout: 10_000 });
+  if (SHOTS) { await p.waitForTimeout(800); await plan.getByLabel("My bench").screenshot({ path: `${SHOTS}/bench-circuit.png` }); }
+});

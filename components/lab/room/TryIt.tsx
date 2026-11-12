@@ -2,8 +2,9 @@
 // "Try it": every piece of apparatus in the lab room does what the real one
 // does — read its scale, pour into it, put it in a circuit, shine light through
 // it, test a substance with it, label it, change its measurements…
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as E from "@/lib/lab/room/engines";
+import { Bulb, Burner, Motor, Thermometer, Vessel } from "@/components/lab/room/Anim";
 import { ROOMS, type Item } from "@/lib/lab/room/inventory";
 
 const num = (v: string) => { const n = Number(String(v).replace(/,/g, "").trim()); return String(v).trim() !== "" && Number.isFinite(n) ? n : null; };
@@ -90,12 +91,16 @@ function ScaleStrip({ v, s }: { v: number; s: { min: number; max: number; lc: nu
 }
 
 function VesselTry({ s }: { s: Extract<E.Spec, { e: "vessel" }> }) {
-  const [p, setP] = useState(Math.round(s.cap * 0.6)), r = E.vesselFill(s.cap, p, s.tol), pct = r.inside / s.cap;
+  const [p, setP] = useState(Math.round(s.cap * 0.6)), [pouring, setPouring] = useState(0), r = E.vesselFill(s.cap, p, s.tol), pct = r.inside / s.cap;
+  useEffect(() => { if (!pouring) return; const t = setTimeout(() => setPouring(0), 700); return () => clearTimeout(t); }, [pouring]);
   return (
     <div className={card}>
-      <Slider label="Pour in" value={p} min={0} max={Math.round(s.cap * 1.3)} step={Math.max(0.5, s.cap / 200)} unit="cm³" onChange={setP} />
+      <Slider label="Pour in" value={p} min={0} max={Math.round(s.cap * 1.3)} step={Math.max(0.5, s.cap / 200)} unit="cm³" onChange={(v) => { if (v > p) setPouring(Date.now()); setP(v); }} />
       <div className="mt-2 flex items-end gap-4">
-        <svg viewBox="0 0 80 120" className="h-32 w-20" aria-hidden><rect x={10} y={10} width={60} height={100} rx={4} fill="none" stroke="#E2E8F0" strokeWidth={3} /><rect x={12} y={110 - 98 * pct} width={56} height={98 * pct} fill="#BFDBFE" fillOpacity=".7" />{r.overflow > 0 && <path d="M70,10 q8,30 6,100" stroke="#93C5FD" strokeWidth={3} fill="none" />}</svg>
+        <div className="relative">
+          {pouring > 0 && <svg className="absolute -top-6 left-1/2 h-14 w-6 -translate-x-1/2" viewBox="0 0 10 60" aria-hidden><line x1={5} y1={0} x2={5} y2={60} stroke="#93C5FD" strokeWidth={4} className="lr-pour" /></svg>}
+          <Vessel shape={/tube/i.test(String(s.cap)) ? "tube" : s.graduated ? "cylinder" : "beaker"} level={pct * 0.92} colour="#BFDBFE" size={70} />
+        </div>
         <div className="text-sm"><Row k="In the vessel" v={`${f(r.inside, 1)} ± ${s.tol} cm³`} /><Row k="Uncertainty" v={`${f(r.percent, 1)}%`} /></div>
       </div>
       {r.overflow > 0 && <Out tone="bad">It overflows: {f(r.overflow, 1)} cm³ spills — it only holds {s.cap} cm³.</Out>}
@@ -103,13 +108,13 @@ function VesselTry({ s }: { s: Extract<E.Spec, { e: "vessel" }> }) {
     </div>
   );
 }
-
 function TimerTry({ s }: { s: { lc: number } }) {
-  const [t0, setT0] = useState<number | null>(null), [t, setT] = useState<number | null>(null);
-  const dp = E.decimals(s.lc);
+  const [t0, setT0] = useState<number | null>(null), [t, setT] = useState<number | null>(null), [now, setNow] = useState(0);
+  useEffect(() => { if (t0 == null) return; let raf = 0; const go = () => { setNow(performance.now()); raf = requestAnimationFrame(go); }; raf = requestAnimationFrame(go); return () => cancelAnimationFrame(raf); }, [t0]);
+  const dp = Math.min(3, E.decimals(s.lc)), shown = t != null ? t : t0 != null ? Math.max(0, (now - t0) / 1000) : 0;
   return (
     <div className={card}>
-      <div className="rounded-lg bg-[#C9D8B6] p-3 text-center font-mono text-3xl font-black text-[#111827]" aria-label="Display">{t != null ? t.toFixed(Math.min(3, dp)) : t0 != null ? "…" : (0).toFixed(Math.min(3, dp))} s</div>
+      <div className={`rounded-lg bg-[#C9D8B6] p-3 text-center font-mono text-3xl font-black text-[#111827] ${t0 != null ? "lr-glow" : ""}`} aria-label="Display">{(Math.floor(shown / s.lc) * s.lc).toFixed(dp)} s</div>
       <div className="mt-2 flex gap-2">
         <button type="button" className={btn} onClick={() => { if (t0 == null) { setT0(performance.now()); setT(null); } else { setT((performance.now() - t0) / 1000); setT0(null); } }}>{t0 == null ? "Start" : "Stop"}</button>
         <button type="button" className={soft} onClick={() => { setT0(null); setT(null); }}>Reset</button>
@@ -118,19 +123,25 @@ function TimerTry({ s }: { s: { lc: number } }) {
     </div>
   );
 }
-
 function HeaterTry({ s }: { s: { power: number } }) {
-  const [m, setM] = useState(0.5), [sec, setSec] = useState(120), P = s.power || 50, r = E.heatWater(P, sec, m);
+  const [m, setM] = useState(0.25), [sec, setSec] = useState(0), [on, setOn] = useState(false), P = s.power || 50, r = E.heatWater(P, sec, m);
+  useEffect(() => { if (!on) return; const t = setInterval(() => setSec((x) => Math.min(3600, x + 10)), 100); return () => clearInterval(t); }, [on]);
   return (
     <div className={card}>
-      <Slider label="Mass of water" value={m} min={0.1} max={2} step={0.1} unit="kg" onChange={setM} />
-      <Slider label="Heating time" value={sec} min={0} max={1200} step={10} unit="s" onChange={setSec} />
-      <Row k="Energy supplied (Pt)" v={`${r.energy} J`} /><Row k="Temperature (from 25 °C, 80% efficient)" v={`${r.T} °C`} />
-      {r.boiling && <Out>It is boiling: the extra energy now changes water to steam (latent heat) — the temperature stays at 100 °C.</Out>}
+      <div className="flex items-end justify-center gap-3">
+        <div className="flex flex-col items-center"><Vessel shape="beaker" level={0.55} colour="#BFDBFE" boiling={r.boiling} fizz={r.T > 80 && !r.boiling} size={64} /><Burner on={on} kind={P >= 1000 ? "bunsen" : "plate"} size={46} /></div>
+        <Thermometer T={r.T} size={110} />
+        <div className="text-sm"><Row k="Time" v={`${sec} s`} /><Row k="Energy (Pt)" v={`${r.energy} J`} /><Row k="Water" v={`${r.T} °C`} /></div>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" className={btn} onClick={() => setOn(!on)}>{on ? "Turn it off" : "🔥 Heat it"}</button>
+        <button type="button" className={soft} onClick={() => { setOn(false); setSec(0); }}>Fresh cold water</button>
+      </div>
+      <Slider label="Mass of water" value={m} min={0.1} max={2} step={0.05} unit="kg" onChange={setM} />
+      {r.boiling ? <Out>It is boiling: the extra energy now changes water to steam (latent heat) — the temperature stays at 100 °C.</Out> : <Out>Q = Pt × 80% = mcΔT: with {f(m, 2)} kg of water (c = 4200 J/kg °C), each minute raises it {f((P * 60 * 0.8) / (m * 4200), 1)} °C.</Out>}
     </div>
   );
 }
-
 function CircuitTry({ s }: { s: Extract<E.Spec, { e: "circuit" }> }) {
   const [V, setV] = useState(s.part === "cell" || s.part === "supply" ? 0 : 3), [T, setT] = useState(25), [lux, setLux] = useState(100), [R, setR] = useState(s.value || 10), [Ns, setNs] = useState(120);
   const x = { V, T, lux, R, Np: 240, Ns }, r = E.current(s.part, s.value ?? 0, x);
@@ -144,6 +155,7 @@ function CircuitTry({ s }: { s: Extract<E.Spec, { e: "circuit" }> }) {
       {(s.part === "ldr" || s.part === "solar") && <Slider label="Light" value={lux} min={1} max={2000} step={1} unit="lux" onChange={setLux} />}
       {(s.part === "rheostat" || s.part === "cell" || s.part === "supply" || s.part === "capacitor") && <Slider label={s.part === "rheostat" ? "Slider position (resistance in use)" : "Resistance of the circuit"} value={R} min={0.5} max={s.part === "rheostat" ? s.value ?? 20 : 10_000} step={0.5} unit="Ω" onChange={setR} />}
       {s.part === "transformer" && <Slider label="Turns on the secondary (240 on the primary)" value={Ns} min={10} max={960} step={10} onChange={setNs} />}
+      <MiniCircuit part={s.part} I={r.I} glow={s.part === "lamp" ? Math.min(1, Math.abs(r.I) / 0.5) : s.part === "led" ? (r.I > 0 ? 1 : 0) : 0} />
       {s.part === "switch"
         ? <SwitchTry />
         : <>{s.part !== "capacitor" && s.part !== "transformer" && <Row k="Current" v={`${f(r.I * 1000, 1)} mA`} />}{r.R != null && <Row k="Resistance" v={`${f(r.R, 1)} Ω`} />}<Out>{r.note}</Out></>}
@@ -155,6 +167,19 @@ function CircuitTry({ s }: { s: Extract<E.Spec, { e: "circuit" }> }) {
           <text x={196} y={56} textAnchor="end" fontSize={9} fill="#94A3B8">V</text><text x={104} y={10} fontSize={9} fill="#94A3B8">I</text>
         </svg>
       )}
+    </div>
+  );
+}
+function MiniCircuit({ part, I, glow }: { part: E.CircuitPart; I: number; glow: number }) {
+  const flowing = Math.abs(I) > 1e-5, dur = `${Math.max(0.25, Math.min(3, 0.15 / Math.max(1e-4, Math.abs(I))))}s`;
+  return (
+    <div className="relative my-2 flex items-center justify-center">
+      <svg viewBox="0 0 240 90" className="w-full max-w-xs" aria-hidden>
+        <rect x={20} y={15} width={200} height={60} rx={8} fill="none" stroke="#DC2626" strokeWidth={3} />
+        {flowing && <rect x={20} y={15} width={200} height={60} rx={8} fill="none" stroke="#FDE047" strokeWidth={2.4} className="lr-flow" style={{ animationDuration: dur, animationDirection: I < 0 ? "reverse" : "normal" }} />}
+        <rect x={8} y={36} width={24} height={18} rx={3} fill="#334155" stroke="#94A3B8" /><text x={20} y={49} textAnchor="middle" fontSize={9} fontWeight={900} fill="#FDE047">+ −</text>
+      </svg>
+      <div className="absolute left-1/2 top-0 -translate-x-1/2">{part === "lamp" || part === "led" ? <Bulb glow={glow} led={part === "led"} size={46} /> : part === "motor" ? <Motor spin={flowing} size={46} /> : <span className="rounded bg-[#0B1220] px-2 py-1 text-[10px] font-black text-white ring-1 ring-white/20">{part}</span>}</div>
     </div>
   );
 }
@@ -203,16 +228,21 @@ function FilterTry() {
 }
 
 function SpringTry({ s }: { s: { k: number; limit: number } }) {
-  const [F, setF] = useState(2), r = E.stretch(s.k, s.limit, F);
-  return <div className={card}><Slider label="Load" value={F} min={0} max={s.limit * 1.6} step={0.1} unit="N" onChange={setF} /><Row k="Extension" v={`${f(r.x * 100, 1)} cm`} /><Out tone={r.past ? "bad" : "info"}>{r.past ? "Past the limit of proportionality: extension is no longer proportional to force, and it won't go back to its length." : `F = kx: ${f(F, 1)} N ÷ ${s.k} N/m = ${f(r.x, 3)} m.`}</Out></div>;
+  const [F, setF] = useState(2), r = E.stretch(s.k, s.limit, F), len = 40 + Math.min(150, r.x * 100 * 6), coils = 12;
+  const zig = Array.from({ length: coils + 1 }, (_, k) => `${k ? "L" : "M"}${k === 0 || k === coils ? 30 : k % 2 ? 20 : 40},${10 + (len * k) / coils}`).join(" ");
+  return <div className={card}><div className="flex items-start gap-4"><svg viewBox="0 0 60 230" className="h-48 w-12" aria-hidden><rect x={5} y={2} width={50} height={6} fill="#64748B" /><path className="lr-fill" d={zig} fill="none" stroke="#CBD5E1" strokeWidth={2.5} /><g className="lr-move" style={{ transform: `translateY(${len}px)` }}><line x1={30} y1={10} x2={30} y2={18} stroke="#94A3B8" strokeWidth={2} />{Array.from({ length: Math.min(8, Math.ceil(F)) }, (_, k) => <rect key={k} x={18} y={18 + k * 6} width={24} height={5} rx={1} fill="#D97706" />)}</g></svg>
+    <div className="flex-1"><Slider label="Load" value={F} min={0} max={s.limit * 1.6} step={0.1} unit="N" onChange={setF} /><Row k="Extension" v={`${f(r.x * 100, 1)} cm`} /><Out tone={r.past ? "bad" : "info"}>{r.past ? "Past the limit of proportionality: extension is no longer proportional to force, and it won't go back to its length." : `F = kx: ${f(F, 1)} N ÷ ${s.k} N/m = ${f(r.x, 3)} m.`}</Out></div></div></div>;
 }
 function MagnetTry({ s }: { s: { strength: number } }) {
-  const [d, setD] = useState(10);
-  return <div className={card}><Slider label="Compass distance from the pole" value={d} min={2} max={40} step={1} unit="cm" onChange={setD} /><Row k="Field (roughly)" v={`${f(E.fieldAt(s.strength, d), 0)} μT`} /><Row k="Compass turns from north" v={`${f(E.compassTurn(s.strength, d), 0)}°`} /><Out>Double the distance and the field is about eight times weaker — far away, the compass just points north (Earth's field).</Out></div>;
+  const [d, setD] = useState(10), turn = E.compassTurn(s.strength, d);
+  return <div className={card}><svg viewBox="0 0 240 80" className="w-full" aria-hidden><rect x={10} y={28} width={40} height={24} fill="#DC2626" /><rect x={50} y={28} width={40} height={24} fill="#2563EB" /><text x={30} y={45} textAnchor="middle" fontSize={12} fontWeight={900} fill="#fff">N</text><text x={70} y={45} textAnchor="middle" fontSize={12} fontWeight={900} fill="#fff">S</text>
+    <g transform={`translate(${Math.min(225, 100 + d * 3.2)},40)`}><circle r={16} fill="#F8FAFC" stroke="#94A3B8" /><g className="lr-move" style={{ transform: `rotate(${-turn}deg)` }}><path d="M0,-13 L4,0 L0,13 L-4,0 Z" fill="#DC2626" /><path d="M0,0 L4,0 L0,13 L-4,0 Z" fill="#334155" /></g></g></svg>
+    <Slider label="Compass distance from the pole" value={d} min={2} max={40} step={1} unit="cm" onChange={setD} /><Row k="Field (roughly)" v={`${f(E.fieldAt(s.strength, d), 0)} μT`} /><Row k="Compass turns from north" v={`${f(turn, 0)}°`} /><Out>Double the distance and the field is about eight times weaker — far away, the compass just points north (Earth's field).</Out></div>;
 }
 function RadiationTry({ s }: { s: Extract<E.Spec, { e: "radiation" }> }) {
   const [kind, setKind] = useState<"alpha" | "beta" | "gamma">(s.kind === "alpha" || s.kind === "beta" || s.kind === "gamma" ? s.kind : "beta");
   const [abs, setAbs] = useState<E.Absorber>("none"), [d, setD] = useState(3), [res, setRes] = useState<ReturnType<typeof E.countRate> | null>(null);
+  const [counting, setCounting] = useState<{ to: ReturnType<typeof E.countRate>; n: number } | null>(null);
   const [dice, setDice] = useState<number[]>([]);
   if (s.kind === "halflife") {
     const throwAll = () => setDice((h) => { const left = h.length ? h[h.length - 1] : 100; let n = 0; for (let k = 0; k < left; k++) if (Math.random() >= 1 / 6) n++; return [...(h.length ? h : [100]), n]; });
@@ -226,11 +256,20 @@ function RadiationTry({ s }: { s: Extract<E.Spec, { e: "radiation" }> }) {
       {s.kind === "detector" && <div className="flex gap-1.5">{(["alpha", "beta", "gamma"] as const).map((k) => <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} className={soft}>{k} source</button>)}</div>}
       <div className="mt-2 flex flex-wrap gap-1.5">{(["none", "paper", "aluminium", "lead"] as const).map((a) => <button key={a} type="button" aria-pressed={abs === a} onClick={() => setAbs(a)} className={soft}>{a === "none" ? "No absorber" : a === "aluminium" ? "3 mm aluminium" : a === "lead" ? "2 cm lead" : "Paper"}</button>)}</div>
       <Slider label="Distance from the detector" value={d} min={1} max={30} step={1} unit="cm" onChange={setD} />
-      <button type="button" className={`${btn} mt-2`} onClick={() => setRes(E.countRate(kind, abs, d, Math.random))}>Count for 10 s</button>
+      <button type="button" className={`${btn} mt-2`} onClick={() => { const r = E.countRate(kind, abs, d, Math.random); setRes(null); setCounting({ to: r, n: 0 }); }} disabled={!!counting}>Count for 10 s</button>
+      {counting && <Counting c={counting} onDone={(r) => { setCounting(null); setRes(r); }} onTick={(n) => setCounting((c) => (c ? { ...c, n } : c))} />}
       {res && <><Row k="Counts in 10 s" v={res.counts} /><Row k="Count rate" v={`${res.perSecond} /s`} /><Row k={`Corrected (− ${E.BACKGROUND}/s background)`} v={`${res.corrected} /s`} /></>}
       <Out>Decay is random: count again and you'll get a slightly different number — take several counts and average them.</Out>
     </div>
   );
+}
+function Counting({ c, onDone, onTick }: { c: { to: ReturnType<typeof E.countRate>; n: number }; onDone: (r: ReturnType<typeof E.countRate>) => void; onTick: (n: number) => void }) {
+  useEffect(() => {
+    const t0 = performance.now(), T = 2000;
+    const t = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / T); onTick(Math.round(c.to.counts * k)); if (k >= 1) { clearInterval(t); onDone(c.to); } }, 60);
+    return () => clearInterval(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return <div className="mt-2 flex items-center gap-3 rounded-lg bg-black/40 p-2"><span key={c.n} className="lr-flash inline-block h-3 w-3 rounded-full bg-[#34D399]" /><span className="font-mono text-2xl font-black text-[#34D399]" aria-label="Counter">{String(c.n).padStart(4, "0")}</span><span className="text-xs text-white/60">counting… (sped up)</span></div>;
 }
 function WaveTry({ s }: { s: Extract<E.Spec, { e: "wave" }> }) {
   const [fq, setF] = useState(s.f ?? 256), [T, setT] = useState(20), [ten, setTen] = useState(20);
@@ -240,6 +279,7 @@ function WaveTry({ s }: { s: Extract<E.Spec, { e: "wave" }> }) {
     <div className={card}>
       <Slider label="Frequency" value={fq} min={s.part === "ripple" || s.part === "slinky" ? 1 : 20} max={s.part === "ripple" || s.part === "slinky" ? 20 : 2000} step={1} unit="Hz" onChange={setF} />
       {s.part !== "ripple" && s.part !== "slinky" && <Slider label="Air temperature" value={T} min={0} max={40} step={1} unit="°C" onChange={setT} />}
+      <TravellingWave lambda={E.wavelength(v, fq)} />
       <Row k="Wave speed" v={`${f(v, 2)} m/s`} /><Row k="Wavelength (v ÷ f)" v={`${f(E.wavelength(v, fq) * 100, 1)} cm`} />
       {s.part === "tube" && <Row k="First resonance length (λ/4 − end correction)" v={`${f(E.firstResonance(fq, T) * 100, 1)} cm`} />}
       <Out>{s.part === "fork" ? "Higher frequency, shorter wavelength — the speed stays the same in the same medium." : "v = fλ."}</Out>
@@ -247,24 +287,65 @@ function WaveTry({ s }: { s: Extract<E.Spec, { e: "wave" }> }) {
   );
 }
 
+function TravellingWave({ lambda }: { lambda: number }) {
+  const px = Math.max(14, Math.min(240, lambda * 120)), pts = Array.from({ length: 121 }, (_, i) => `${i * 2.5},${40 - 22 * Math.sin((2 * Math.PI * i * 2.5) / px)}`).join(" ");
+  return (
+    <svg viewBox="0 0 300 80" className="mt-2 w-full overflow-hidden rounded-lg bg-[#0B1220]" aria-hidden>
+      <g><animateTransform attributeName="transform" type="translate" from="0 0" to={`${-px} 0`} dur="1s" repeatCount="indefinite" /><polyline points={pts} fill="none" stroke="#38BDF8" strokeWidth={2.5} transform={`translate(0,0)`} /><polyline points={pts} fill="none" stroke="#38BDF8" strokeWidth={2.5} transform="translate(300,0)" /></g>
+      <line x1={10} y1={72} x2={10 + px} y2={72} stroke="#FDE047" strokeWidth={2} /><text x={14 + px} y={75} fontSize={9} fill="#FDE047">λ</text>
+    </svg>
+  );
+}
 function ReagentTry({ s }: { s: Extract<E.Spec, { e: "reagent" }> }) {
-  const [t, setT] = useState<E.TestName | null>(null), c = E.indicatorColour("universal", s.pH);
+  const [t, setT] = useState<E.TestName | null>(null), [k, setK] = useState(0), c = E.indicatorColour("universal", s.pH);
   const tests = E.TESTS.filter((x) => (s.kind === "gas" ? ["limewater", "glowing splint", "lighted splint", "damp litmus paper", "bromine water"].includes(x) : !["limewater", "glowing splint", "lighted splint"].includes(x) || s.gas));
+  const seen = t ? E.observe(s, t) : "";
+  const look = lookOf(seen, s);
   return (
     <div className={card}>
       <p className="flex items-center gap-2 text-sm font-bold"><span className="h-5 w-5 rounded-full ring-1 ring-white/30" style={{ background: c.hex }} />pH {s.pH} · {E.strength(s.pH)}</p>
+      <div className="mt-2 flex items-end justify-center gap-4">
+        {t === "flame test"
+          ? <div className="relative"><Burner on kind="bunsen" flame={look.flame ?? "#3B82F6"} size={96} /><svg viewBox="0 0 60 40" className="absolute -right-10 top-0 h-10 w-16" aria-hidden><path d="M58,4 L14,30" stroke="#CBD5E1" strokeWidth={1.6} /><circle cx={12} cy={31} r={3} fill="none" stroke="#CBD5E1" strokeWidth={1.4} /></svg></div>
+          : t && /splint/.test(t) ? <Splint glow={/relights|brightly/.test(seen)} pop={/pop/.test(seen)} out={/goes out/.test(seen)} k={k} />
+          : <Vessel key={t ?? "none"} shape="tube" size={56} level={0.5} colour={look.colour ?? (s.formula === "CuSO4" ? "#60A5FA" : "#E0F2FE")} ppt={look.ppt} fizz={look.fizz} milky={look.milky} drop={t ? { colour: "#E2E8F0", key: k } : null} />}
+      </div>
       <p className="mt-2 text-xs font-black uppercase tracking-wide text-white/50">Test it with…</p>
-      <div className="mt-1 flex flex-wrap gap-1.5">{tests.map((x) => <button key={x} type="button" aria-pressed={t === x} onClick={() => setT(x)} className={soft}>{x}</button>)}</div>
-      {t && <Out>{E.observe(s, t)}</Out>}
+      <div className="mt-1 flex flex-wrap gap-1.5">{tests.map((x) => <button key={x} type="button" aria-pressed={t === x} onClick={() => { setT(x); setK(Date.now()); }} className={soft}>{x}</button>)}</div>
+      {t && <Out>{seen}</Out>}
     </div>
+  );
+}
+// What the observation looks like, for the drawing.
+function lookOf(seen: string, s: Extract<E.Spec, { e: "reagent" }>): { colour?: string; ppt?: string; fizz?: boolean; milky?: boolean; flame?: string } {
+  const out: ReturnType<typeof lookOf> = {};
+  if (/precipitate/.test(seen) && !/No precipitate/.test(seen)) out.ppt = /light blue/.test(seen) ? "#7DD3FC" : /green/.test(seen) ? "#4D7C0F" : /red-brown/.test(seen) ? "#9A3412" : /cream/.test(seen) ? "#FEF3C7" : /yellow/.test(seen) ? "#FDE047" : "#F8FAFC";
+  if (/deep blue solution/.test(seen)) out.colour = "#1D4ED8";
+  if (/Effervescence|Bubbles|fizz/i.test(seen)) out.fizz = true;
+  if (/milky/.test(seen)) out.milky = true;
+  if (/Turns (\w+)/.test(seen)) out.colour = E.indicatorColour("universal", s.pH).hex;
+  if (/blue-black/.test(seen)) out.colour = "#1E1B4B";
+  if (/Decolourised/.test(seen)) out.colour = "#E0F2FE";
+  const flame: [RegExp, string][] = [[/yellow-orange/, "#FB923C"], [/lilac/, "#C084FC"], [/brick-red/, "#DC2626"], [/blue-green/, "#14B8A6"], [/crimson/, "#BE123C"], [/apple-green/, "#84CC16"], [/white glow/, "#F8FAFC"]];
+  for (const [re, c] of flame) if (re.test(seen)) out.flame = c;
+  return out;
+}
+function Splint({ glow, pop, out, k }: { glow: boolean; pop: boolean; out: boolean; k: number }) {
+  return (
+    <svg key={k} viewBox="0 0 120 90" className="h-24 w-32" aria-hidden>
+      <path d="M50,88 V20 a10,10 0 0 1 20,0 V88" fill="#ffffff14" stroke="#E2E8F0" strokeWidth={2} transform="rotate(180 60 54)" />
+      <line x1={10} y1={10} x2={58} y2={60} stroke="#D6B47A" strokeWidth={4} strokeLinecap="round" />
+      {!out && <circle cx={58} cy={60} r={glow ? 7 : 4} fill={glow ? "#FDE047" : "#F97316"} className={glow ? "lr-glow" : ""} />}
+      {pop && <text x={60} y={30} textAnchor="middle" fontSize={16} fontWeight={900} fill="#FDE047" className="lr-pop">POP!</text>}
+      {out && <path d="M58,58 q4,-10 -2,-18" fill="none" stroke="#94A3B8" strokeWidth={2} className="lr-steam" />}
+    </svg>
   );
 }
 function IndicatorTry({ s }: { s: { ind: E.IndicatorId } }) {
   const [pH, setPH] = useState(7), c = E.indicatorColour(s.ind, pH);
-  return <div className={card}><Slider label="pH of the solution" value={pH} min={0} max={14} step={0.5} onChange={setPH} /><div className="mt-2 flex items-center gap-3"><svg viewBox="0 0 40 60" className="h-16 w-10" aria-hidden><path d="M8,4 V48 a12,12 0 0 0 24,0 V4" fill={c.hex} stroke="#E2E8F0" strokeWidth={2} /></svg><p className="text-sm font-bold">Turns <b>{c.name}</b> at pH {pH} ({E.strength(pH)}).</p></div>
+  return <div className={card}><Slider label="pH of the solution" value={pH} min={0} max={14} step={0.5} onChange={setPH} /><div className="mt-2 flex items-center gap-3"><Vessel shape="tube" level={0.6} colour={c.hex} size={44} /><p className="text-sm font-bold">Turns <b>{c.name}</b> at pH {pH} ({E.strength(pH)}).</p></div>
     <div className="mt-2 flex h-4 overflow-hidden rounded-full">{Array.from({ length: 29 }, (_, k) => <span key={k} className="flex-1" style={{ background: E.indicatorColour(s.ind, k / 2).hex }} />)}</div></div>;
 }
-
 function SpecimenTry({ item, s }: { item: Item; s: Extract<E.Spec, { e: "specimen" }> }) {
   const others = useMemo(() => ROOMS.biology.filter((x) => x.spec.e === "specimen" && x.id !== item.id && (x.spec as typeof s).group !== s.group).flatMap((x) => (x.spec as typeof s).features), [item.id, s.group]);
   const [q, setQ] = useState(() => mk()), [got, setGot] = useState<string | null>(null);
@@ -322,12 +403,15 @@ function SolidTry({ s }: { s: Extract<E.Spec, { e: "solid" }> }) {
     {r.E > 0 && <Out>Euler: F + V − E = {r.F} + {r.Vx} − {r.E} = {r.F + r.Vx - r.E}.</Out>}</div>;
 }
 function RandomTry({ s }: { s: Extract<E.Spec, { e: "random" }> }) {
-  const [n, setN] = useState(0), [res, setRes] = useState<ReturnType<typeof E.throwsOf> | null>(null);
+  const [n, setN] = useState(0), [roll, setRoll] = useState(0), [res0, setRes] = useState<ReturnType<typeof E.throwsOf> | null>(null);
+  const [last, setLast] = useState(0);
+  const res = res0 ? { ...res0, last } : null;
   const k = s.kind === "coin" ? 2 : s.kind === "cards" ? 4 : s.sides ?? 6;
   const names = s.kind === "coin" ? ["Heads", "Tails"] : s.kind === "cards" ? ["♠", "♥", "♦", "♣"] : s.kind === "balls" ? ["Red", "Blue", "Green", "Yellow", "White"].slice(0, k) : Array.from({ length: k }, (_, i) => String(i + 1));
   return (
     <div className={card}>
-      <div className="flex flex-wrap gap-1.5">{[1, 10, 100, 1000].map((t) => <button key={t} type="button" className={soft} onClick={() => { setN(t); setRes(E.throwsOf(s.kind, k, t, Math.random)); }}>{s.kind === "coin" ? "Toss" : s.kind === "cards" ? "Draw" : s.kind === "spinner" ? "Spin" : "Roll"} ×{t}</button>)}</div>
+      <div className="mb-2 flex justify-center"><span key={roll} className={`inline-flex h-14 w-14 items-center justify-center rounded-xl bg-white text-2xl font-black text-[#0B1220] shadow-lg ${roll ? "lr-shake" : ""}`} aria-label="Last result">{res ? names[res.last] : s.kind === "coin" ? "🪙" : "🎲"}</span></div>
+      <div className="flex flex-wrap gap-1.5">{[1, 10, 100, 1000].map((t) => <button key={t} type="button" className={soft} onClick={() => { setN(t); setRoll(Date.now()); setLast(Math.floor(Math.random() * k)); setRes(E.throwsOf(s.kind, k, t, Math.random)); }}>{s.kind === "coin" ? "Toss" : s.kind === "cards" ? "Draw" : s.kind === "spinner" ? "Spin" : "Roll"} ×{t}</button>)}</div>
       {res && <>
         <div className="mt-2 grid gap-1">{res.tally.map((t, i) => <div key={i} className="flex items-center gap-2 text-xs"><span className="w-12 font-black">{names[i]}</span><span className="h-3 rounded bg-[#38BDF8]" style={{ width: `${Math.max(2, res.relative[i] * 100 * (k / 2))}%` }} /><span className="font-mono">{t} ({f(res.relative[i], 3)})</span></div>)}</div>
         <Out>{n} trials. Theory: each is {f(res.theory, 3)}. The more trials, the closer the relative frequencies get to it.</Out>
@@ -380,6 +464,7 @@ function StatsTry() {
 function MicroTry({ s }: { s: { eyepiece: number; objectives: number[] } }) {
   const [o, setO] = useState(s.objectives[0]), [img, setImg] = useState(20), mag = E.magnification(s.eyepiece, o);
   return <div className={card}><div className="flex flex-wrap gap-1.5">{s.objectives.map((x) => <button key={x} type="button" aria-pressed={o === x} onClick={() => setO(x)} className={soft}>×{x} objective</button>)}</div>
+    <svg viewBox="0 0 120 120" className="mx-auto mt-2 h-36 w-36" role="img" aria-label="What you see"><defs><clipPath id="mv"><circle cx={60} cy={60} r={56} /></clipPath></defs><circle cx={60} cy={60} r={58} fill="#0B1220" /><g clipPath="url(#mv)"><rect width={120} height={120} fill="#FEF9C3" /><g className="lr-move" style={{ transform: `scale(${Math.min(4, o / 4)})`, transformOrigin: "60px 60px" }}>{Array.from({ length: 16 }, (_, k) => <g key={k}><rect x={(k % 4) * 30 + 2} y={Math.floor(k / 4) * 30 + 2} width={27} height={27} fill="#FDE68A" stroke="#A16207" strokeWidth={1} /><circle cx={(k % 4) * 30 + 12} cy={Math.floor(k / 4) * 30 + 14} r={4} fill="#92400E" fillOpacity=".7" /></g>)}</g></g></svg>
     <Slider label="Size of the cell in your drawing" value={img} min={5} max={100} step={1} unit="mm" onChange={setImg} />
     <Row k="Total magnification" v={`×${mag}`} /><Row k="Real size of the cell" v={`${f(E.actualSize(img, mag), 1)} μm`} /><Row k="Field of view" v={`${f(E.fieldOfView(o), 2)} mm across`} />
     <Out>Actual size = image size ÷ magnification. Higher power: more detail, but you see a smaller area and it's darker.</Out></div>;
