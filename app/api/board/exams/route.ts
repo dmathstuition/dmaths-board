@@ -8,6 +8,7 @@ import { nameKey } from "@/lib/stars";
 import { isSlideUrl } from "@/lib/whiteboard";
 import { aiChat, aiErrorResponse, extractJson } from "@/lib/ai";
 import { removeSlidePictures } from "@/lib/slideStore";
+import { cleanRedoMinutes, keptOf, redoExtraMs, redoPaper, triesOf, withoutTries, type RedoMode } from "@/lib/examRedo";
 
 // Exam mode (supabase/migration-exams-stars.sql). Each learner takes the test
 // on their own phone, in their own order; the answers stay on the server
@@ -27,6 +28,10 @@ import { removeSlidePictures } from "@/lib/slideStore";
 //                                                 storage and the writing on them (marks and scores stay)
 //        { action: "extra", examId, studentId, on }       extra time (25%) for one learner (teacher)
 //        { action: "working", examId, n, value }  working shown for a method mark (learner)
+//        { action: "redo", examId, studentIds, mode, minutes }  send handed-in learners back to try
+//                                                 again: "fresh" (an empty paper) or "wrong" (only the
+//                                                 ones they got wrong), with `minutes` from now (teacher)
+//        { action: "collect", examId, studentId } hand one learner's paper in now (teacher)
 //   GET  ?sessionId=&warmups=1      → the teacher's daily warm-ups, for the tracker
 //   GET  ?sessionId=&list=1         → the class's exams (teacher), for the results after the class
 //   GET  ?sessionId=&examId=        → that exam, as above, instead of the latest
@@ -35,7 +40,9 @@ import { removeSlidePictures } from "@/lib/slideStore";
 // method marks. Extra time: each learner's own deadline is ends_at + extra_ms,
 // and the exam stays open until the last one has passed. Personal spelling
 // words: board_exams.personal_words of each learner's earlier misses go on the
-// end of their test (board_exam_entries.extra_qs). A reading paper: the
+// end of their test (board_exam_entries.extra_qs). A try again (redo): the
+// earlier try is kept in answers._tries (lib/examRedo), their own deadline is
+// set with extra_ms, and an ended exam opens again until they finish. A reading paper: the
 // booklet's pages (board_exams.booklet) are shown beside the questions.
 export const dynamic = "force-dynamic";
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
@@ -136,7 +143,8 @@ export async function GET(req: Request) {
           answered: qs.filter((q, i) => { const v = (r.answers ?? {})[String(i)]; return q.kind === "page" ? pageDone(v) : v != null && v !== ""; }).length,
           flags: r.flags, flagLog: (r.flag_log ?? []).slice(-10), submitted: !!r.submitted_at, score: r.submitted_at ? m.score : null, total: m.total,
           live: r.submitted_at ? null : m.score, // what they'd get now
-          answers: hand ? slimAnswers(qs, r.answers ?? {}, -1, true) : r.answers ?? {}, // the writing is fetched one page at a time
+          answers: hand ? slimAnswers(qs, withoutTries(r.answers), -1, true) : withoutTries(r.answers), // the writing is fetched one page at a time
+          tries: triesOf(r.answers), // earlier tries, when sent back to redo
           startedAt: r.started_at ?? null, submittedAt: r.submitted_at ?? null, // for the teacher's reports
           ...(hand ? { pageMarks: marks, toMark: pagesToMark(qs, r.answers ?? {}, marks, !!r.submitted_at) } : {}),
         };
@@ -147,23 +155,26 @@ export async function GET(req: Request) {
     const { data: mine } = await admin.from("board_exam_entries").select("*").eq("exam_id", e.id).eq("student_id", v.id).maybeSingle();
     const entry = mine as EntryRow | null;
     // An exam that ended more than 2 hours ago and they never started: nothing to show.
-    if (!entry && e.status === "closed") return NextResponse.json({ exam: null });
-    const given0 = entry?.answers ?? {};
+    // (Or its time is over — it may still be open for someone's extra time or a redo.)
+    if (!entry && (e.status === "closed" || over(e))) return NextResponse.json({ exam: null });
+    const given0 = withoutTries(entry?.answers);
+    const tries = triesOf(entry?.answers), last = tries[tries.length - 1];
     const myQs = qsFor(e, entry);
     const hand = needsMarking(myQs);
     const myMarks = entry ? marksOf(e, entry) : {};
     const out: any = { exam: meta, entry: entry ? {
       started: true, submitted: !!entry.submitted_at, flags: entry.flags, extraMs: extraOf(entry),
+      attempt: tries.length + 1, ...(last ? { lastTry: { score: last.score, total: last.total, mode: last.mode }, keep: keptOf(entry.answers) } : {}),
       answers: isHandMarked(myQs) ? slimAnswers(myQs, given0, entry.submitted_at ? -1 : currentPage(myQs, given0)) : given0,
       score: entry.submitted_at ? markPaper(myQs, given0, myMarks).score : entry.score, total: entry.total ?? markPaper(myQs, given0).total,
       // Marked by hand (pages, method marks): how far the teacher has got.
       ...(hand && entry.submitted_at ? { marking: { left: pagesToMark(myQs, given0, myMarks, true).length, pages: myQs.filter((q) => q.kind === "page").length } } : {}),
     } : null };
-    if (entry && !entry.submitted_at && e.status === "open") { out.paper = learnerPaper(e.id, v.id, myQs, !!e.in_order); out.personalFrom = e.questions.length; }
+    if (entry && !entry.submitted_at && e.status === "open") { out.paper = learnerPaper(e.id, tries.length ? `${v.id}:${tries.length}` : v.id, myQs, !!e.in_order); out.personalFrom = e.questions.length; }
     // Once it's over: how they did, against the class — and (if the teacher
     // allows it) their answers against the right ones.
     if (entry && e.status === "closed") {
-      const given = entry.answers ?? {};
+      const given = given0;
       const m = markPaper(myQs, given, myMarks);
       const blank = myQs.filter((q, i) => (q.kind === "page" ? pageBlank(given[String(i)]) : given[String(i)] == null || given[String(i)] === "")).length;
       const { data: all } = await admin.from("board_exam_entries").select("score, total").eq("exam_id", e.id).not("submitted_at", "is", null).limit(500);
@@ -335,6 +346,46 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, score, marks });
     }
 
+    if (action === "redo") {
+      if (!v.host) return bad("Only the teacher can send a paper back.", 403);
+      if (!rateLimit(`exam-redo:${v.id}`, 30, 60_000)) return bad("Wait a minute.", 429);
+      const list: unknown[] = Array.isArray(body?.studentIds) ? body.studentIds : [body?.studentId];
+      const ids = [...new Set(list.map((x) => String(x ?? "")).filter(Boolean))].slice(0, 300);
+      if (!ids.length) return bad("Pick a learner first.");
+      const mode: RedoMode = body?.mode === "wrong" ? "wrong" : "fresh";
+      const minutes = cleanRedoMinutes(body?.minutes, e.minutes);
+      const { data: rows, error: rowsErr } = await admin.from("board_exam_entries").select("*").eq("exam_id", e.id).in("student_id", ids);
+      if (rowsErr) return dbFail(rowsErr.message);
+      const now = Date.now(), at = new Date(now).toISOString(), endsAt = new Date(e.ends_at).getTime();
+      let sent = 0;
+      const writing: string[] = [];
+      for (const r of (rows ?? []) as EntryRow[]) {
+        if (!r.submitted_at) { writing.push(r.name); continue; } // still on their first go
+        const next = redoPaper(qsFor(e, r), r.answers, marksOf(e, r), mode, at, r.flags);
+        const patch: Record<string, unknown> = { answers: next.answers, page_marks: next.marks, extra_ms: redoExtraMs(now, minutes, endsAt, extraOf(r)), submitted_at: null, score: null, total: null, flags: 0, started_at: at };
+        let { error } = await admin.from("board_exam_entries").update(patch).eq("exam_id", e.id).eq("student_id", r.student_id);
+        if (error && /page_marks/i.test(error.message)) { delete patch.page_marks; ({ error } = await admin.from("board_exam_entries").update(patch).eq("exam_id", e.id).eq("student_id", r.student_id)); }
+        if (error) return /extra_ms/i.test(error.message) ? bad("Sending a paper back needs the latest supabase/migration-learner-tools.sql — run it in Supabase once.", 501) : dbFail(error.message);
+        sent++;
+      }
+      // An exam that has ended opens again for them; it ends by itself when they're done.
+      if (sent && e.status === "closed") {
+        const { error } = await admin.from("board_exams").update({ status: "open", closed_at: null }).eq("id", e.id);
+        if (error) return dbFail(error.message);
+      }
+      return NextResponse.json({ ok: true, sent, writing, mode, minutes });
+    }
+    if (action === "collect") {
+      if (!v.host) return bad("Only the teacher can collect a paper.", 403);
+      const { data: row, error } = await admin.from("board_exam_entries").select("*").eq("exam_id", e.id).eq("student_id", String(body?.studentId ?? "")).maybeSingle();
+      if (error) return dbFail(error.message);
+      if (!row) return bad("That learner isn't taking this exam.", 404);
+      const r = row as EntryRow;
+      const m = r.submitted_at ? { score: r.score, total: r.total } : await handIn(e, r);
+      await settle(e);
+      return NextResponse.json({ ok: true, score: m.score, total: m.total });
+    }
+
     if (v.host) return bad("The teacher doesn't take the exam.", 403);
     if (!rateLimit(`exam:${v.id}`, 240, 60_000)) return bad("Slow down a little.", 429);
     const { data: row } = await admin.from("board_exam_entries").select("*").eq("exam_id", e.id).eq("student_id", v.id).maybeSingle();
@@ -368,6 +419,7 @@ export async function POST(req: Request) {
     if (action === "working") {
       const n = Math.round(Number(body?.n));
       if (!myQs[n]?.method) return bad("That question doesn't need working.");
+      if (keptOf(entry.answers).includes(n)) return bad("You got that one right last time — it's kept.", 409);
       const answers = { ...(entry.answers ?? {}), [workingKey(n)]: { ink: cleanPageAnswer(body?.value).ink } };
       const { error } = await admin.from("board_exam_entries").update({ answers }).eq("exam_id", e.id).eq("student_id", v.id);
       if (error) return dbFail(error.message);
@@ -376,6 +428,7 @@ export async function POST(req: Request) {
     if (action === "answer" || action === "page-done") {
       const n = Math.round(Number(body?.n));
       if (!(n >= 0 && n < myQs.length)) return bad("Which question?");
+      if (keptOf(entry.answers).includes(n)) return bad("You got that one right last time — it's kept.", 409);
       const q = myQs[n], had = (entry.answers ?? {})[String(n)];
       let value: unknown;
       if (q.kind === "page") {

@@ -1,6 +1,7 @@
 import { readFile } from "fs/promises";
 import { test, expect, type Browser, type BrowserContext } from "@playwright/test";
 import { SID, agree, classServer, realtimeHub } from "./helpers";
+import { keptOf, redoExtraMs, redoPaper, triesOf, withoutTries } from "../lib/examRedo";
 import { cleanExamQuestions, cleanPageAnswer, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageDone, pagesToMark, shownQ, slimAnswers, workingKey, type ExamQ } from "../lib/exams";
 
 // Exam mode with a stand-in for /api/board/exams that keeps the exam in memory
@@ -26,18 +27,21 @@ function examServer() {
         if (who === "teacher") return r.fulfill({ json: { exam: { ...meta(), questions: exam.questions }, entries: [...entries].map(([id, e]) => {
           const qs = qsOf(e), m = markPaper(qs, e.answers, e.marks ?? {});
           return { id, name: e.name, extraMs: e.extraMs, ...(e.extraQs.length ? { extraQs: e.extraQs } : {}), answered: Object.keys(e.answers).filter((k) => /^\d+$/.test(k)).length, flags: e.flags, flagLog: [], submitted: e.submitted, score: e.submitted ? m.score : null, total: m.total, live: e.submitted ? null : m.score,
-            answers: hand ? slimAnswers(qs, e.answers) : e.answers, startedAt: new Date(Date.now() - 300_000).toISOString(), submittedAt: e.submitted ? new Date().toISOString() : null,
+            answers: hand ? slimAnswers(qs, withoutTries(e.answers)) : withoutTries(e.answers), tries: triesOf(e.answers), startedAt: new Date(Date.now() - 300_000).toISOString(), submittedAt: e.submitted ? new Date().toISOString() : null,
             ...(hand ? { pageMarks: e.marks ?? {}, toMark: pagesToMark(qs, e.answers, e.marks ?? {}, e.submitted) } : {}) };
         }) } });
         const e = entries.get(me.id);
+        if (!e && exam.status === "closed") return r.fulfill({ json: { exam: null } });
         const qs = e ? qsOf(e) : exam.questions;
+        const tries = triesOf(e?.answers), last = tries[tries.length - 1];
         const out: any = { exam: meta(), entry: e ? {
           started: true, submitted: e.submitted, flags: e.flags, extraMs: e.extraMs, total: markPaper(qs, e.answers).total,
-          answers: isHandMarked(qs) ? slimAnswers(qs, e.answers, e.submitted ? -1 : currentPage(qs, e.answers)) : e.answers,
+          attempt: tries.length + 1, ...(last ? { lastTry: { score: last.score, total: last.total, mode: last.mode }, keep: keptOf(e.answers) } : {}),
+          answers: isHandMarked(qs) ? slimAnswers(qs, withoutTries(e.answers), e.submitted ? -1 : currentPage(qs, e.answers)) : withoutTries(e.answers),
           score: e.submitted ? markPaper(qs, e.answers, e.marks ?? {}).score : null,
           ...(hand && e.submitted ? { marking: { left: pagesToMark(qs, e.answers, e.marks ?? {}, true).length, pages: qs.filter((q) => q.kind === "page").length } } : {}),
         } : null };
-        if (e && !e.submitted && exam.status === "open") { out.paper = learnerPaper(exam.id, me.id, qs, exam.inOrder); out.personalFrom = exam.questions.length; }
+        if (e && !e.submitted && exam.status === "open") { out.paper = learnerPaper(exam.id, tries.length ? `${me.id}:${tries.length}` : me.id, qs, exam.inOrder); out.personalFrom = exam.questions.length; }
         if (e && exam.status === "closed") { const m = markPaper(qs, e.answers, e.marks ?? {});
           out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = qs.map((q, i) => ({ q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks })); }
         return r.fulfill({ json: out });
@@ -54,6 +58,22 @@ function examServer() {
         exam!.questions = exam!.questions.map(({ img: _img, ...q }) => q);
         return r.fulfill({ json: { ok: true, removed: n, kept: 0 } });
       }
+      if (b.action === "redo") {
+        let sent = 0;
+        for (const id of b.studentIds ?? []) {
+          const t = entries.get(id); if (!t?.submitted) continue;
+          const next = redoPaper(qsOf(t), t.answers, t.marks ?? {}, b.mode === "wrong" ? "wrong" : "fresh", new Date().toISOString(), t.flags);
+          Object.assign(t, { answers: next.answers, marks: next.marks, submitted: false, score: null, total: null, flags: 0, extraMs: redoExtraMs(Date.now(), b.minutes, exam!.endsAt, t.extraMs) });
+          sent++;
+        }
+        if (sent && exam!.status === "closed") exam!.status = "open";
+        return r.fulfill({ json: { ok: true, sent, writing: [], mode: b.mode, minutes: b.minutes } });
+      }
+      if (b.action === "collect") {
+        const t = entries.get(b.studentId)!;
+        if (!t.submitted) { const m = markPaper(qsOf(t), t.answers, t.marks ?? {}); Object.assign(t, { submitted: true, score: m.score, total: m.total }); }
+        return r.fulfill({ json: { ok: true, score: t.score, total: t.total } });
+      }
       if (b.action === "extra") { const t = entries.get(b.studentId)!; t.extraMs = b.on === false ? 0 : Math.round(exam!.minutes * 0.25 * 60_000); return r.fulfill({ json: { ok: true, extraMs: t.extraMs } }); }
       if (b.action === "page-view" || b.action === "mark") {
         const t = entries.get(b.studentId)!, q = qsOf(t)[b.n];
@@ -68,6 +88,7 @@ function examServer() {
       const e = entries.get(me.id)!;
       if (b.action === "working") { e.answers[workingKey(b.n)] = { ink: cleanPageAnswer(b.value).ink }; return r.fulfill({ json: { ok: true } }); }
       if (b.action === "answer" || b.action === "page-done") {
+        if (keptOf(e.answers).includes(b.n)) return r.fulfill({ status: 409, json: { error: "You got that one right last time — it's kept." } });
         if (qsOf(e)[b.n]?.kind === "page") {
           if (pageDone(e.answers[String(b.n)])) return r.fulfill({ status: 409, json: { error: "You've handed in that page." } });
           e.answers[String(b.n)] = { ...cleanPageAnswer(b.value), ...(b.action === "page-done" ? { done: new Date().toISOString() } : {}) };
@@ -541,4 +562,90 @@ test("a reading paper: the booklet beside the questions (tabs on a phone), writt
   await desk.getByRole("button", { name: "2 marks" }).click();
   await expect(panel.getByRole("cell", { name: /3 \/ 4/ })).toBeVisible({ timeout: 15_000 });
   await expect(exam.getByText("3 / 4")).toBeVisible({ timeout: 20_000 });
+});
+
+test("send a learner back to redo: only the wrong ones (right answers kept), a message to everyone, then the whole paper again after it ended", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const { teacher, learner } = await openClass(browser);
+  await teacher.getByRole("button", { name: "Exam mode" }).click();
+  const panel = teacher.getByRole("dialog", { name: "Exam mode" });
+  await panel.getByLabel("Title").fill("Redo check");
+  await panel.getByRole("button", { name: "10 min", exact: true }).click();
+  await panel.getByRole("button", { name: "+ Multiple-choice question" }).click();
+  await panel.getByLabel("Question 1", { exact: true }).fill("What is 7 × 8?");
+  for (const [k, v] of ["54", "56", "58", "64"].entries()) await panel.getByLabel(`Question 1, option ${k + 1}`).fill(v);
+  await panel.getByLabel("Option 2 is the answer").check();
+  await panel.getByRole("button", { name: "+ Typed-answer question" }).click();
+  await panel.getByLabel("Question 2", { exact: true }).fill("Solve 3x + 2 = 14");
+  await panel.getByLabel("Answer to question 2").fill("4");
+  await panel.getByLabel("Marks for question 2").selectOption("2");
+  await panel.getByRole("button", { name: /Start the exam \(2 questions, 10 min\)/ }).click();
+
+  // First try: the multiple choice right, the equation wrong.
+  const exam = learner.getByRole("dialog", { name: "Exam: Redo check" });
+  await exam.getByRole("button", { name: "Start the exam" }).click({ timeout: 20_000 });
+  const answerBoth = async (typed: string) => {
+    for (let i = 0; i < 2; i++) {
+      await expect(exam.getByText(new RegExp(`Question ${i + 1} of 2`))).toBeVisible({ timeout: 15_000 });
+      if (await exam.getByText("What is 7 × 8?").isVisible()) { if (!(await exam.getByText(/it.s kept/).isVisible())) await exam.getByRole("radio", { name: /56/ }).click(); }
+      else await exam.getByLabel("Your answer").fill(typed);
+      if (i === 0) await exam.getByRole("button", { name: "Next →" }).click();
+    }
+    await learner.waitForTimeout(900);
+    await exam.getByRole("button", { name: "Hand in", exact: true }).click();
+    await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
+  };
+  await answerBoth("5");
+  await expect(exam.getByText("1 / 3")).toBeVisible({ timeout: 15_000 });
+
+  // The teacher: question by question, hardest first — pick who missed it, send them back.
+  await expect(panel.getByRole("cell", { name: "1 / 3" })).toBeVisible({ timeout: 15_000 });
+  const breakdown = panel.getByRole("region", { name: "Question by question" });
+  await expect(breakdown.getByText(/^0% right/)).toBeVisible();
+  await expect(breakdown.getByRole("listitem").first()).toContainText("Q2");
+  await breakdown.getByRole("button", { name: "Pick the 1 who missed it" }).click();
+  await expect(panel.getByLabel("Pick Emmanuel")).toBeChecked();
+  await panel.getByRole("button", { name: "🔁 Send 1 back to redo" }).click();
+  const sheet = teacher.getByRole("dialog", { name: "Send back to redo" });
+  await expect(sheet.getByRole("radio", { name: /Only the ones they got wrong/ })).toHaveAttribute("aria-checked", "true");
+  await sheet.getByRole("button", { name: "5 min" }).click();
+  await expect(sheet.getByText(/or the rest of the exam, if that.s longer/)).toBeVisible();
+  await sheet.screenshot({ path: "test-results/exam-redo-sheet.png" });
+  await sheet.getByRole("button", { name: "Send back" }).click();
+  await expect(panel.getByText(/Emmanuel is doing it again — only the ones they got wrong, 5 min/)).toBeVisible();
+  await expect(panel.getByText("🔁 Try 2")).toBeVisible();
+
+  // A message to everyone taking it.
+  await panel.getByLabel("Message to everyone taking the exam").fill("Question 2: x is a whole number");
+  await panel.getByRole("button", { name: "📣 Send to everyone" }).click();
+
+  // The phone: try 2, the right answer kept and locked, only the wrong one to fix.
+  await expect(exam.getByText(/Try 2 — your teacher sent this back\. The one you got right is kept/)).toBeVisible({ timeout: 20_000 });
+  await expect(exam.getByText("📣 Your teacher: Question 2: x is a whole number")).toBeVisible({ timeout: 15_000 });
+  await expect(exam.getByRole("button", { name: /kept from last time/ })).toHaveCount(1);
+  await expect(exam.getByRole("timer")).toContainText(/9:\d\d/); // the exam had longer left than the 5 minutes picked
+  await learner.screenshot({ path: "test-results/exam-redo-learner.png" });
+  await exam.getByRole("button", { name: "OK" }).click();
+  await answerBoth("4");
+  await expect(exam.getByText("3 / 3")).toBeVisible({ timeout: 15_000 });
+  await expect(exam.getByText(/Try 2 · last time 1 \/ 3 — up 2/)).toBeVisible();
+
+  // The teacher sees the new mark against the last one.
+  await expect(panel.getByRole("cell", { name: /3 \/ 3.*was 1 \/ 3.*\+2/ })).toBeVisible({ timeout: 15_000 });
+  await panel.screenshot({ path: "test-results/exam-redo-teacher.png" });
+
+  // After it has ended: the whole paper again, then the teacher collects it.
+  await panel.getByRole("button", { name: "End exam" }).click();
+  await expect(panel.getByRole("button", { name: "New exam" })).toBeVisible({ timeout: 15_000 });
+  await panel.getByRole("button", { name: "Send Emmanuel back to redo" }).click();
+  await sheet.getByRole("radio", { name: /The whole paper again/ }).click();
+  await expect(sheet.getByText(/The exam opens again just for them/)).toBeVisible();
+  await sheet.getByRole("button", { name: "Send back" }).click();
+  await expect(panel.getByRole("button", { name: "End exam" })).toBeVisible({ timeout: 15_000 });
+  await expect(exam.getByText(/Try 3 — your teacher sent this back\. Start again from the top/)).toBeVisible({ timeout: 20_000 });
+  await expect(exam.getByRole("button", { name: /kept from last time/ })).toHaveCount(0);
+  await panel.getByRole("button", { name: "Hand in Emmanuel's paper now" }).click();
+  await teacher.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
+  await expect(panel.getByRole("cell", { name: /0 \/ 3.*was 3 \/ 3/ })).toBeVisible({ timeout: 15_000 });
+  await expect(exam.getByText("Handed in ✓")).toBeVisible({ timeout: 20_000 });
 });

@@ -15,16 +15,19 @@ import { downloadExamCsv, downloadExamReports } from "@/lib/examDownloads";
 import { EXAM_MINUTES, EXAM_TOPICS, MAX_PAGE_MARKS, MAX_WRITTEN, clockLeft, isHandMarked, keepsOrder, needsMarking, pageDone, workingKey, spokenSpelling, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
 import { BookletLayout, MarkingDesk, PageFlow, WorkingPad } from "@/components/live/board/PaperPages";
 import type { Difficulty } from "@/lib/games/generators";
+import { MAX_SAY, REDO_MINUTES, belowMark, questionBreakdown, type ExamTry, type RedoMode } from "@/lib/examRedo";
 
 // Exam mode: a timed test every learner takes on their own phone — questions
 // in a different order on each phone, answers saved as they go, leaving the
 // exam page reported to the teacher, and marked automatically.
 // Message: "exam" (teacher → all, signed): { examId } when one starts or ends,
 // so phones check at once (they also check every few seconds); { examId, at }
-// when the teacher reads spelling number `at` out — phones go to it.
+// when the teacher reads spelling number `at` out — phones go to it;
+// { examId, say: { id, text } } a message to everyone taking it (sent again
+// every few seconds while the exam runs, so a phone that joins late sees it).
 
 type Meta = { booklet?: string[]; id: string; title: string; minutes: number; review: boolean; calculator?: boolean; inOrder?: boolean; handMarked?: boolean; personal?: number; spelling?: boolean; status: "open" | "closed"; endsAt: number; count: number; total: number ; questions?: ExamQ[]; className?: string; teacher?: string; createdAt?: string | null };
-type Entry = { extraMs?: number; extraQs?: ExamQ[]; pageMarks?: Record<string, number>; toMark?: number[]; id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null;
+type Entry = { tries?: ExamTry[]; extraMs?: number; extraQs?: ExamQ[]; pageMarks?: Record<string, number>; toMark?: number[]; id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null;
   answers?: Record<string, unknown>; startedAt?: string | null; submittedAt?: string | null };
 type Analysis = { score: number; total: number; right: number; wrong: number; blank: number; average: number | null; best: number | null; takers: number; position: number | null; flags: number };
 type Review = { q: string; kind: ExamQ["kind"]; options: string[]; answer: number | string; given: unknown; right: boolean; marks: number; mark?: number | null };
@@ -42,8 +45,15 @@ export default function ExamMode({ sessionId, host, open, onOpen, onClose }: { s
     if (r?.ok && j) setData(j); else if (r && r.status === 501) setData({ exam: null, setup: j?.error });
   }, [sessionId]);
   const [follow, setFollow] = useState<{ n: number; k: number } | null>(null);
+  const [say, setSay] = useState<{ id: string; text: string; examId: string } | null>(null);
+  const sayRef = useRef<string | null>(null);
   const send = useLive({ exam: (p) => {
     if (host || !p?.host) return;
+    if (p.say && typeof p.say.text === "string") {
+      // The teacher's message: shown once per message (it's sent again every few seconds).
+      if (sayRef.current !== p.say.id) { sayRef.current = String(p.say.id); setSay({ id: String(p.say.id), text: String(p.say.text).slice(0, MAX_SAY), examId: String(p.examId ?? "") }); }
+      return;
+    }
     load();
     if (Number.isInteger(p.at) && p.at >= 0) setFollow({ n: p.at, k: Date.now() });
   } });
@@ -57,13 +67,14 @@ export default function ExamMode({ sessionId, host, open, onOpen, onClose }: { s
     return () => clearInterval(t);
   }, [load, host, open, running]);
   const tell = (examId: string | null, at?: number) => send("exam", { host: true, examId, ...(at != null ? { at } : {}) });
+  const announce = (examId: string, msg: { id: string; text: string }) => send("exam", { host: true, examId, say: msg });
 
-  if (host) return <Teacher open={open} onOpen={onOpen} onClose={onClose} data={data} reload={load} sessionId={sessionId} tell={tell} />;
-  return <Learner data={data} reload={load} sessionId={sessionId} follow={follow} />;
+  if (host) return <Teacher open={open} onOpen={onOpen} onClose={onClose} data={data} reload={load} sessionId={sessionId} tell={tell} announce={announce} />;
+  return <Learner data={data} reload={load} sessionId={sessionId} follow={follow} say={say?.examId === exam?.id ? say : null} />;
 }
 
 // ── Teacher ──
-function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { open: boolean; onOpen: () => void; onClose: () => void; data: any; reload: () => Promise<void>; sessionId: string; tell: (id: string | null, at?: number) => void }) {
+function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announce }: { open: boolean; onOpen: () => void; onClose: () => void; data: any; reload: () => Promise<void>; sessionId: string; tell: (id: string | null, at?: number) => void; announce: (examId: string, msg: { id: string; text: string }) => void }) {
   const now = useServerClock()();
   const [pdfBusy, setPdfBusy] = useState<string | null>(null); // PDF reports being made
   // Grading: the UK's GCSE 9–1 unless this teacher picks WAEC (kept on this device).
@@ -112,6 +123,22 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
   // Personal spelling words: up to this many of each learner's earlier misses go on the end of their test.
   const [personalN, setPersonalN] = useState(5);
   const [tracker, setTracker] = useState(false);
+  // Many learners at once: pick some, send them back to redo; a message to everyone.
+  const [ask, askBox] = useAsk();
+  const [pick, setPick] = useState<Set<string>>(new Set());
+  const [redoFor, setRedoFor] = useState<Entry[] | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const [sayText, setSayText] = useState("");
+  const [said, setSaid] = useState<{ id: string; text: string; examId: string } | null>(null);
+  const [allQs, setAllQs] = useState(false);
+  useEffect(() => { setPick(new Set()); setSaid(null); setDone(null); }, [data?.exam?.id]);
+  // The last message goes out again every few seconds while the exam runs.
+  useEffect(() => {
+    if (!said || data?.exam?.status !== "open" || data?.exam?.id !== said.examId) return;
+    const t = setInterval(() => announce(said.examId, { id: said.id, text: said.text }), 8000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [said, data?.exam?.status, data?.exam?.id]);
   const [wiping, setWiping] = useState(false); // deleting a finished exam's paper
   const [wiped, setWiped] = useState<string | null>(null);
   // How an uploaded paper is marked: by the teacher, page by page (learners write
@@ -263,6 +290,28 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
     if (!ok) setNote(j.error ?? "Couldn't change the extra time.");
     await reload();
   }
+  // Hand one learner's paper in now (they're stuck, or have to leave).
+  async function collect(e: Entry) {
+    if (!exam || !(await ask(`Hand in ${e.name}'s paper now? It's marked straight away.`, "Yes, hand it in"))) return;
+    const { ok, j } = await api({ action: "collect", examId: exam.id, studentId: e.id });
+    if (!ok) setNote(j.error ?? "Couldn't hand it in — try again.");
+    tell(exam.id); await reload();
+  }
+  async function sendBack(list: Entry[], mode: RedoMode, mins: number) {
+    if (!exam) return;
+    const { ok, j } = await api({ action: "redo", examId: exam.id, studentIds: list.map((e) => e.id), mode, minutes: mins });
+    if (!ok) { setNote(j.error ?? "Couldn't send it back — try again."); return; }
+    setRedoFor(null); setPick(new Set()); setNote(null);
+    const who = list.length === 1 ? list[0].name : `${j.sent} learners`;
+    setDone(`✓ ${who} ${list.length === 1 ? "is" : "are"} doing it again — ${mode === "wrong" ? "only the ones they got wrong" : "a fresh start"}, ${j.minutes} min.${j.writing?.length ? ` (${j.writing.join(", ")} still writing — not sent.)` : ""}`);
+    tell(exam.id); await reload();
+  }
+  function sendSay() {
+    const text = sayText.replace(/\s+/g, " ").trim().slice(0, MAX_SAY);
+    if (!exam || !text) return;
+    const msg = { id: `${Date.now()}`, text, examId: exam.id };
+    announce(exam.id, msg); setSaid(msg); setSayText("");
+  }
   function useWarmUp() {
     if (qs.length && !window.confirm(`Replace the ${qs.length} question${qs.length === 1 ? "" : "s"} below with today's warm-up?`)) return;
     setQs(satsWarmUp()); ownTitle.current = false; setTitle(warmUpTitle()); setMinutes(WARM_UP.minutes); setCalcOk(false); setInOrder(true);
@@ -301,10 +350,11 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
             <p className="truncate text-xs font-bold text-ink/55">{showBuilder ? "A timed test on every learner’s phone — marked for you" : `${exam!.title} · ${exam!.count} questions · ${exam!.total} marks`}</p>
           </div>
           {running && !showBuilder && (() => {
-            const extraLeft = Math.max(0, ...entries.filter((e) => !e.submitted && e.extraMs).map((e) => exam!.endsAt + (e.extraMs ?? 0) - now));
+            const late = entries.filter((e) => !e.submitted && e.extraMs);
+            const extraLeft = Math.max(0, ...late.map((e) => exam!.endsAt + (e.extraMs ?? 0) - now));
             return exam!.endsAt > now || !extraLeft
               ? <span role="timer" className="rounded-xl bg-orange-50 px-3 py-2 text-sm font-black text-[#C2451C]">⏱ {clockLeft(exam!.endsAt - now)}</span>
-              : <span role="timer" className="rounded-xl bg-violet-100 px-3 py-2 text-sm font-black text-violet-800">⏱ Extra time · {clockLeft(extraLeft)}</span>;
+              : <span role="timer" className="rounded-xl bg-violet-100 px-3 py-2 text-sm font-black text-violet-800">⏱ {late.some((e) => e.tries?.length) ? "Trying again" : "Extra time"} · {clockLeft(extraLeft)}</span>;
           })()}
           {running && !showBuilder && <button type="button" onClick={() => act("extend", { minutes: 5 })} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black">+5 min</button>}
           {running && !showBuilder && <button type="button" onClick={() => act("close")} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white">End exam</button>}
@@ -529,16 +579,37 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                 <div key={String(l)} className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200"><p className="text-[11px] font-black uppercase tracking-wider text-ink/50">{l}</p><p className="text-2xl font-black">{v}</p></div>
               ))}
             </div>
+            {running && (
+              <form onSubmit={(x) => { x.preventDefault(); sendSay(); }} aria-label="Message to everyone" className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-[#EEF7F6] p-2 ring-1 ring-[#CDE7E5]">
+                <input value={sayText} onChange={(x) => setSayText(x.target.value)} maxLength={MAX_SAY} aria-label="Message to everyone taking the exam" placeholder="📣 Tell everyone, e.g. “Question 4 should say cm, not m”"
+                  className="min-w-0 flex-1 rounded-lg bg-white px-3 py-2 text-sm font-semibold ring-1 ring-[#CDE7E5] focus:outline-none focus:ring-2 focus:ring-[#0E6E72]" />
+                <button type="submit" disabled={!sayText.trim()} className="min-h-[40px] rounded-lg bg-[#0E6E72] px-3 text-xs font-black text-white disabled:opacity-40">📣 Send to everyone</button>
+                {said && said.examId === exam?.id && <p role="status" className="w-full text-xs font-bold text-[#0A4F52]">Showing on every phone: “{said.text}”</p>}
+              </form>
+            )}
+            {done && <p role="status" className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{done}</p>}
+            {marked.length > 0 && (
+              <div role="group" aria-label="Pick learners" className="mb-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-black text-ink/55">Pick:</span>
+                <button type="button" onClick={() => setPick(new Set(marked.map((e) => e.id)))} className="min-h-[34px] rounded-lg bg-slate-100 px-2.5 text-xs font-black">Everyone handed in</button>
+                <button type="button" onClick={() => setPick(new Set(belowMark(entries, scheme.pass)))} className="min-h-[34px] rounded-lg bg-slate-100 px-2.5 text-xs font-black">Under {scheme.pass}% ({belowMark(entries, scheme.pass).length})</button>
+                {pick.size > 0 && <button type="button" onClick={() => setPick(new Set())} className="min-h-[34px] rounded-lg px-2.5 text-xs font-black text-ink/55 underline">Clear</button>}
+                {pick.size > 0 && <button type="button" onClick={() => setRedoFor(entries.filter((e) => pick.has(e.id) && e.submitted))} className="ml-auto min-h-[38px] rounded-xl bg-[#C2451C] px-3 text-xs font-black text-white">🔁 Send {pick.size} back to redo</button>}
+              </div>
+            )}
             {!entries.length && <p className="p-6 text-center text-sm font-bold text-ink/50">{running ? "Waiting for learners to start…" : "Nobody took this exam."}</p>}
             {entries.length > 0 && (
               <table className="w-full text-left text-sm">
-                <thead><tr className="text-[11px] uppercase tracking-wider text-ink/50"><th className="p-2">Learner</th><th className="p-2">Answered</th><th className="p-2">Left the page</th><th className="p-2">Status</th><th className="p-2 text-right">Score</th><th className="p-2 text-right" title={scheme.name}>Grade</th><th className="p-2 text-right"><span className="sr-only">Report</span></th></tr></thead>
+                <thead><tr className="text-[11px] uppercase tracking-wider text-ink/50"><th className="w-8 p-2"><span className="sr-only">Pick</span></th><th className="p-2">Learner</th><th className="p-2">Answered</th><th className="p-2">Left the page</th><th className="p-2">Status</th><th className="p-2 text-right">Score</th><th className="p-2 text-right" title={scheme.name}>Grade</th><th className="p-2 text-right"><span className="sr-only">Report</span></th></tr></thead>
                 <tbody>
                   {[...entries].sort((a, b) => (b.score ?? b.live ?? 0) - (a.score ?? a.live ?? 0)).map((e) => (
-                    <tr key={e.id} className="border-t border-line">
+                    <tr key={e.id} className={`border-t border-line ${pick.has(e.id) ? "bg-orange-50/60" : ""}`}>
+                      <td className="p-2"><input type="checkbox" checked={pick.has(e.id)} disabled={!e.submitted} onChange={(x) => setPick((cur) => { const n = new Set(cur); if (x.target.checked) n.add(e.id); else n.delete(e.id); return n; })}
+                        aria-label={`Pick ${e.name}`} title={e.submitted ? undefined : "Still writing"} className="h-4 w-4 accent-[#C2451C] disabled:opacity-30" /></td>
                       <td className="p-2 font-black">
                         {e.name}
-                        {(running || !!e.extraMs) && (
+                        {!!e.tries?.length && <span className="ml-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[11px] font-black text-amber-900" title={e.tries.map((t, k) => `Try ${k + 1}: ${t.score} / ${t.total}`).join("\n")}>🔁 Try {e.tries.length + 1}</span>}
+                        {(running || !!e.extraMs) && !(e.tries?.length && !e.submitted) && (
                           <button type="button" onClick={() => toggleExtra(e)} disabled={!running || e.submitted} aria-pressed={!!e.extraMs} aria-label={`Extra time for ${e.name}`}
                             title={e.extraMs ? `${extraMins(e.extraMs)} minutes extra (25%)` : "Give 25% extra time"}
                             className={`ml-2 rounded-md px-1.5 py-0.5 text-[11px] font-black disabled:opacity-60 ${e.extraMs ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-ink/50"}`}>
@@ -548,12 +619,18 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                       </td>
                       <td className="p-2">{e.answered} / {exam!.count}</td>
                       <td className="p-2">{e.flags ? <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-black text-red-700" title={e.flagLog.map((f) => `${new Date(f.at).toLocaleTimeString()} — ${f.reason}`).join("\n")}>⚠ {e.flags}×</span> : <span className="text-xs font-bold text-emerald-700">No</span>}</td>
-                      <td className="p-2 text-xs font-black">{e.submitted ? <span className="text-emerald-700">Handed in</span> : <span className="text-ink/55">Writing…</span>}</td>
-                      <td className="p-2 text-right font-black">{e.submitted ? `${e.score} / ${e.total}` : e.toMark ? `${e.live ?? 0} / ${e.total} so far` : running ? "—" : ""}{e.toMark?.length ? <span className="block text-[11px] font-bold text-amber-700">{e.toMark.length} to mark</span> : null}</td>
+                      <td className="p-2 text-xs font-black">{e.submitted ? <span className="text-emerald-700">Handed in</span> : e.tries?.length ? <span className="text-amber-800">Trying again…</span> : <span className="text-ink/55">Writing…</span>}</td>
+                      <td className="p-2 text-right font-black">{e.submitted ? `${e.score} / ${e.total}` : e.toMark ? `${e.live ?? 0} / ${e.total} so far` : running ? "—" : ""}{e.toMark?.length ? <span className="block text-[11px] font-bold text-amber-700">{e.toMark.length} to mark</span> : null}
+                        {!!e.tries?.length && (() => { const t = e.tries[e.tries.length - 1]; return <span className="block text-[11px] font-bold text-ink/50">was {t.score} / {t.total}{e.submitted && e.score != null && e.score > t.score ? <span className="text-emerald-700"> ▲ +{e.score - t.score}</span> : null}</span>; })()}</td>
                       <td className="p-2 text-right">{e.submitted && e.total ? (() => { const p = Math.round(((e.score ?? 0) / e.total) * 100); return <span className={`rounded-md px-2 py-0.5 text-xs font-black ${p >= scheme.pass ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>{gradeOf(p, scheme)}</span>; })() : ""}</td>
                       <td className="p-2 text-right">
-                        <button type="button" onClick={() => reports(e)} disabled={!!pdfBusy} aria-label={`Download ${e.name}'s report (PDF)`}
-                          className="whitespace-nowrap rounded-lg bg-[#E2F3F2] px-2.5 py-1.5 text-[11px] font-black text-[#0A4F52] disabled:opacity-50">{pdfBusy === e.id ? "Making…" : "📄 Report"}</button>
+                        <span className="inline-flex flex-wrap justify-end gap-1">
+                          {e.submitted
+                            ? <button type="button" onClick={() => setRedoFor([e])} aria-label={`Send ${e.name} back to redo`} className="whitespace-nowrap rounded-lg bg-orange-50 px-2.5 py-1.5 text-[11px] font-black text-[#C2451C] ring-1 ring-orange-200">🔁 Redo</button>
+                            : running && <button type="button" onClick={() => collect(e)} aria-label={`Hand in ${e.name}'s paper now`} className="whitespace-nowrap rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-black text-ink/70">📥 Collect</button>}
+                          <button type="button" onClick={() => reports(e)} disabled={!!pdfBusy} aria-label={`Download ${e.name}'s report (PDF)`}
+                            className="whitespace-nowrap rounded-lg bg-[#E2F3F2] px-2.5 py-1.5 text-[11px] font-black text-[#0A4F52] disabled:opacity-50">{pdfBusy === e.id ? "Making…" : "📄 Report"}</button>
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -572,6 +649,27 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
                 {running && <span className="text-xs font-semibold text-ink/55">Reports made now show the papers so far — download again when the exam ends.</span>}
               </div>
             )}
+            {exam?.questions && marked.length > 0 && (() => {
+              const rows = questionBreakdown(exam.questions, entries);
+              const shown = allQs ? rows : rows.slice(0, 6);
+              return rows.length > 0 && (
+                <section aria-label="Question by question" className="mt-4 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                  <p className="text-xs font-black uppercase tracking-wider text-ink/55">Question by question · hardest first</p>
+                  <ul className="mt-2 grid gap-1.5">
+                    {shown.map((r) => (
+                      <li key={r.n} className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="w-9 shrink-0 font-black">Q{r.n + 1}</span>
+                        <span className="min-w-0 flex-1 truncate font-semibold text-ink/70" title={r.q}>{r.q || `Question ${r.n + 1}`}</span>
+                        <span className="relative h-2.5 w-24 overflow-hidden rounded-full bg-white ring-1 ring-slate-200" aria-hidden><span className={`absolute inset-y-0 left-0 ${r.pct >= scheme.pass ? "bg-emerald-500" : "bg-red-500"}`} style={{ width: `${r.pct}%` }} /></span>
+                        <span className="w-24 shrink-0 font-black">{r.pct}% right <span className="font-bold text-ink/45">({r.right}/{r.of})</span></span>
+                        {r.wrong.length > 0 && <button type="button" onClick={() => setPick(new Set(r.wrong))} className="rounded-md bg-white px-2 py-1 font-black text-[#C2451C] ring-1 ring-orange-200">Pick the {r.wrong.length} who missed it</button>}
+                      </li>
+                    ))}
+                  </ul>
+                  {rows.length > 6 && <button type="button" onClick={() => setAllQs((v) => !v)} className="mt-2 text-xs font-black text-ink/60 underline">{allQs ? "Show fewer" : `Show all ${rows.length} questions`}</button>}
+                </section>
+              );
+            })()}
             {wiped && <p role="status" className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{wiped}</p>}
             {!running && exam?.questions && (exam.questions.some((q) => q.img) || !!exam.booklet?.length) && (
               <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
@@ -583,6 +681,43 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell }: { ope
             )}
           </div>
         )}
+      </div>
+      {redoFor && exam && <RedoSheet list={redoFor} minutes={exam.minutes} running={running} review={exam.review} onCancel={() => setRedoFor(null)} onSend={sendBack} />}
+      {askBox}
+    </div>
+  );
+}
+
+// Send one learner — or many — back to do the paper again.
+function RedoSheet({ list, minutes, running, review, onCancel, onSend }: { list: Entry[]; minutes: number; running: boolean; review: boolean; onCancel: () => void; onSend: (list: Entry[], mode: RedoMode, mins: number) => Promise<void> }) {
+  const [mode, setMode] = useState<RedoMode>("wrong");
+  const times = [...new Set([...REDO_MINUTES.filter((m) => m < minutes), minutes])].slice(-5);
+  const [mins, setMins] = useState(minutes);
+  const [busy, setBusy] = useState(false);
+  const one = list.length === 1 ? list[0] : null;
+  const opt = (on: boolean) => `flex min-h-[56px] w-full flex-col items-start justify-center rounded-xl px-3 py-2 text-left ring-2 ${on ? "bg-orange-50 ring-[#C2451C]" : "bg-white ring-slate-200"}`;
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Send back to redo" className="fixed inset-0 z-[150] flex items-end justify-center bg-black/50 p-3 sm:items-center">
+      <div className="w-full max-w-md rounded-2xl bg-white p-4 text-ink shadow-2xl">
+        <p className="text-base font-black">🔁 {one ? `Send ${one.name} back to redo` : `Send ${list.length} learners back to redo`}</p>
+        <p className="mt-0.5 text-xs font-semibold text-ink/60">{one ? `They got ${one.score ?? 0} / ${one.total ?? 0}.` : list.map((e) => e.name).join(", ")} Their last try is kept, so you can compare.</p>
+        <div role="radiogroup" aria-label="What they redo" className="mt-3 grid gap-2">
+          <button type="button" role="radio" aria-checked={mode === "wrong"} onClick={() => setMode("wrong")} className={opt(mode === "wrong")}>
+            <span className="text-sm font-black">Only the ones they got wrong</span><span className="text-xs font-semibold text-ink/60">Right answers are kept and locked</span>
+          </button>
+          <button type="button" role="radio" aria-checked={mode === "fresh"} onClick={() => setMode("fresh")} className={opt(mode === "fresh")}>
+            <span className="text-sm font-black">The whole paper again</span><span className="text-xs font-semibold text-ink/60">A clean paper, questions in a new order</span>
+          </button>
+        </div>
+        <p className="mt-3 text-xs font-black text-ink/60">Time for this try{running ? " — or the rest of the exam, if that's longer" : ""}{list.some((e) => e.extraMs) ? " (extra-time learners get 25% more)" : ""}</p>
+        <div className="mt-1 flex flex-wrap gap-1.5" role="group" aria-label="Time for this try">
+          {times.map((m) => <button key={m} type="button" aria-pressed={mins === m} onClick={() => setMins(m)} className={`min-h-[38px] rounded-xl px-3 text-xs font-black ring-1 ${mins === m ? "bg-[#C2451C] text-white ring-[#C2451C]" : "bg-white text-ink/70 ring-slate-200"}`}>{m} min</button>)}
+        </div>
+        {!running && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">The exam opens again just for {one ? "them" : "these learners"}{review ? " — they have already seen the right answers" : ""}. It ends by itself when they finish.</p>}
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={onCancel} className="min-h-[48px] flex-1 rounded-xl bg-slate-100 text-sm font-black">Cancel</button>
+          <button type="button" disabled={busy} onClick={async () => { setBusy(true); await onSend(list, mode, mins); setBusy(false); }} className="min-h-[48px] flex-1 rounded-xl bg-[#C2451C] text-sm font-black text-white disabled:opacity-60">{busy ? "Sending…" : "Send back"}</button>
+        </div>
       </div>
     </div>
   );
@@ -676,7 +811,7 @@ export function useAsk(): [Ask, React.ReactNode] {
 }
 
 // ── Learner ──
-function Learner({ data, reload, sessionId, follow }: { data: any; reload: () => Promise<void>; sessionId: string; follow: { n: number; k: number } | null }) {
+function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: () => Promise<void>; sessionId: string; follow: { n: number; k: number } | null; say: { id: string; text: string } | null }) {
   const now = useServerClock()();
   const [, tick] = useState(0);
   const exam: Meta | null = data?.exam ?? null;
@@ -687,6 +822,12 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
   // An ended exam whose results the learner has looked at and closed: nothing more to show.
   const [seen, setSeen] = useState<string | null>(() => { try { return sessionStorage.getItem("exam-seen"); } catch { return null; } });
   const markSeen = (id: string) => { setSeen(id); try { sessionStorage.setItem("exam-seen", id); } catch { /* storage blocked */ } };
+  // Sent back to redo: this is try 2, 3… (a fresh start, or only the ones they got wrong).
+  const attempt: number = Math.max(1, Number(entry?.attempt) || 1);
+  const seenKey = exam ? (attempt > 1 ? `${exam.id}:${attempt}` : exam.id) : null;
+  const lastTry: { score: number; total: number; mode: "fresh" | "wrong" } | null = entry?.lastTry ?? null;
+  const kept = new Set<number>(Array.isArray(entry?.keep) ? entry.keep : []);
+  const [saySeen, setSaySeen] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [at, setAt] = useState(0);
   const [hidden, setHidden] = useState(false);
@@ -708,8 +849,12 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
   // Their saved answers (after a refresh, or on another visit).
   // The exam has just ended: open the results at once (unless already seen).
   const status = exam?.status, examId = exam?.id;
-  useEffect(() => { if (status === "closed" && examId && seen !== examId) setHidden(false); }, [status, examId, seen]);
-  useEffect(() => { if (exam && entry && seeded.current !== exam.id) { seeded.current = exam.id; setAnswers(entry.answers ?? {}); setAt(0); setResult(null); setHidden(false); } }, [exam, entry]);
+  useEffect(() => { if (status === "closed" && seenKey && seen !== seenKey) setHidden(false); }, [status, seenKey, seen]);
+  useEffect(() => {
+    if (!exam || !entry || seeded.current === `${exam.id}:${attempt}`) return;
+    seeded.current = `${exam.id}:${attempt}`;
+    setAnswers(entry.answers ?? {}); setAt(0); setResult(null); setHidden(false); submitted.current = false; setWarned(0);
+  }, [exam, entry, attempt]);
   // Leaving the exam page (another app, another tab) is reported.
   const lastFlag = useRef(0);
   useEffect(() => {
@@ -739,6 +884,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
 
   const pending = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   function answer(n: number, value: unknown, typed = false) {
+    if (kept.has(n)) return; // right last time: kept
     setAnswers((a) => ({ ...a, [String(n)]: value }));
     clearTimeout(pending.current[n]);
     const go = () => api({ action: "answer", examId: exam!.id, n, value }).then(({ ok, j }) => setNote(ok ? null : j.error ?? "An answer didn't save — check the internet."));
@@ -800,6 +946,17 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
         {entry?.extraMs ? <span className="rounded-lg bg-violet-100 px-2 py-1 text-[11px] font-black text-violet-800" title="Your teacher gave you extra time">+ extra time</span> : null}
         <span role="timer" className={`rounded-xl px-3 py-1.5 text-sm font-black ${left < 60_000 ? "bg-red-600 text-white" : "bg-white text-[#C2451C] ring-1 ring-orange-200"}`}>⏱ {clockLeft(left)}</span>
       </div>
+      {say && saySeen !== say.id && (
+        <div role="alert" className="flex items-start gap-2 rounded-xl bg-[#EEF7F6] p-3 ring-1 ring-[#CDE7E5]">
+          <p className="flex-1 text-sm font-black text-[#0A4F52]">📣 Your teacher: {say.text}</p>
+          <button type="button" onClick={() => setSaySeen(say.id)} className="min-h-[36px] rounded-lg bg-[#0E6E72] px-3 text-xs font-black text-white">OK</button>
+        </div>
+      )}
+      {lastTry && (
+        <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-900 ring-1 ring-amber-200">
+          🔁 Try {attempt} — your teacher sent this back. {lastTry.mode === "wrong" ? `${kept.size === 1 ? "The one you got right is" : `The ${kept.size} you got right are`} kept (✓) — fix the others.` : "Start again from the top."} Last time: {lastTry.score} / {lastTry.total}.
+        </p>
+      )}
       {warned > 0 && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-black text-red-700 ring-1 ring-red-200">⚠️ You left the exam page{warned > 1 ? ` ${warned} times` : ""}. Your teacher has been told.</p>}
       {withBooklet(hand ? (
         <div className="rounded-2xl bg-white p-3 shadow ring-1 ring-orange-200">
@@ -814,6 +971,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
           <p className="flex-1 whitespace-pre-wrap text-xl font-black leading-snug">{q.q}</p>
           {q.kind !== "spell" && <Speak text={`${q.q}. ${q.kind === "choice" ? q.options.map((o, k) => `Option ${String.fromCharCode(65 + k)}: ${o.text}.`).join(" ") : ""}`} />}
         </div>
+        {kept.has(q.n) && <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-black text-emerald-800">✓ You got this right last time — it&apos;s kept.</p>}
         {q.kind === "spell" && (q.say
           ? <button type="button" onClick={() => speak(q.say!)} className="mt-3 min-h-[48px] w-full rounded-xl bg-[#EEF7F6] text-base font-black text-[#0A4F52] ring-1 ring-[#CDE7E5]">🔊 Hear the sentence</button>
           : <p className="mt-2 text-sm font-semibold text-ink/60">🎧 Listen to your teacher read the sentence, then write the missing word.</p>)}
@@ -822,7 +980,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
             {q.options.map((o, k) => {
               const on = answers[String(q.n)] === o.i;
               return (
-                <button key={o.i} type="button" role="radio" aria-checked={on} onClick={() => answer(q.n, o.i)}
+                <button key={o.i} type="button" role="radio" aria-checked={on} aria-disabled={kept.has(q.n) || undefined} onClick={() => answer(q.n, o.i)}
                   className={`flex min-h-[52px] items-center gap-3 rounded-xl px-4 text-left text-base font-bold ring-2 ${on ? "bg-[#C2451C] text-white ring-[#C2451C]" : "bg-white ring-orange-100 hover:ring-orange-300"}`}>
                   <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-black ${on ? "bg-white text-[#C2451C]" : "bg-orange-50 text-[#C2451C]"}`}>{String.fromCharCode(65 + k)}</span>{o.text}
                 </button>
@@ -831,16 +989,16 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
           </div>
         ) : q.kind === "written" ? (
           <label className="mt-4 block text-sm font-bold text-ink/60">Your answer <span className="font-semibold text-ink/45">({q.marks} mark{q.marks === 1 ? "" : "s"}{q.marks >= 2 ? " — explain, and use the text" : ""})</span>
-            <textarea value={String(answers[String(q.n)] ?? "")} maxLength={MAX_WRITTEN} rows={q.marks >= 3 ? 7 : q.marks === 2 ? 5 : 3} onChange={(e) => answer(q.n, e.target.value, true)}
+            <textarea value={String(answers[String(q.n)] ?? "")} readOnly={kept.has(q.n)} maxLength={MAX_WRITTEN} rows={q.marks >= 3 ? 7 : q.marks === 2 ? 5 : 3} onChange={(e) => answer(q.n, e.target.value, true)}
               className="mt-1 w-full resize-y rounded-xl bg-white px-4 py-3 text-base font-semibold leading-relaxed text-ink ring-2 ring-orange-200 focus:outline-none focus:ring-[#C2451C]" />
           </label>
         ) : (
           <label className="mt-4 block text-sm font-bold text-ink/60">{q.kind === "spell" ? "The missing word" : "Your answer"}
-            <input value={String(answers[String(q.n)] ?? "")} maxLength={120} onChange={(e) => answer(q.n, e.target.value, true)} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
+            <input value={String(answers[String(q.n)] ?? "")} readOnly={kept.has(q.n)} maxLength={120} onChange={(e) => answer(q.n, e.target.value, true)} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
               className="mt-1 w-full rounded-xl bg-white px-4 py-3 text-xl font-black text-ink ring-2 ring-orange-200 focus:outline-none focus:ring-[#C2451C]" />
           </label>
         )}
-        {q.method && <WorkingPad key={q.n} examId={exam.id} n={q.n} myId="learner" saved={answers[workingKey(q.n)]} api={api} onInk={(ink) => setAnswers((a) => ({ ...a, [workingKey(q.n)]: { ink } }))} />}
+        {q.method && !kept.has(q.n) && <WorkingPad key={q.n} examId={exam.id} n={q.n} myId="learner" saved={answers[workingKey(q.n)]} api={api} onInk={(ink) => setAnswers((a) => ({ ...a, [workingKey(q.n)]: { ink } }))} />}
         <div className="mt-4 flex gap-2">
           <button type="button" disabled={at === 0} onClick={() => setAt(at - 1)} className="min-h-[48px] flex-1 rounded-xl bg-orange-50 text-sm font-black text-[#C2451C] disabled:opacity-40">← Back</button>
           {at < paper.length - 1
@@ -851,8 +1009,9 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
       <nav aria-label="Questions" className="flex flex-wrap gap-1.5">
         {paper.map((x, i) => {
           const a = answers[String(x.n)] != null && answers[String(x.n)] !== "";
-          return <button key={x.n} type="button" onClick={() => setAt(i)} aria-label={`Question ${i + 1}${a ? ", answered" : ""}`} aria-current={i === at}
-            className={`h-10 w-10 rounded-lg text-sm font-black ${i === at ? "ring-2 ring-[#C2451C]" : ""} ${a ? "bg-[#C2451C] text-white" : "bg-white text-ink/60 ring-1 ring-orange-200"}`}>{i + 1}</button>;
+          const k = kept.has(x.n);
+          return <button key={x.n} type="button" onClick={() => setAt(i)} aria-label={`Question ${i + 1}${k ? ", kept from last time" : a ? ", answered" : ""}`} aria-current={i === at}
+            className={`h-10 w-10 rounded-lg text-sm font-black ${i === at ? "ring-2 ring-[#C2451C]" : ""} ${k ? "bg-emerald-600 text-white" : a ? "bg-[#C2451C] text-white" : "bg-white text-ink/60 ring-1 ring-orange-200"}`}>{k ? "✓" : i + 1}</button>;
         })}
       </nav>
       <button type="button" onClick={() => submit()} className="min-h-[48px] w-full rounded-xl bg-emerald-600 text-sm font-black text-white">Hand in my exam</button>
@@ -863,7 +1022,7 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
   // Handed in (or time's up).
   if (entry?.submitted || result) {
     const over = exam.status === "closed";
-    if (over && seen === exam.id) return null; // results seen and closed: no button left behind
+    if (seen === seenKey) return null; // results seen and closed: no button left behind (even if it opens again for someone's redo)
     if (hidden && !over) {
       return <button type="button" onClick={() => setHidden(false)} className="fixed bottom-4 left-4 z-[95] rounded-full bg-[#C2451C] px-4 py-3 text-sm font-black text-white shadow-2xl">📝 My exam</button>;
     }
@@ -876,13 +1035,14 @@ function Learner({ data, reload, sessionId, follow }: { data: any; reload: () =>
         <h2 className="mt-1 font-display text-2xl font-black">{exam.title}</h2>
         {score != null && <p className="mt-3 font-display text-5xl font-black text-[#C2451C]">{score} / {total}</p>}
         {score != null && <p className="mt-1 text-sm font-bold text-ink/60">{Math.round((score / Math.max(1, total)) * 100)}%{marking?.left ? " so far" : ""}</p>}
+        {lastTry && score != null && <p className="mt-2 text-sm font-black text-ink/70">Try {attempt} · last time {lastTry.score} / {lastTry.total}{score > lastTry.score ? <span className="text-emerald-700"> — up {score - lastTry.score} 🎉</span> : null}</p>}
         {marking && marking.left > 0 && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-900 ring-1 ring-amber-200">✍️ Your teacher is marking your paper — {marking.left} page{marking.left === 1 ? "" : "s"} still to mark. Your score goes up as each page is marked.</p>}
         {marking && marking.left === 0 && <p className="mt-3 text-sm font-bold text-emerald-700">✓ Your teacher has marked every page.</p>}
         {exam.status === "open" && <p className="mt-3 text-sm font-semibold text-ink/60">{exam.review ? "You can see the right answers when the exam ends." : "Wait for your teacher."}</p>}
         {over && analysis && <ExamAnalysis a={analysis} />}
         {over && analysis && analysis.score < analysis.total && <FixMistakes sessionId={sessionId} />}
         {over && analysis && analysis.score < analysis.total && exam.spelling && <FixMistakes sessionId={sessionId} page="spelling" label="✏️ Practise my spellings" />}
-        <button type="button" onClick={() => { if (over) markSeen(exam.id); else setHidden(true); }} className="mt-4 min-h-[44px] rounded-xl bg-[#C2451C] px-5 text-sm font-black text-white">{over ? "Done — back to the class" : "Back to the class"}</button>
+        <button type="button" onClick={() => { if (over && seenKey) markSeen(seenKey); else setHidden(true); }} className="mt-4 min-h-[44px] rounded-xl bg-[#C2451C] px-5 text-sm font-black text-white">{over ? "Done — back to the class" : "Back to the class"}</button>
       </div>
       {review && (
         <ol className="grid gap-2" aria-label="Your answers">
