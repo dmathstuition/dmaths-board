@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Confetti from "@/components/ui/Confetti";
 import { play } from "@/lib/games/fx";
-import { BOSS, MODES, modeInfo, resultText, teamOf, type GameMode, type GameState, type Lane } from "@/lib/quizGames";
+import { BOOST_STREAK, BOSS, CHESTS, MODES, PLANETS, modeInfo, resultText, teamOf, type GameMode, type GameState, type Lane } from "@/lib/quizGames";
 
 // The live quiz's game styles, drawn (lib/quizGames.ts): a tug of war, a team
 // battle, a boss battle and a race. Each scene eases from the last round's
@@ -24,7 +24,7 @@ function useStaged(g: GameState, from: GameState | null | undefined, sound: bool
       setShown(g);
       if (moving) {
         setBurst((b) => b + 1);
-        if (sound) play(g.mode === "battle" ? "lightning" : g.mode === "boss" ? (g.bossHit ? "wrong" : "combo") : g.mode === "tug" ? "combo" : "tick");
+        if (sound) play(g.mode === "battle" ? "lightning" : g.mode === "boss" ? (g.bossHit ? "wrong" : "combo") : g.mode === "tug" || g.mode === "space" ? "combo" : g.mode === "treasure" ? "chest" : "tick");
       }
       if (g.winner !== null && shown.winner === null && sound) setTimeout(() => play("best"), 900);
     }, moving ? 450 : 0);
@@ -44,6 +44,8 @@ export function GameScene({ g, from, myId = "", big = false, sound = false }: { 
       {shown.mode === "battle" && <BattleScene g={shown} burst={burst} myId={myId} />}
       {shown.mode === "boss" && <BossScene g={shown} burst={burst} />}
       {shown.mode === "race" && <RaceScene g={shown} burst={burst} myId={myId} big={big} />}
+      {shown.mode === "space" && <SpaceScene g={shown} burst={burst} myId={myId} big={big} />}
+      {shown.mode === "treasure" && <TreasureScene g={shown} burst={burst} myId={myId} big={big} />}
       {done && <p className="qg-pop mt-3 text-center font-display text-2xl font-black text-white sm:text-3xl" role="status">{resultText(shown, myId)}</p>}
     </div>
   );
@@ -202,10 +204,108 @@ function RaceScene({ g, burst, myId, big }: { g: GameState; burst: number; myId:
   );
 }
 
+// The racers on show: the leaders, and always this learner.
+function onShow(g: GameState, myId: string, most: number): Lane[] {
+  const top = g.lanes.slice(0, most), me = g.lanes.find((l) => l.id === myId);
+  return me && !top.includes(me) ? [...top.slice(0, most - 1), me] : top;
+}
+
+// ── Space race ───────────────────────────────────────────────────────────
+const STARS = "radial-gradient(1.5px 1.5px at 12% 18%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 33% 62%, #fff 50%, transparent 51%), radial-gradient(1.5px 1.5px at 57% 9%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 76% 44%, #fff 50%, transparent 51%), radial-gradient(1.5px 1.5px at 91% 78%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 22% 88%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 66% 83%, #fff 50%, transparent 51%), linear-gradient(180deg, #020617 0%, #1E1B4B 60%, #312E81 100%)";
+function SpaceScene({ g, burst, myId, big }: { g: GameState; burst: number; myId: string; big: boolean }) {
+  const lanes = onShow(g, myId, big ? 10 : 5), max = Math.max(1, g.total) * 1000;
+  const reached = (l: Lane) => { const before = Math.max(0, (l.points - l.gain) / max); return [...PLANETS].reverse().find((p) => before < p.at && l.progress >= p.at); };
+  return (
+    <section aria-label="Space race" className="relative overflow-hidden rounded-2xl ring-4 ring-[#0B1220]/40" style={{ background: STARS }}>
+      <div className={`relative ${big ? "h-[360px]" : "h-[270px]"} pl-11 pr-2 pt-2`}>
+        {PLANETS.map((p) => (
+          <div key={p.name} aria-hidden className="absolute left-0 right-0 flex items-center" style={{ bottom: `calc(${p.at} * (100% - 4.5rem) + 2.6rem)` }}>
+            <span className="w-11 text-center text-xl leading-none">{p.emoji}</span>
+            <span className="h-px flex-1 border-t border-dashed border-white/25" />
+          </div>
+        ))}
+        <ol className="relative flex h-full gap-1">
+          {lanes.map((l) => {
+            const hit = burst > 0 && l.gain > 0, planet = hit ? reached(l) : undefined, boost = hit && l.streak >= BOOST_STREAK;
+            return (
+              <li key={l.id} aria-label={`${l.name}: ${ord(l.place)} place, ${Math.round(l.progress * 100)}% of the way to the stars`} className="relative min-w-0 flex-1">
+                <span className="qg-rocket absolute left-1/2 flex -translate-x-1/2 flex-col items-center" style={{ bottom: `calc(${l.progress} * (100% - 4.5rem) + 1.6rem)` }}>
+                  {planet && <span key={`p-${burst}`} className="qg-float mb-0.5 whitespace-nowrap rounded-full bg-amber-300 px-1.5 text-[10px] font-black text-[#3b2600]" style={{ animationDelay: "1.2s" }}>{planet.emoji} {planet.name}!</span>}
+                  {boost && <span key={`b-${burst}`} className="qg-pop mb-0.5 rounded-full bg-fuchsia-500 px-1.5 text-[10px] font-black text-white">⚡ BOOST</span>}
+                  <span key={`r-${burst}`} className={hit ? "qg-shake" : "qg-bob"} style={{ fontSize: big ? 32 : 26, lineHeight: 1, display: "block" }}><span style={{ display: "block", transform: "rotate(-45deg)" }}>🚀</span></span>
+                  {hit && <span key={`f-${burst}`} className="qg-flame text-lg leading-none" aria-hidden>🔥</span>}
+                  {hit && <span key={`g-${burst}`} className="qg-float absolute -right-6 top-0 rounded-full bg-emerald-400 px-1 text-[10px] font-black text-[#052e16]">+{l.gain}</span>}
+                </span>
+                <span className={`absolute inset-x-0 bottom-0 truncate rounded-md px-0.5 text-center text-[10px] font-black sm:text-[11px] ${l.place === 1 ? "bg-amber-400 text-[#3b2600]" : l.id === myId ? "bg-white text-violet-800" : "bg-white/15 text-white"}`}>{l.place}. {l.id === myId ? "You" : l.name}</span>
+              </li>
+            );
+          })}
+        </ol>
+        <span aria-hidden className="absolute bottom-0 left-0 w-11 text-center text-2xl">🌍</span>
+      </div>
+      {g.lanes.length > lanes.length && <p className="pb-1 text-center text-[11px] font-bold text-white/60">and {g.lanes.length - lanes.length} more rocket{g.lanes.length - lanes.length === 1 ? "" : "s"}</p>}
+      {!g.lanes.length && <p className="absolute inset-x-0 top-1/2 text-center text-sm font-bold text-white/70">The rockets are on the launch pad.</p>}
+    </section>
+  );
+}
+
+// ── Treasure hunt ────────────────────────────────────────────────────────
+function Chest({ open, loot, size }: { open: boolean; loot: string; size: number }) {
+  const full = open && loot && loot !== "empty";
+  return (
+    <span className="relative inline-block" style={{ width: size, height: size * 0.8 }}>
+      {full && <span className="qg-glow absolute inset-0 rounded-full" aria-hidden />}
+      <svg viewBox="0 0 80 64" width={size} height={size * 0.8} className="relative block overflow-visible" aria-hidden>
+        <rect x={8} y={28} width={64} height={32} rx={4} fill="#92400E" stroke="#451A03" strokeWidth={2.5} />
+        <rect x={8} y={36} width={64} height={5} fill="#FBBF24" />
+        {full && <ellipse cx={40} cy={30} rx={28} ry={6} fill="#FDE047" />}
+        <g className={open ? "qg-lid" : ""} style={{ transformBox: "fill-box", transformOrigin: "0% 100%" }}>
+          <path d="M8,30 V18 Q8,6 40,6 Q72,6 72,18 V30 Z" fill="#B45309" stroke="#451A03" strokeWidth={2.5} />
+          <rect x={8} y={20} width={64} height={5} fill="#FBBF24" />
+        </g>
+        <rect x={35} y={30} width={10} height={12} rx={2} fill="#FDE047" stroke="#451A03" strokeWidth={2} />
+      </svg>
+      {full && [0, 1, 2].map((k) => <span key={k} className="qg-coin absolute left-1/2 top-1/3 text-base" style={{ animationDelay: `${0.35 + k * 0.12}s`, ["--qg-x" as string]: `${(k - 1) * 22}px` }} aria-hidden>{loot === "gem" ? "💎" : loot === "crown" ? "👑" : "🪙"}</span>)}
+    </span>
+  );
+}
+function TreasureScene({ g, burst, myId, big }: { g: GameState; burst: number; myId: string; big: boolean }) {
+  const lanes = onShow(g, myId, big ? 10 : 5), me = g.lanes.find((l) => l.id === myId);
+  const label = (l: Lane) => (l.loot && burst > 0 ? `${CHESTS[l.loot].emoji} ${l.loot === "coins" ? `+${l.gain} gold` : l.loot === "empty" ? "Empty" : CHESTS[l.loot].label}` : "");
+  return (
+    <section aria-label="Treasure hunt" className="overflow-hidden rounded-2xl p-2 ring-4 ring-[#0B1220]/30" style={{ background: "linear-gradient(180deg, #0EA5E9 0%, #38BDF8 22%, #FDE68A 23%, #FCD34D 100%)" }}>
+      <p aria-hidden className="mb-1 flex justify-between px-1 text-xl leading-none"><span>🏝️</span><span>⛵</span><span>🌴</span></p>
+      {!big && me && (
+        <div className="mb-2 flex items-center gap-3 rounded-xl bg-white/80 p-2 text-[#451A03]" aria-label="Your chest">
+          <Chest key={`me-${burst}`} open={burst > 0 && !!me.loot} loot={me.loot} size={64} />
+          <div className="min-w-0">
+            <p className="text-sm font-black">{label(me) || "Your chest"}</p>
+            <p className="font-mono text-lg font-black">🪙 {me.points} gold</p>
+            <p className="text-[11px] font-bold">{ord(me.place)} place</p>
+          </div>
+        </div>
+      )}
+      <ol className={`grid gap-1.5 ${big ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-1"}`}>
+        {lanes.filter((l) => big || l.id !== myId).map((l) => (
+          <li key={l.id} aria-label={`${l.name}: ${ord(l.place)} place, ${l.points} gold${l.loot && burst > 0 ? `, last chest: ${CHESTS[l.loot].label}` : ""}`}
+            className={`relative flex items-center gap-2 rounded-xl p-1.5 text-[#451A03] ${big ? "flex-col text-center" : ""} ${l.place === 1 ? "bg-amber-200 ring-2 ring-amber-500" : "bg-white/70"}`}>
+            {big ? <Chest key={`c-${l.id}-${burst}`} open={burst > 0 && !!l.loot} loot={l.loot} size={72} /> : <span className="w-6 text-center text-sm font-black">{l.place}</span>}
+            <span className={`min-w-0 truncate text-xs font-black ${big ? "w-full text-sm" : "flex-1"}`}>{big && `${l.place}. `}{l.id === myId ? "You" : l.name}</span>
+            {big && <span key={`l-${burst}`} className={`min-h-[16px] text-[11px] font-black ${burst > 0 ? "qg-pop" : ""}`} style={{ animationDelay: "0.5s" }}>{label(l)}</span>}
+            <span className="font-mono text-xs font-black">🪙 {l.points}</span>
+          </li>
+        ))}
+      </ol>
+      {g.lanes.length > lanes.length && <p className="mt-1 text-center text-[11px] font-bold text-[#451A03]/70">and {g.lanes.length - lanes.length} more treasure hunter{g.lanes.length - lanes.length === 1 ? "" : "s"}</p>}
+      {!g.lanes.length && <p className="py-4 text-center text-sm font-bold text-[#451A03]">The chests are waiting to be found.</p>}
+    </section>
+  );
+}
+
 // ── Choosing a game style, and the teams, in the lobby ───────────────────
 export function ModePicker({ mode, onPick }: { mode: GameMode; onPick: (m: GameMode) => void }) {
   return (
-    <div role="radiogroup" aria-label="Game style" className="mx-auto mt-5 grid max-w-3xl grid-cols-2 gap-2 sm:grid-cols-5">
+    <div role="radiogroup" aria-label="Game style" className="mx-auto mt-5 grid max-w-3xl grid-cols-2 gap-2 sm:grid-cols-4">
       {MODES.map((m) => (
         <button key={m.id} type="button" role="radio" aria-checked={mode === m.id} onClick={() => onPick(m.id)} title={m.hint}
           className={`flex min-h-[84px] flex-col items-center justify-center gap-0.5 rounded-2xl p-2 text-center transition ${mode === m.id ? "bg-white text-violet-800 shadow-xl ring-4 ring-amber-300" : "bg-white/12 text-white hover:bg-white/20"}`}>
@@ -236,7 +336,7 @@ export function TeamsPreview({ teams, onShuffle }: { teams: { name: string; colo
   );
 }
 // What the next button says in each game style.
-export const GAME_STEP: Record<GameMode, string> = { classic: "Scoreboard →", race: "Race on! →", tug: "Pull! →", battle: "Attack! →", boss: "Fight the boss! →" };
+export const GAME_STEP: Record<GameMode, string> = { classic: "Scoreboard →", race: "Race on! →", space: "Blast off! →", treasure: "Open the chests! →", tug: "Pull! →", battle: "Attack! →", boss: "Fight the boss! →" };
 // A learner's team, as a coloured badge.
 export function MyTeam({ g, myId, className = "" }: { g: GameState | null; myId: string; className?: string }) {
   if (!g || !(g.mode === "tug" || g.mode === "battle")) return null;

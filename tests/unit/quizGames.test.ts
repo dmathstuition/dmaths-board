@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOSS, MODES, assignTeams, cleanGame, computeGame, resultText, shuffleTeams, teamOf, type GameMode, type Player, type Scored } from "@/lib/quizGames";
+import { BOOST_STREAK, BOSS, CHESTS, MODES, PLANETS, assignTeams, chest, cleanGame, computeGame, resultText, shuffleTeams, teamOf, type GameMode, type Player, type Scored } from "@/lib/quizGames";
 import { revealedCount, viewFor, type AnswerRow, type QuizRow } from "@/lib/liveQuiz";
 
 const P = (n: number): Player[] => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `Kid ${i}` }));
@@ -124,7 +124,10 @@ describe("cleaning what arrives", () => {
     expect(cleanGame({ quizId: "q", mode: "chess" })).toBeNull();
     expect(cleanGame(null)).toBeNull();
     expect(cleanGame({ quizId: "q", mode: "tug", lead: 9, hp: [500], winner: 7, lanes: [{ progress: 3 }] })).toMatchObject({ lead: 1, hp: [100], winner: 1, lanes: [{ progress: 1, name: "Learner" }] });
-    expect(MODES.map((m) => m.id)).toEqual(["classic", "race", "tug", "battle", "boss"]);
+    expect(MODES.map((m) => m.id)).toEqual(["classic", "race", "space", "treasure", "tug", "battle", "boss"]);
+    const t = game("treasure", P(3), answers(P(3), 2, () => true), 2);
+    expect(cleanGame(JSON.parse(JSON.stringify(t)))).toEqual(t);
+    expect(cleanGame({ quizId: "q", mode: "treasure", lanes: [{ loot: "dragon", streak: -4 }] })!.lanes[0]).toMatchObject({ loot: "", streak: 0 });
   });
 });
 
@@ -139,5 +142,45 @@ describe("what the teacher's screen is told", () => {
     expect(host.game.scored).toEqual([{ idx: 0, id: "s1", points: 900, correct: true }]);
     expect(host.game.players).toEqual([{ id: "s1", name: "Amy" }]);
     expect((viewFor(quiz, ans, new Map(), { host: false, id: "s1" }) as any).game).toBeUndefined(); // learners don't get it
+  });
+});
+
+describe("treasure hunt", () => {
+  it("a right answer opens a chest; a wrong one finds it empty", () => {
+    expect(chest("q", "p0", 0, undefined)).toEqual({ loot: "", gold: 0 });
+    expect(chest("q", "p0", 0, { idx: 0, id: "p0", points: 0, correct: false })).toEqual({ loot: "empty", gold: 0 });
+    const c = chest("q", "p0", 0, { idx: 0, id: "p0", points: 800, correct: true });
+    expect(["coins", "double", "gem", "crown"]).toContain(c.loot);
+    expect(c.gold).toBe({ coins: 80, double: 160, gem: 180, crown: 330 }[c.loot]);
+    expect(chest("q", "p0", 0, { idx: 0, id: "p0", points: 800, correct: true })).toEqual(c); // the same every time, on every screen
+    expect(Object.keys(CHESTS)).toEqual(["empty", "coins", "double", "gem", "crown"]);
+  });
+  it("bonus chests turn up now and then, not every time", () => {
+    const got: Record<string, number> = {};
+    for (let i = 0; i < 2000; i++) { const c = chest("quiz", `kid${i}`, i % 7, { idx: 0, id: "x", points: 800, correct: true }); got[c.loot] = (got[c.loot] ?? 0) + 1; }
+    expect(got.crown / 2000).toBeGreaterThan(0.02); expect(got.crown / 2000).toBeLessThan(0.09);
+    expect(got.coins / 2000).toBeGreaterThan(0.55); expect(got.coins / 2000).toBeLessThan(0.8);
+  });
+  it("adds up each hunter's gold and puts the richest first", () => {
+    const kids = P(3), g = game("treasure", kids, answers(kids, 3, (id) => id !== "p2"), 3);
+    expect(g.lanes[2]).toMatchObject({ name: "Kid 2", points: 0, loot: "empty", progress: 0 });
+    expect(g.lanes[0].progress).toBe(1);
+    for (const l of g.lanes.slice(0, 2)) {
+      const sum = [0, 1, 2].reduce((a, q) => a + chest("q", l.id, q, { idx: q, id: l.id, points: 800, correct: true }).gold, 0);
+      expect(l.points).toBe(sum);
+      expect(l.gain).toBe(chest("q", l.id, 2, { idx: 2, id: l.id, points: 800, correct: true }).gold);
+    }
+    expect(resultText(game("treasure", kids, answers(kids, 3, (id) => id !== "p2"), 3, 5, true))).toContain("found the most treasure");
+  });
+});
+
+describe("space race", () => {
+  it("counts each rocket's run of right answers for a boost", () => {
+    const kids = P(2), g = game("space", kids, answers(kids, 4, (id, q) => id === "p0" || q === 3), 4);
+    expect(g.lanes.find((l) => l.id === "p0")!.streak).toBe(4);
+    expect(g.lanes.find((l) => l.id === "p1")!.streak).toBe(1);
+    expect(BOOST_STREAK).toBe(3);
+    expect(PLANETS.map((p) => p.at)).toEqual([0.25, 0.5, 0.75, 1]);
+    expect(resultText(game("space", kids, answers(kids, 4, () => true), 4, 4, true))).toContain("reaches the stars first");
   });
 });

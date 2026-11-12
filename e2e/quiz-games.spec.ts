@@ -118,6 +118,33 @@ test("tug of war, boss battle, race and team battle on the live quiz", async ({ 
   await shot(teacher, "race");
   await teacher.getByRole("button", { name: "End quiz" }).click();
 
+  // ── Space race ──
+  await launchAnother();
+  await style.getByRole("radio", { name: /Space race/ }).click();
+  await teacher.getByRole("button", { name: "▶ Start" }).click();
+  await play(0, "4", "Blast off! →", "space");
+  const space = teacher.getByRole("region", { name: "Space race" });
+  await expect(space.getByRole("listitem").first()).toHaveAccessibleName("Emmanuel: 1st place, 45% of the way to the stars", { timeout: 20_000 });
+  await expect(learner.getByRole("region", { name: "Space race" }).getByRole("listitem", { name: /^Emmanuel: 1st place/ })).toBeVisible({ timeout: 20_000 });
+  await shot(teacher, "space");
+  await teacher.getByRole("button", { name: "Next question →" }).click();
+  await play(1, "9", "Podium 🏆");
+  await expect(teacher.getByText("Emmanuel reaches the stars first! 🚀")).toBeVisible({ timeout: 20_000 });
+
+  // ── Treasure hunt ──
+  await launchAnother();
+  await style.getByRole("radio", { name: /Treasure hunt/ }).click();
+  await teacher.getByRole("button", { name: "▶ Start" }).click();
+  await play(0, "4", "Open the chests! →");
+  const hunt = teacher.getByRole("region", { name: "Treasure hunt" });
+  await expect(hunt.getByRole("listitem", { name: /^Learner 2: 4th place, 0 gold, last chest: Empty chest$/ })).toBeVisible({ timeout: 20_000 });
+  await expect(hunt.getByRole("listitem", { name: /^Emmanuel: \d(st|nd|rd|th) place, \d+ gold, last chest: / })).toBeVisible();
+  await expect(learner.getByLabel("Your chest")).toContainText("gold", { timeout: 20_000 });
+  await shot(teacher, "treasure");
+  await shot(learner, "treasure-phone");
+  await teacher.getByRole("button", { name: "End quiz" }).click();
+  await expect(teacher.getByText(/found the most treasure/).first()).toBeVisible({ timeout: 20_000 });
+
   // ── Team battle ──
   await launchAnother();
   await style.getByRole("radio", { name: /Team battle/ }).click();

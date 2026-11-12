@@ -1,6 +1,6 @@
 // Game styles for the live quiz — pure. The quiz itself (questions, timing,
 // points) is unchanged (lib/liveQuiz.ts); a game style draws it as a race, a
-// tug of war, a team battle or a boss battle.
+// space race, a treasure hunt, a tug of war, a team battle or a boss battle.
 //
 // The teacher's screen is in charge: it picks the style and the teams, works
 // out the game from the answers it can see after each reveal, and sends the
@@ -8,10 +8,12 @@
 // Only answers to questions already revealed count, so the game never gives
 // away who was right before the class sees the answer.
 
-export type GameMode = "classic" | "race" | "tug" | "battle" | "boss";
+export type GameMode = "classic" | "race" | "space" | "treasure" | "tug" | "battle" | "boss";
 export const MODES: { id: GameMode; name: string; emoji: string; hint: string; teams: boolean }[] = [
   { id: "classic", name: "Classic", emoji: "⚡", hint: "Points and a scoreboard", teams: false },
   { id: "race", name: "Race", emoji: "🏎️", hint: "Fast, right answers move your car along the track", teams: false },
+  { id: "space", name: "Space race", emoji: "🚀", hint: "Rockets blast off past the Moon, Mars and Saturn to the stars; answer streaks give a boost", teams: false },
+  { id: "treasure", name: "Treasure hunt", emoji: "💰", hint: "Every right answer opens a treasure chest — some hold double gold, gems or a crown", teams: false },
   { id: "tug", name: "Tug of war", emoji: "🪢", hint: "Two teams pull a rope; the better team pulls harder", teams: true },
   { id: "battle", name: "Team battle", emoji: "⚔️", hint: "Two teams attack each other's health bar", teams: true },
   { id: "boss", name: "Boss battle", emoji: "🐉", hint: "The whole class against a monster — works with one learner too", teams: false },
@@ -48,7 +50,28 @@ export function shuffleTeams(players: Player[], rnd: () => number = Math.random)
 export const teamOf = (teams: string[][], id: string) => (teams[0]?.includes(id) ? 0 : teams[1]?.includes(id) ? 1 : -1);
 
 // ── The game ──
-export type Lane = { id: string; name: string; progress: number; place: number; gain: number; points: number };
+// points: race points, or gold in a treasure hunt. gain: what this round added. streak: right answers in a row (space race).
+// loot: what the last chest held (treasure hunt): "" no answer, or one of CHESTS.
+export type Lane = { id: string; name: string; progress: number; place: number; gain: number; points: number; streak: number; loot: string };
+
+// ── Treasure hunt ──
+// A right answer opens a chest: gold worth a tenth of the points, and sometimes more.
+// Which chest a learner gets is fixed by the quiz, the learner and the question,
+// so every screen agrees and nobody can re-roll it.
+export const CHESTS: Record<string, { label: string; emoji: string }> = {
+  empty: { label: "Empty chest", emoji: "🕸️" }, coins: { label: "Gold coins", emoji: "🪙" }, double: { label: "Double gold!", emoji: "✨" },
+  gem: { label: "A gem: +100", emoji: "💎" }, crown: { label: "The crown: +250", emoji: "👑" },
+};
+const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+export function chest(quizId: string, id: string, idx: number, s: Scored | undefined): { loot: string; gold: number } {
+  if (!s) return { loot: "", gold: 0 };
+  if (!s.correct) return { loot: "empty", gold: 0 };
+  const base = Math.round(s.points / 10), roll = hash(`${quizId}|${id}|${idx}`) % 100;
+  return roll < 5 ? { loot: "crown", gold: base + 250 } : roll < 17 ? { loot: "gem", gold: base + 100 } : roll < 32 ? { loot: "double", gold: base * 2 } : { loot: "coins", gold: base };
+}
+// ── Space race ──
+export const PLANETS = [{ at: 0.25, name: "the Moon", emoji: "🌕" }, { at: 0.5, name: "Mars", emoji: "🔴" }, { at: 0.75, name: "Saturn", emoji: "🪐" }, { at: 1, name: "the stars", emoji: "⭐" }];
+export const BOOST_STREAK = 3; // right answers in a row for a rocket boost
 export type TeamView = { name: string; colour: string; dark: string; emoji: string; size: number; members: string[]; names: string[]; points: number; right: number };
 export type GameState = {
   quizId: string; mode: GameMode; round: number; total: number; ended: boolean;
@@ -74,9 +97,16 @@ export function computeGame(args: { quizId: string; mode: GameMode; scored: Scor
   const state: GameState = { quizId, mode, round, total, ended, teams: [], lead: 0, pull: 0, hp: [], hit: [], hearts: 0, bossHit: false, lanes: [], winner: null };
   const pointsOf = (id: string, upTo = round) => scored.filter((s) => s.id === id && s.idx < upTo).reduce((a, s) => a + s.points, 0);
 
-  if (mode === "race") {
+  if (mode === "race" || mode === "space" || mode === "treasure") {
     const max = Math.max(1, total) * 1000;
-    state.lanes = players.map((p) => ({ id: p.id, name: p.name, points: pointsOf(p.id), progress: r1(Math.min(1, pointsOf(p.id) / max)), gain: round ? byIdx(scored, round - 1).find((s) => s.id === p.id)?.points ?? 0 : 0, place: 0 }))
+    const streakOf = (id: string) => { let n = 0; for (let q = round - 1; q >= 0 && scored.some((s) => s.idx === q && s.id === id && s.correct); q--) n++; return n; };
+    const goldOf = (id: string) => { let gold = 0, gain = 0, loot = ""; for (let q = 0; q < round; q++) { const c = chest(quizId, id, q, scored.find((s) => s.idx === q && s.id === id)); gold += c.gold; if (q === round - 1) { gain = c.gold; loot = c.loot; } } return { gold, gain, loot }; };
+    const rows = players.map((p) => {
+      if (mode === "treasure") { const t = goldOf(p.id); return { id: p.id, name: p.name, points: t.gold, gain: t.gain, loot: t.loot, streak: streakOf(p.id), progress: 0, place: 0 }; }
+      return { id: p.id, name: p.name, points: pointsOf(p.id), progress: r1(Math.min(1, pointsOf(p.id) / max)), gain: round ? byIdx(scored, round - 1).find((s) => s.id === p.id)?.points ?? 0 : 0, streak: streakOf(p.id), loot: "", place: 0 };
+    });
+    if (mode === "treasure") { const most = Math.max(1, ...rows.map((r) => r.points)); rows.forEach((r) => { r.progress = r1(r.points / most); }); }
+    state.lanes = rows
       .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name))
       .map((l, i, all) => ({ ...l, place: i > 0 && all[i - 1].points === l.points ? 0 : i + 1 }));
     state.lanes.forEach((l, i) => { if (!l.place) l.place = state.lanes[i - 1].place; });
@@ -146,6 +176,8 @@ export function resultText(g: GameState, myId = ""): string {
   }
   if (g.mode === "boss") return g.winner === 0 ? `You beat the ${BOSS.name}! 🎉` : g.winner === 1 ? `The ${BOSS.name} got away… try again!` : "";
   if (g.mode === "race") return g.lanes[0] ? `${g.lanes[0].name} wins the race! 🏁` : "";
+  if (g.mode === "space") return g.lanes[0] ? `${g.lanes[0].name} reaches the stars first! 🚀` : "";
+  if (g.mode === "treasure") return g.lanes[0] ? `${g.lanes[0].name} found the most treasure: ${g.lanes[0].points} gold! 💰` : "";
   return "";
 }
 
@@ -167,6 +199,7 @@ export function cleanGame(g: any): GameState | null {
     hearts: Math.round(num(g.hearts, 0, BOSS.hearts)), bossHit: !!g.bossHit,
     lanes: (Array.isArray(g.lanes) ? g.lanes : []).slice(0, MAX_LANES).map((l: any) => ({
       id: str(l?.id, 80), name: str(l?.name, 60) || "Learner", progress: num(l?.progress, 0, 1), place: Math.round(num(l?.place, 1, 500, 1)), gain: Math.round(num(l?.gain, 0, 5000)), points: Math.round(num(l?.points, 0, 1e7)),
+      streak: Math.round(num(l?.streak, 0, 500)), loot: typeof l?.loot === "string" && CHESTS[l.loot] ? l.loot : "",
     })),
     winner: g.winner === null || g.winner === undefined ? null : Math.round(num(g.winner, -1, 1)),
   };

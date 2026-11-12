@@ -271,7 +271,7 @@ export default function QuizHostStage({ sessionId, code, people, base, onActive 
         <div className="mx-auto mt-5 max-w-3xl">
           <p className="mb-3 text-center font-display text-3xl font-black">{modeInfo(mode).emoji} {modeInfo(mode).name}</p>
           <GameScene key={`${quiz.id}-${mode}`} g={game} from={before} big sound />
-          {mode !== "race" && <div className="mx-auto mt-4 max-w-xl"><p className="mb-1.5 text-sm font-black text-white/70">Top scorers</p><Leaderboard rows={quiz.leaderboard.slice(0, 3)} /></div>}
+          {(mode === "tug" || mode === "battle" || mode === "boss") && <div className="mx-auto mt-4 max-w-xl"><p className="mb-1.5 text-sm font-black text-white/70">Top scorers</p><Leaderboard rows={quiz.leaderboard.slice(0, 3)} /></div>}
         </div>
       )}
 

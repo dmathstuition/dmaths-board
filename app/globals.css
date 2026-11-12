@@ -1186,6 +1186,21 @@ html:not(.dark) .portal-sky { color: #0B1220; }
   .qg-defeat { animation: none; opacity: .2; }
 }
 
+.qg-rocket { transition: bottom 1.6s cubic-bezier(.22,1,.36,1); }
+@keyframes qgFlame { 0%, 20%, 40%, 60% { transform: scale(1) translateY(0); opacity: 1; } 10%, 30%, 50%, 70% { transform: scale(1.35, .8) translateY(3px); opacity: .85; } 100% { transform: scale(.4) translateY(8px); opacity: 0; } }
+.qg-flame { animation: qgFlame 1.6s linear both; }
+@keyframes qgLid { 0% { transform: translateY(0) rotate(0); } 60% { transform: translateY(-16px) rotate(-38deg); } 100% { transform: translateY(-12px) rotate(-30deg); } }
+.qg-lid { animation: qgLid .7s cubic-bezier(.34,1.56,.64,1) .2s both; }
+@keyframes qgCoin { 0% { transform: translate(-50%, 0) scale(.5); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(calc(-50% + var(--qg-x, 0px)), -46px) scale(1.15); opacity: 0; } }
+.qg-coin { animation: qgCoin 1.2s ease-out both; }
+@keyframes qgGlow { 0%, 100% { opacity: .35; transform: scale(.9); } 50% { opacity: .9; transform: scale(1.2); } }
+.qg-glow { background: radial-gradient(circle, rgba(253,224,71,.9) 0%, rgba(253,224,71,0) 70%); animation: qgGlow 1.6s ease-in-out .4s 2 both; }
+@media (prefers-reduced-motion: reduce) {
+  .qg-rocket { transition: none; }
+  .qg-flame, .qg-coin, .qg-glow { animation: none; display: none; }
+  .qg-lid { animation: none; transform: translateY(-12px) rotate(-30deg); }
+}
+
 
 /* ── Low-data mode (lib/lowData.tsx) ─────────────────────────────
    No animation, transitions, blur or decorative extras — less work for the
