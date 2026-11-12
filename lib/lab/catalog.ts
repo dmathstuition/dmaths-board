@@ -28,9 +28,19 @@ export type LabEntry = {
   level: string;        // who it's pitched at
   status?: LabStatus;   // omit for a normal live experiment
   practical?: boolean;  // a hands-on practical on the lab bench (components/lab/bench)
+  room?: boolean;       // a lab room: every piece of apparatus, to try and to plan with (components/lab/room)
 };
 
 export const LAB: LabEntry[] = [
+  // ── Lab rooms: all the apparatus, to pick from and plan a practical ──
+  { slug: "room-physics", title: "Physics Lab Room", subject: "physics", emoji: "🏫", level: "All levels", status: "new", room: true,
+    blurb: "Every piece of physics apparatus — measure, wire up, shine light through, time and test each one, then pick what you need and plan a practical." },
+  { slug: "room-chemistry", title: "Chemistry Lab Room", subject: "chemistry", emoji: "🏫", level: "All levels", status: "new", room: true,
+    blurb: "Glassware, heating, separation, gas collection, every reagent and indicator — test them, then plan a practical with its risk assessment." },
+  { slug: "room-biology", title: "Biology Lab Room", subject: "biology", emoji: "🏫", level: "All levels", status: "new", room: true,
+    blurb: "Microscopes, dissection kit, plant and animal specimens, anatomy models and ecology equipment — identify, label and plan." },
+  { slug: "room-maths", title: "Maths Lab Room", subject: "maths", emoji: "🏫", level: "All levels", status: "new", room: true,
+    blurb: "Instruments, 2D shapes, 3D solids, algebra, probability, trigonometry, calculus and money tools — every one works." },
   // ── Mathematics ──
   { slug: "probability", title: "Is the Dice Fair?", subject: "maths", emoji: "🎲", level: "JSS 1 – SS 3", status: "new", practical: true,
     blurb: "Roll a dice 20, 100 and 500 times, keep a tally, work out relative frequencies and decide if it's biased." },

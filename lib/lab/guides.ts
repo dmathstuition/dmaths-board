@@ -716,6 +716,70 @@ export const GUIDES: Record<string, LabGuide> = {
     ],
     conclusion: "The upthrust equals the weight of water displaced. That is Archimedes' principle. The weight in air divided by the upthrust is the stone's relative density.",
   },
+  "room-physics": {
+    aim: "Find the apparatus you need in the physics lab room, try each one out, and plan a practical.",
+    steps: [
+      "Choose a shelf, or search for a piece of apparatus by name.",
+      "Open it to see what it is, its properties, how to use it and how to use it safely.",
+      "Try it out: read scales, put parts in a circuit, shine light through lenses and time events.",
+      "Pick the apparatus you need, so it goes on your bench.",
+      "Plan your practical: choose it from the list to check you have everything, write your aim, variables and method, and read the risk assessment.",
+      "When you have everything, start the practical.",
+    ],
+    tips: [
+      "Read the smallest division of every measuring instrument: it tells you how precise your readings can be.",
+      "Add the safety equipment the risk assessment asks for.",
+    ],
+    conclusion: "A good plan lists the right apparatus, says what you will change, measure and keep the same, and how you will stay safe.",
+  },
+  "room-chemistry": {
+    aim: "Find the apparatus you need in the chemistry lab room, try each one out, and plan a practical.",
+    steps: [
+      "Choose a shelf, or search for a piece of apparatus by name.",
+      "Open it to see what it is, its properties, how to use it and how to use it safely.",
+      "Try it out: test each substance, read the indicators and measure with the glassware.",
+      "Pick the apparatus you need, so it goes on your bench.",
+      "Plan your practical: choose it from the list to check you have everything, write your aim, variables and method, and read the risk assessment.",
+      "When you have everything, start the practical.",
+    ],
+    tips: [
+      "Read the smallest division of every measuring instrument: it tells you how precise your readings can be.",
+      "Add the safety equipment the risk assessment asks for.",
+    ],
+    conclusion: "A good plan lists the right apparatus, says what you will change, measure and keep the same, and how you will stay safe.",
+  },
+  "room-biology": {
+    aim: "Find the apparatus you need in the biology lab room, try each one out, and plan a practical.",
+    steps: [
+      "Choose a shelf, or search for a piece of apparatus by name.",
+      "Open it to see what it is, its properties, how to use it and how to use it safely.",
+      "Try it out: identify specimens, label the models and use the microscope.",
+      "Pick the apparatus you need, so it goes on your bench.",
+      "Plan your practical: choose it from the list to check you have everything, write your aim, variables and method, and read the risk assessment.",
+      "When you have everything, start the practical.",
+    ],
+    tips: [
+      "Read the smallest division of every measuring instrument: it tells you how precise your readings can be.",
+      "Add the safety equipment the risk assessment asks for.",
+    ],
+    conclusion: "A good plan lists the right apparatus, says what you will change, measure and keep the same, and how you will stay safe.",
+  },
+  "room-maths": {
+    aim: "Find the apparatus you need in the maths lab room, try each one out, and plan a practical.",
+    steps: [
+      "Choose a shelf, or search for a piece of apparatus by name.",
+      "Open it to see what it is, its properties, how to use it and how to use it safely.",
+      "Try it out: change the measurements of shapes and solids, roll dice and plot graphs.",
+      "Pick the apparatus you need, so it goes on your bench.",
+      "Plan your practical: choose it from the list to check you have everything, write your aim, variables and method, and read the risk assessment.",
+      "When you have everything, start the practical.",
+    ],
+    tips: [
+      "Read the smallest division of every measuring instrument: it tells you how precise your readings can be.",
+      "Add the safety equipment the risk assessment asks for.",
+    ],
+    conclusion: "A good plan lists the right apparatus, says what you will change, measure and keep the same, and how you will stay safe.",
+  },
   "reading-instruments": {
     aim: "Read five common instruments correctly.",
     steps: [

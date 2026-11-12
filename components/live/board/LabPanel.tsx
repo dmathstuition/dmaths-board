@@ -10,6 +10,7 @@ import { useKeptRef, useKeptState, type KeepStore } from "@/lib/keptState";
 import PracticalThumb from "@/components/lab/bench/Thumb";
 import { LabReportContext, type LabReport } from "@/components/lab/bench/labReport";
 import LabTracker, { useNow } from "@/components/live/board/LabTracker";
+import { START_EVENT } from "@/components/lab/room/LabRoom";
 import { addReport, cleanProgress, summary, type LabEntry as TrackEntry, type LabProgress } from "@/lib/lab/labTrack";
 
 // The E-Laboratory on the board. The teacher picks an experiment and works it
@@ -151,7 +152,16 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
     (!q.trim() || `${e.title} ${e.blurb}`.toLowerCase().includes(q.trim().toLowerCase()))), [subject, q]);
   // The bench practicals come first, as big cards with a picture of the bench.
   const practicals = list.filter((e) => e.practical);
-  const others = list.filter((e) => !e.practical);
+  const rooms = list.filter((e) => e.room);
+  const others = list.filter((e) => !e.practical && !e.room);
+  // A practical planned in a lab room: "Start the practical" opens it. A learner
+  // opens it on their own phone, and can go back to the room.
+  const [own, setOwn] = useKeptState<{ from: string; slug: string } | null>(keep, "lab:own", null);
+  useEffect(() => {
+    const on = (e: Event) => { const s = String((e as CustomEvent).detail ?? ""); if (!entryFor(s)) return; if (host) setSlug(s); else if (theirsRef.current) setOwn({ from: theirsRef.current, slug: s }); };
+    window.addEventListener(START_EVENT, on);
+    return () => window.removeEventListener(START_EVENT, on);
+  }, [host, setSlug, setOwn, theirsRef]);
 
   async function put(what: "apparatus" | "all") {
     const root = stage.current, entry = entryFor(slug);
@@ -188,7 +198,8 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
 
   // ── Learner: the experiment the teacher opened, to try on their own ──
   if (!host) {
-    const entry = entryFor(theirs);
+    const mine = own && own.from === theirs ? own.slug : null;
+    const entry = entryFor(mine ?? theirs);
     if (!entry) return null;
     const Experiment = EXPERIMENTS[entry.slug];
     if (hidden) {
@@ -203,11 +214,12 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
         <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2 text-white">
           <span className="text-xl" aria-hidden>{entry.emoji}</span>
           <p className="min-w-0 flex-1 truncate text-sm font-black">{entry.title} <span className="font-semibold text-white/50">· try it yourself</span></p>
-          <ZoomButtons scale={scale} onZoom={setZoom} />
+          {!entry.room && <ZoomButtons scale={scale} onZoom={setZoom} />}
+          {mine && <button type="button" onClick={() => setOwn(null)} className="min-h-[40px] shrink-0 rounded-xl bg-white/10 px-3 text-xs font-black text-white">Back to the lab room</button>}
           <button type="button" onClick={() => setHidden(true)} className="min-h-[40px] shrink-0 rounded-xl bg-white px-3 text-xs font-black text-[#0B1220]">Back to the class board</button>
         </div>
         <div className="elab min-h-0 flex-1 overflow-auto overscroll-contain p-2 sm:p-4">
-          <div className="mx-auto max-w-6xl" style={{ zoom: scale }}><LabReportContext.Provider value={reportCtx}><Experiment /></LabReportContext.Provider></div>
+          <div className="mx-auto max-w-6xl" style={{ zoom: entry.room ? 1 : scale }}><LabReportContext.Provider value={reportCtx}><Experiment /></LabReportContext.Provider></div>
         </div>
       </div>
     );
@@ -237,7 +249,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
       <div className="flex items-center gap-2 border-b border-white/10 px-2 py-1.5 sm:px-3">
         <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 sm:flex"><BoardIcon name="flask" /></span>
         <p className="min-w-0 flex-1 truncate text-sm font-black">{entry ? `${entry.emoji} ${entry.title}` : "Laboratory — choose an experiment"}</p>
-        {entry && <ZoomButtons scale={scale} onZoom={setZoom} />}
+        {entry && !entry.room && <ZoomButtons scale={scale} onZoom={setZoom} />}
         <button type="button" onClick={onClose} title="Hide — back to the board, the experiment keeps running" aria-label="Hide the lab"
           className={`${chip} bg-white/10 hover:bg-white/15`}><BoardIcon name="down" className="h-4 w-4" /><span className="hidden sm:inline">Hide</span></button>
         <button type="button" onClick={end} title={entry ? "End the experiment and close the lab" : "Close the lab"} aria-label={entry ? "End the experiment" : "Close the lab"}
@@ -277,6 +289,22 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search — e.g. pendulum" className="h-10 w-full rounded-xl bg-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-[#38BDF8]" />
               </label>
             </div>
+            {rooms.length > 0 && (
+              <section className="mt-4" aria-label="Lab rooms">
+                <p className="text-sm font-black">🏫 Lab rooms <span className="font-semibold text-white/50">· every piece of apparatus — try it, pick it, plan your practical</span></p>
+                <ul className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {rooms.map((e) => (
+                    <li key={e.slug}>
+                      <button type="button" onClick={() => setSlug(e.slug)} aria-label={e.title}
+                        className="flex h-full w-full flex-col rounded-2xl p-3 text-left ring-1 ring-white/15 transition hover:ring-white/40" style={{ background: `linear-gradient(135deg, ${SUBJECTS[e.subject].color}33, #ffffff08)` }}>
+                        <span className="text-sm font-black">{e.emoji} {e.title}</span>
+                        <span className="mt-0.5 line-clamp-3 text-xs text-white/60">{e.blurb}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             {practicals.length > 0 && (
               <section className="mt-4" aria-label="Virtual practicals">
                 <p className="text-sm font-black">Virtual practicals <span className="font-semibold text-white/50">· real equipment, done step by step</span></p>
@@ -323,7 +351,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
       ) : (
         <div className="relative min-h-0 flex-1">
           <div className="elab absolute inset-0 isolate overflow-auto overscroll-contain p-2 sm:p-4">
-            <div ref={stage} className="mx-auto max-w-6xl" style={{ zoom: scale }}>{Experiment && <Experiment />}</div>
+            <div ref={stage} className="mx-auto max-w-6xl" style={{ zoom: entry?.room ? 1 : scale }}>{Experiment && <Experiment />}</div>
           </div>
           {tracking && live && <LabTracker entries={trackList} quiet={quiet} onClose={() => setTracking(false)} />}
         </div>
