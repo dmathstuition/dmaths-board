@@ -139,6 +139,29 @@ export const EXAM: Record<string, ExamQ[]> = {
     Q("What must be the same in each beaker for a fair test?", "The volume and starting temperature of the water", ["The insulating material", "The final temperature", "The time each was left"], "Only the insulation should differ."),
     Q("Why does cotton wool insulate well?", "It traps air, a poor conductor", ["It is white", "It absorbs water", "It is heavier than newspaper"], "Trapped air reduces conduction and convection."),
   ],
+  "vernier-callipers": [
+    Q("The main scale reads 2.3 cm and vernier line 6 lines up. What is the reading?", "2.36 cm", ["2.30 cm", "2.9 cm", "8.3 cm"], "Reading = main scale + vernier line × 0.01 cm = 2.3 + 0.06."),
+    Q("With the jaws closed, the vernier's 0 is slightly past the main 0 and line 3 lines up. The zero error is…", "+0.03 cm, so take 0.03 cm off every reading", ["−0.03 cm, so add 0.03 cm", "0.3 cm", "Nothing — ignore it"], "A positive zero error makes every reading too big."),
+    Q("What is the precision of these vernier callipers?", "0.01 cm (0.1 mm)", ["1 cm", "0.1 cm", "0.001 cm"], "Ten vernier divisions span 0.9 cm, so each is 0.01 cm shorter than a main division."),
+    Q("Which jaws measure the inside of a test tube?", "The small top jaws", ["The big bottom jaws", "The depth rod", "Any of them"], "The small jaws' outer edges press on the inside wall."),
+  ],
+  micrometer: [
+    Q("The sleeve shows 2.5 mm and thimble line 17 is on the datum line. The reading is…", "2.67 mm", ["2.17 mm", "4.2 mm", "2.517 mm"], "Reading = sleeve + thimble × 0.01 mm = 2.5 + 0.17."),
+    Q("Why turn the ratchet rather than the thimble?", "The ratchet slips when the jaws are just closed, so the wire is never squashed", ["It is faster", "The thimble would read in cm", "It sets the zero error"], "It closes with the same small force every time."),
+    Q("Why measure the wire's diameter in several places?", "The wire may not be perfectly round or the same all along, so the mean is more reliable", ["To check the micrometer works", "To stretch the wire", "Because the first reading is always wrong"], "Repeat readings in different places average out the variation."),
+    Q("One turn of the thimble moves the spindle 0.5 mm and the thimble has 50 divisions. One division is…", "0.01 mm", ["0.1 mm", "0.5 mm", "0.05 mm"], "0.5 mm ÷ 50 = 0.01 mm."),
+  ],
+  callipers: [
+    Q("Outside diameter 6.4 cm, inside diameter 5.6 cm. The wall thickness is…", "0.4 cm", ["0.8 cm", "12.0 cm", "0.08 cm"], "(D − d) ÷ 2: the difference covers two walls."),
+    Q("Why is a reading from callipers and a rule only precise to 1 mm?", "The callipers only carry the distance — it is read on the rule, whose smallest mark is 1 mm", ["Callipers stretch", "The pipe is soft", "Callipers have no zero"], "The measuring instrument is really the rule."),
+    Q("How do you avoid parallax when reading the rule?", "Look straight down at the mark, at right angles to the rule", ["Read it from the side", "Close one eye", "Use a longer rule"], "Looking at an angle shifts the mark you see."),
+  ],
+  archimedes: [
+    Q("A stone weighs 1.50 N in air and 0.90 N in water. The upthrust is…", "0.60 N", ["2.40 N", "0.90 N", "1.67 N"], "Upthrust = weight in air − weight in water."),
+    Q("Why fill the eureka can until it overflows before you start?", "So that only the water pushed out by the stone runs into the cylinder", ["To make the stone heavier", "To clean the spout", "So the stone floats"], "The water must start level with the spout."),
+    Q("Archimedes' principle says the upthrust equals…", "The weight of the fluid displaced", ["The weight of the object", "The volume of the object", "The mass of the can"], "This is why the two values match."),
+    Q("Weight in air 1.50 N, upthrust 0.60 N. The relative density is…", "2.5", ["0.4", "0.9", "2.1"], "Relative density = weight in air ÷ upthrust."),
+  ],
   "terminal-velocity": [
     Q("Why start timing below the first band, not at the surface?", "The ball needs time to reach terminal velocity", ["The oil is thicker at the top", "So the ball goes faster", "The bands are easier to see"], "It accelerates at first, then travels at a steady speed."),
     Q("At terminal velocity the forces on the ball are…", "Balanced: weight = drag + upthrust", ["Unbalanced", "Weight only", "Zero weight"], "No resultant force means no acceleration."),

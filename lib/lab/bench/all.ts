@@ -7,6 +7,7 @@ import { BIOLOGY } from "@/lib/lab/bench/biology";
 import { MATHS } from "@/lib/lab/bench/maths";
 import { EXTRA } from "@/lib/lab/bench/extra";
 import { MORE } from "@/lib/lab/bench/more";
+import { MEASURE } from "@/lib/lab/bench/measure";
 
-export const ALL_PRACTICALS: Practical[] = [...MATHS, ...PRACTICALS, ...PHYSICS, ...CHEMISTRY, ...BIOLOGY, ...EXTRA, ...MORE];
+export const ALL_PRACTICALS: Practical[] = [...MATHS, ...PRACTICALS, ...PHYSICS, ...CHEMISTRY, ...BIOLOGY, ...EXTRA, ...MORE, ...MEASURE];
 export const practicalFor = (slug: string) => ALL_PRACTICALS.find((p) => p.slug === slug) ?? null;

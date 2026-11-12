@@ -653,6 +653,69 @@ export const GUIDES: Record<string, LabGuide> = {
     ],
     conclusion: "The cotton wool beaker cooled the least. Trapped air is a poor conductor, so it reduces heat loss.",
   },
+  "vernier-callipers": {
+    aim: "Use vernier callipers to measure lengths to a hundredth of a centimetre, correcting for zero error.",
+    steps: [
+      "Close the jaws with nothing between them, and read the zero error.",
+      "Close the jaws on the marble.",
+      "Read the main scale just before the vernier's zero, then find the vernier line that lines up exactly with a main scale line.",
+      "The reading is the main scale plus the vernier line times nought point nought one centimetres. Take away the zero error.",
+      "Measure the brass rod the same way, and the inside of the test tube with the small top jaws.",
+      "Work out the marble's volume: pi times the diameter cubed, divided by six.",
+    ],
+    tips: [
+      "Close the jaws gently — just touching, not squeezing.",
+      "If the vernier's zero stops short of the main zero, the zero error is negative: take away a negative and the reading goes up.",
+    ],
+    conclusion: "Vernier callipers read to nought point nought one centimetres, ten times finer than a metre rule. Always correct for the zero error.",
+  },
+  "micrometer": {
+    aim: "Use a micrometer screw gauge to measure the diameter of a wire to a hundredth of a millimetre.",
+    steps: [
+      "Close the micrometer with the ratchet, with nothing in it, and read the zero error.",
+      "Put the wire between the anvil and the spindle, and close it with the ratchet until it clicks.",
+      "Read the sleeve: whole millimetres above the datum line, and half millimetres below it.",
+      "Read the thimble line that sits on the datum line, and add that many hundredths of a millimetre.",
+      "Measure the wire in three different places, find the mean and take away the zero error.",
+      "Work out the cross-sectional area: pi times the diameter squared, divided by four.",
+    ],
+    tips: [
+      "Only ever turn the ratchet, so the wire is not squashed.",
+      "Don't forget a half millimetre mark showing below the datum line.",
+    ],
+    conclusion: "A micrometer reads to nought point nought one millimetres. Measuring in several places and taking the mean allows for a wire that is not perfectly round.",
+  },
+  "callipers": {
+    aim: "Use outside and inside callipers with a metre rule to find the thickness of a pipe's wall.",
+    steps: [
+      "Close the outside callipers on the outside of the pipe.",
+      "Lay them on the rule with the left point on ten centimetres, and read the right point.",
+      "The outside diameter is the reading take away ten centimetres.",
+      "Open the inside callipers inside the pipe until they touch the inside wall, and measure them on the rule the same way.",
+      "The wall thickness is the outside diameter take away the inside diameter, divided by two.",
+    ],
+    tips: [
+      "Don't let the legs move when you lift the callipers off the pipe.",
+      "Look straight down at the rule to avoid parallax.",
+    ],
+    conclusion: "Callipers carry a distance to a rule, so they are only as precise as the rule — one millimetre. Vernier callipers would be more precise.",
+  },
+  "archimedes": {
+    aim: "Show that the upthrust on a stone in water equals the weight of the water it displaces.",
+    steps: [
+      "Hang the stone on the spring balance and read its weight in air.",
+      "Fill the eureka can until water runs out of the spout, and let it stop dripping.",
+      "Put an empty measuring cylinder under the spout.",
+      "Lower the stone into the water, and read the spring balance again.",
+      "Read the volume of water that ran into the measuring cylinder.",
+      "Upthrust is the weight in air take away the weight in water. Each cubic centimetre of water weighs nought point nought one newtons.",
+    ],
+    tips: [
+      "The stone must be completely under the water, and not touch the sides or the bottom.",
+      "Wait for the spout to stop dripping before you start.",
+    ],
+    conclusion: "The upthrust equals the weight of water displaced. That is Archimedes' principle. The weight in air divided by the upthrust is the stone's relative density.",
+  },
   "terminal-velocity": {
     aim: "Find the terminal velocity of ball bearings falling through oil.",
     steps: [
