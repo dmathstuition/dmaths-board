@@ -15,6 +15,7 @@ import { ItemPic } from "@/components/lab/room/ItemPic";
 import BenchArea from "@/components/lab/room/BenchArea";
 import { RoomScene } from "@/components/lab/room/Anim";
 import { emptyBench, type BenchState } from "@/lib/lab/room/bench";
+import { useRoomClass } from "@/components/lab/room/roomContext";
 export { ItemPic };
 
 export const START_EVENT = "lab-room-start"; // detail: a practical's slug (the lab opens it)
@@ -47,6 +48,7 @@ export default function LabRoom({ subject: first = "physics" }: { subject?: LabS
     <section aria-label="Lab room" className="relative text-white">
       <svg width="0" height="0" className="absolute" aria-hidden><BenchDefs /></svg>
       <div className="mb-3 overflow-hidden rounded-2xl ring-1 ring-white/10"><RoomScene subject={subject} /></div>
+      <ClassBar subject={subject} onSubject={setSubject} onPlan={(slug) => { if (slug) save((s) => ({ ...s, plan: { ...s.plan, target: slug, title: s.plan.title || (LAB.find((e) => e.slug === slug)?.title ?? "") } })); setPlanning(true); }} />
       <div className="flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label="Which lab" className="flex gap-1.5 overflow-x-auto">
           {SUBS.map((s) => <button key={s} type="button" role="tab" aria-selected={subject === s} onClick={() => setSubject(s)} className={`${chip} ${subject === s ? "text-[#0B1220]" : "bg-white/10 text-white/80"}`} style={subject === s ? { background: SUBJECTS[s].color } : undefined}>{SUBJECTS[s].label} lab</button>)}
@@ -86,6 +88,54 @@ export default function LabRoom({ subject: first = "physics" }: { subject?: LabS
 
       {item && <ItemSheet item={item} on={saved.picked.includes(item.id)} onToggle={() => toggle(item.id)} onClose={() => setOpen(null)} />}
       {planning && <Planner subject={subject} saved={saved} save={save} picked={picked} onOpen={(id) => setOpen(id)} onClose={() => setPlanning(false)} />}
+    </section>
+  );
+}
+
+// In a class: the practical the teacher set (teacher: set it; learner: see it).
+function ClassBar({ subject, onSubject, onPlan }: { subject: LabSubject; onSubject: (s: LabSubject) => void; onPlan: (slug: string | null) => void }) {
+  const rc = useRoomClass();
+  const practicals = LAB.filter((e) => e.practical && NEEDS[e.slug]?.subject === subject);
+  const [slug, setSlug] = useState(""), [note, setNote] = useState("");
+  const a = rc.assignment;
+  if (!rc.live) return null;
+  if (rc.host) return (
+    <section aria-label="Set a practical" className="mb-3 rounded-2xl bg-white/5 p-3 ring-1 ring-white/10">
+      {a ? <p className="flex flex-wrap items-center gap-2 text-sm font-bold">📌 Set for the class: <b>{a.title}</b> ({SUBJECTS[a.subject].label}){a.note ? <span className="text-white/60">— “{a.note}”</span> : null}
+          <button type="button" onClick={() => rc.setAssignment?.(null)} className="ml-auto rounded-lg bg-white/10 px-2.5 py-1 text-xs font-black">Stop it</button></p>
+        : <div className="flex flex-wrap items-end gap-2">
+            <label className="min-w-0 flex-1 text-xs font-black text-white/70">📌 Set a practical for the class to plan
+              <select value={slug} onChange={(e) => setSlug(e.target.value)} className={`${field} mt-1`}><option value="">Their own practical (free choice)</option>{practicals.map((p) => <option key={p.slug} value={p.slug}>{p.title}</option>)}</select>
+            </label>
+            <label className="min-w-0 flex-1 text-xs font-black text-white/70">Note (optional)<input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="e.g. Include a risk assessment" className={`${field} mt-1`} /></label>
+            <button type="button" onClick={() => rc.setAssignment?.({ subject, slug: slug || null, title: practicals.find((p) => p.slug === slug)?.title ?? `Plan a ${SUBJECTS[subject].label.toLowerCase()} practical`, note: note.trim(), at: Date.now() })} className="min-h-[40px] rounded-xl bg-[#38BDF8] px-3 text-sm font-black text-[#0B1220]">Set it for the class</button>
+          </div>}
+      <p className="mt-1 text-xs text-white/50">Learners get it on their phones; their plans come to “📋 Learners&apos; plans” above.</p>
+    </section>
+  );
+  return (
+    <>
+      {a && <p role="status" aria-label="Set by your teacher" className="lr-pop mb-3 flex flex-wrap items-center gap-2 rounded-2xl bg-[#38BDF8]/15 p-3 text-sm font-bold text-[#E0F2FE] ring-1 ring-[#38BDF8]/40">📌 Your teacher set: <b>{a.title}</b>{a.note ? <span className="text-white/70">— “{a.note}”</span> : null}
+        {a.subject !== subject
+          ? <button type="button" onClick={() => onSubject(a.subject)} className="ml-auto rounded-lg bg-[#38BDF8] px-3 py-1.5 text-xs font-black text-[#0B1220]">Go to the {SUBJECTS[a.subject].label.toLowerCase()} lab</button>
+          : <button type="button" onClick={() => onPlan(a.slug)} className="ml-auto rounded-lg bg-[#38BDF8] px-3 py-1.5 text-xs font-black text-[#0B1220]">Plan it</button>}</p>}
+      {rc.reply && <p role="status" aria-label="Your teacher's reply" className={`mb-3 rounded-2xl p-3 text-sm font-bold ring-1 ${rc.reply.ok ? "bg-emerald-500/15 text-emerald-100 ring-emerald-400/40" : "bg-amber-500/15 text-amber-100 ring-amber-400/40"}`}>{rc.reply.ok ? "✓" : "💬"} Your teacher: {rc.reply.text}</p>}
+    </>
+  );
+}
+
+// A learner hands in their plan, apparatus, checks and observations.
+function HandIn({ subject, plan, picked, check, hazards, seen }: { subject: LabSubject; plan: Plan; picked: Item[]; check: ReturnType<typeof checkPlan>; hazards: string[]; seen: string[] }) {
+  const rc = useRoomClass();
+  if (rc.host || !rc.live || !rc.handIn) return null;
+  return (
+    <section aria-label="Hand in" className="mt-4 rounded-2xl bg-[#38BDF8]/10 p-3 ring-1 ring-[#38BDF8]/30">
+      {rc.reply && <p className={`mb-2 text-sm font-bold ${rc.reply.ok ? "text-emerald-200" : "text-amber-200"}`}>{rc.reply.ok ? "✓" : "💬"} Your teacher: {rc.reply.text}</p>}
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => rc.handIn!({ subject, plan: { title: plan.title, aim: plan.aim, independent: plan.independent, dependent: plan.dependent, controls: plan.controls, method: plan.method, target: plan.target }, picked: picked.map((x) => x.name), check: check ? { have: check.have, of: check.of, missing: check.missing } : null, hazards, seen: seen.slice(-25) })}
+          className="min-h-[48px] rounded-xl bg-[#38BDF8] px-4 text-sm font-black text-[#0B1220]">📤 {rc.handedIn ? "Hand it in again" : "Hand in my plan"}</button>
+        <span className="text-xs font-bold text-white/70">{rc.handedIn ? `✓ Handed in at ${new Date(rc.handedIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} — your teacher can see your plan and observations.` : "Your teacher sees your plan, apparatus, risk assessment and observations."}</span>
+      </div>
     </section>
   );
 }
@@ -178,6 +228,7 @@ function Planner({ subject, saved, save, picked, onOpen, onClose }: { subject: L
             <button type="button" onClick={() => add(risk.missingSafety)} className="ml-2 rounded-lg bg-amber-400 px-2 py-1 text-xs font-black text-[#0B1220]">＋ Add</button></p>}
         </section>
 
+        <HandIn subject={subject} plan={plan} picked={picked} check={check} hazards={risk.rows.map((r) => r.hazard)} seen={saved.bench.log.map((l) => l.text)} />
         <div className="mt-4 flex flex-wrap gap-2 pb-8">
           {target && <button type="button" disabled={!check?.ready} onClick={() => window.dispatchEvent(new CustomEvent(START_EVENT, { detail: target.slug }))} className="min-h-[48px] rounded-xl bg-emerald-500 px-4 text-sm font-black text-[#0B1220] disabled:opacity-40">▶ Start the practical</button>}
           <button type="button" onClick={() => printPlan(subject, plan, picked, risk.rows, saved.bench.log)} className="min-h-[48px] rounded-xl bg-white/10 px-4 text-sm font-black">🖨 Print / save as PDF</button>

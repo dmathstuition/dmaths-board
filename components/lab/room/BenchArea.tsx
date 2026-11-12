@@ -4,12 +4,17 @@
 // time runs (faster if you like) so things heat up, boil and change colour; what
 // happens is written in the notebook underneath.
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import type { Item } from "@/lib/lab/room/inventory";
 import { circuitNote, circuitState, colourOf, combine, emptyBench, partOf, tick, type BenchState, type Fx } from "@/lib/lab/room/bench";
 import { Bulb, Burner, Dial, Motor, Thermometer, Vessel, shapeOf } from "@/components/lab/room/Anim";
 import { ItemPic } from "@/components/lab/room/ItemPic";
 
 type Pos = Record<string, { x: number; y: number }>;
+// The 3D bench is loaded only when it's shown (three.js is big).
+const Bench3D = dynamic(() => import("@/components/lab/room/Bench3D"), { ssr: false, loading: () => <div className="flex h-[22rem] items-center justify-center rounded-2xl bg-[#111827] text-sm text-white/50 ring-1 ring-white/15 sm:h-[28rem]">Setting out the bench…</div> });
+const webgl = () => { try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); } catch { return false; } };
+const VIEW_KEY = "dm-lab-bench-view";
 const isVessel = (it: Item) => it.spec.e === "vessel" || /tube|flask|beaker|dish|jar|bottle|calorimeter|trough|cylinder/i.test(it.name);
 const DROP: Record<string, string> = { "#E0F2FE": "#BAE6FD" };
 
@@ -20,6 +25,11 @@ export default function BenchArea({ items, pos, bench, onMove, onRemove, onOpen,
   const [sel, setSel] = useState<string | null>(null), [flash, setFlash] = useState<{ id: string; fx: Fx; k: number; colour?: string } | null>(null);
   const [speed, setSpeed] = useState(5), [paused, setPaused] = useState(false), [last, setLast] = useState<{ text: string; ok: boolean } | null>(null);
   const benchRef = useRef(bench); benchRef.current = bench;
+  // 3D where the device can draw it; flat otherwise (or if the learner prefers).
+  const [view, setView] = useState<"3d" | "flat">("flat");
+  useEffect(() => { let v: string | null = null; try { v = localStorage.getItem(VIEW_KEY); } catch { /* storage blocked */ } setView(v === "flat" || !webgl() ? "flat" : "3d"); }, []);
+  const pickView = (v: "3d" | "flat") => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* storage blocked */ } };
+  const tap = (id: string | null) => { if (!id) return setSel(null); if (sel && sel !== id) act(sel, id); else setSel(sel === id ? null : id); };
   // New pieces stand on the worktop, then on the shelf above it.
   const at = (it: Item, i: number) => pos[it.id] ?? { x: 2 + (i % 7) * 14, y: i < 7 ? 38 : 2 + Math.floor((i - 7) / 7) * 16 };
   // Time runs while something is heating or a circuit is joined.
@@ -61,10 +71,29 @@ export default function BenchArea({ items, pos, bench, onMove, onRemove, onOpen,
         <span className="text-xs font-black text-white/60">Time:</span>
         <button type="button" onClick={() => setPaused(!paused)} aria-pressed={paused} className="min-h-[34px] rounded-lg bg-white/10 px-2.5 text-xs font-black">{paused ? "▶ Resume" : "⏸ Pause"}</button>
         {[1, 5, 20].map((s) => <button key={s} type="button" aria-pressed={speed === s} onClick={() => setSpeed(s)} className={`min-h-[34px] rounded-lg px-2.5 text-xs font-black ${speed === s ? "bg-white text-[#0B1220]" : "bg-white/10"}`}>×{s}</button>)}
-        <button type="button" onClick={() => { onBench(emptyBench()); setLast(null); }} className="ml-auto min-h-[34px] rounded-lg bg-white/10 px-2.5 text-xs font-black">↺ Clean the bench</button>
+        <span className="ml-auto flex overflow-hidden rounded-lg ring-1 ring-white/15" role="group" aria-label="View">
+          {(["3d", "flat"] as const).map((v) => <button key={v} type="button" aria-pressed={view === v} onClick={() => pickView(v)} className={`min-h-[34px] px-2.5 text-xs font-black ${view === v ? "bg-white text-[#0B1220]" : "bg-white/5"}`}>{v === "3d" ? "🧊 3D" : "▦ Flat"}</button>)}
+        </span>
+        <button type="button" onClick={() => { onBench(emptyBench()); setLast(null); }} className="min-h-[34px] rounded-lg bg-white/10 px-2.5 text-xs font-black">↺ Clean the bench</button>
       </div>
-      <p className="mt-1 text-xs text-white/55">{sel ? <>Now tap what to put the <b>{items.find((x) => x.id === sel)?.name.toLowerCase()}</b> on (or into). <button type="button" className="underline" onClick={() => setSel(null)}>Cancel</button></> : "Drag one piece onto another — or tap one, then the other. Tap ⓘ to look at it."}</p>
-      <div ref={box} aria-label="My bench" className="relative mt-1 h-80 overflow-hidden rounded-2xl ring-1 ring-white/15 sm:h-96" style={{ background: "linear-gradient(#1E293B 0 33%, #8B5E34 33% 34.5%, #5B3A1A 34.5% 35.5%, #1E293B 35.5% 74%, #CBD5E1 74% 75.5%, #64748B 75.5%)", touchAction: "none" }}>
+      <p className="mt-1 text-xs text-white/55">{sel ? <>Now tap what to put the <b>{items.find((x) => x.id === sel)?.name.toLowerCase()}</b> on (or into). <button type="button" className="underline" onClick={() => setSel(null)}>Cancel</button></> : view === "3d" ? "Drag a piece onto another — or tap one, then the other. Drag the empty bench to look round; pinch or scroll to zoom." : "Drag one piece onto another — or tap one, then the other. Tap ⓘ to look at it."}</p>
+      {view === "3d" ? <>
+        <div className="mt-1"><Bench3D items={items} pos={pos} bench={bench} sel={sel} onTap={tap} onDrop={act} onMove={onMove} /></div>
+        <ul aria-label="On my bench" className="mt-2 flex flex-wrap gap-1.5">
+          {items.map((it) => { const s = bench.slots[it.id] ?? {}, on = sel === it.id; return (
+            <li key={it.id} data-bench-item={it.id} className={`flex items-center gap-1 rounded-xl px-1.5 py-1 ring-1 ${on ? "bg-[#38BDF8]/25 ring-[#38BDF8]" : "bg-white/5 ring-white/15"}`}>
+              <button type="button" onClick={() => tap(it.id)} aria-pressed={on} className="min-h-[32px] px-1 text-left text-xs font-black">{it.icon} {it.name}{s.reading ? <span className="ml-1 font-mono text-[#34D399]">{s.reading}</span> : s.liquid ? <span className="ml-1 font-mono text-white/60">{Math.round(s.liquid.T)} °C</span> : null}</button>
+              {on && <>
+                <button type="button" onClick={() => onOpen(it.id)} aria-label={`About the ${it.name}`} className="h-7 rounded-md bg-white/80 px-1.5 text-[11px] font-black text-[#0B1220]">i</button>
+                <button type="button" onClick={() => { onRemove(it.id); setSel(null); }} aria-label={`Take the ${it.name} off the bench`} className="h-7 rounded-md bg-red-500 px-1.5 text-[11px] font-black">×</button>
+              </>}
+              {partOf(it) === "switch" && <button type="button" onClick={() => onBench(circuitState({ ...bench, slots: { ...bench.slots, [it.id]: { ...s, on: !s.on } } }, items))} className="h-7 rounded-md bg-white/15 px-1.5 text-[10px] font-black" aria-pressed={!!s.on}>{s.on ? "Open it" : "Close it"}</button>}
+              {s.heat && <button type="button" onClick={() => onBench({ ...bench, slots: { ...bench.slots, [it.id]: { ...s, heat: null, boiling: false }, [s.heat!]: { ...bench.slots[s.heat!], on: false } } })} className="h-7 rounded-md bg-white/15 px-1.5 text-[10px] font-black">Off the heat</button>}
+              {s.liquid && !s.heat && <button type="button" onClick={() => onBench({ ...bench, slots: { ...bench.slots, [it.id]: { ...s, liquid: undefined, boiling: false } } })} className="h-7 rounded-md bg-white/15 px-1.5 text-[10px] font-black">Empty it</button>}
+            </li>
+          ); })}
+        </ul>
+      </> : <div ref={box} aria-label="My bench" className="relative mt-1 h-80 overflow-hidden rounded-2xl ring-1 ring-white/15 sm:h-96" style={{ background: "linear-gradient(#1E293B 0 33%, #8B5E34 33% 34.5%, #5B3A1A 34.5% 35.5%, #1E293B 35.5% 74%, #CBD5E1 74% 75.5%, #64748B 75.5%)", touchAction: "none" }}>
         {/* wires between the circuit's parts */}
         {wired.length > 1 && (
           <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
@@ -94,7 +123,7 @@ export default function BenchArea({ items, pos, bench, onMove, onRemove, onOpen,
             {s.liquid && !s.heat && <button type="button" onClick={() => onBench({ ...bench, slots: { ...bench.slots, [it.id]: { ...s, liquid: undefined, boiling: false } } })} className="mt-1 rounded bg-white/15 px-1.5 text-[10px] font-black">Empty it</button>}
           </div>
         ); })}
-      </div>
+      </div>}
       {note && <p role="status" className="mt-2 rounded-lg bg-[#38BDF8]/10 px-3 py-2 text-sm font-bold text-[#BAE6FD]">⚡ {note}</p>}
       {last && <p role="status" aria-label="What happened" className={`lr-pop mt-2 rounded-lg px-3 py-2 text-sm font-bold ${last.ok ? "bg-emerald-500/15 text-emerald-100" : "bg-amber-500/15 text-amber-100"}`}>{last.ok ? "👀 " : "💡 "}{last.text}</p>}
       {bench.log.length > 0 && (

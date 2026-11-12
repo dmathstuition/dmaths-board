@@ -11,6 +11,9 @@ import PracticalThumb from "@/components/lab/bench/Thumb";
 import { LabReportContext, type LabReport } from "@/components/lab/bench/labReport";
 import LabTracker, { useNow } from "@/components/live/board/LabTracker";
 import { START_EVENT } from "@/components/lab/room/LabRoom";
+import { RoomClassContext, type RoomClass } from "@/components/lab/room/roomContext";
+import PlansPanel from "@/components/lab/room/PlansPanel";
+import { addPlan, cleanAssignment, cleanReply, cleanReport, type Assignment, type PlanReport, type Reply } from "@/lib/lab/room/planShare";
 import { addReport, cleanProgress, summary, type LabEntry as TrackEntry, type LabProgress } from "@/lib/lab/labTrack";
 
 // The E-Laboratory on the board. The teacher picks an experiment and works it
@@ -107,6 +110,13 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
 
   const [track, setTrack] = useKeptState<Record<string, TrackEntry>>(keep, "lab:track", {}); // teacher: each learner's progress
   const [tracking, setTracking] = useKeptState(keep, "lab:tracking", false);           // teacher: looking at the tracker
+  const [assign, setAssign] = useKeptState<Assignment | null>(keep, "lab:assign", null);          // teacher: the practical set
+  const [plans, setPlans] = useKeptState<Record<string, PlanReport>>(keep, "lab:plans", {});    // teacher: plans handed in
+  const [replies, setReplies] = useKeptState<Record<string, Reply>>(keep, "lab:replies", {});   // teacher: replies sent
+  const [viewPlans, setViewPlans] = useKeptState(keep, "lab:viewPlans", false);
+  const [assigned, setAssigned] = useKeptState<Assignment | null>(keep, "lab:assigned", null);   // learner: what was set
+  const [handedIn, setHandedIn] = useKeptState<number | null>(keep, "lab:handedIn", null);       // learner
+  const [myReply, setMyReply] = useKeptState<Reply | null>(keep, "lab:reply", null);             // learner
   const send = useLive({
     "lab-open": (p) => {
       if (host || !p?.host) return;
@@ -115,6 +125,10 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
       theirsRef.current = s; setTheirs(s);
     },
     "lab-progress": (p) => { if (host) setTrack((m) => addReport(m, cleanProgress(p), Date.now())); },
+    // Lab rooms: the practical set for the class, plans handed in, and replies.
+    "lab-assign": (p) => { if (host || !p?.host) return; const a = cleanAssignment(p.assign); setAssigned((cur) => (JSON.stringify(cur) === JSON.stringify(a) ? cur : a)); },
+    "lab-plan": (p) => { if (host) setPlans((m) => addPlan(m, cleanReport(p))); },
+    "lab-plan-reply": (p) => { if (host || !p?.host) return; const r = cleanReply(p); if (r && r.to === myId) setMyReply(r); },
   });
   // Teacher: keep learners in step while they're trying it.
   const repeat = useClassScale(); // big classes: repeat less (lib/classScale)
@@ -147,6 +161,20 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
     return () => clearInterval(t);
   }, [host, live, shared, slug, send, repeat]);
 
+  // Teacher: the practical set for the class goes out now and then (phones that join late see it).
+  useEffect(() => {
+    if (!host || !live) return;
+    const tell = () => send("lab-assign", { host: true, assign });
+    tell();
+    if (!assign) return;
+    const t = setInterval(tell, 5000 * repeat);
+    return () => clearInterval(t);
+  }, [host, live, assign, send, repeat]);
+  const planSeq = useRef(0);
+  const roomClass: RoomClass = host
+    ? { host: true, live, assignment: assign, setAssignment: (a) => { setAssign(a); if (a) { if (entryFor(`room-${a.subject}`)) setSlug(`room-${a.subject}`); setShared(true); } } }
+    : { host: false, live, assignment: assigned, handedIn, reply: myReply, handIn: live && myId ? (r) => { send("lab-plan", { ...r, by: myId, name: myName, v: ++planSeq.current, at: Date.now() }); setHandedIn(Date.now()); } : undefined };
+  const reply = (to: string, text: string, ok: boolean) => { const r = { to, text, ok, at: Date.now() }; send("lab-plan-reply", { host: true, ...r }); setReplies((m) => ({ ...m, [to]: r })); };
   const list = useMemo(() => BOARD_LAB.filter((e) =>
     (subject === "all" || e.subject === subject) &&
     (!q.trim() || `${e.title} ${e.blurb}`.toLowerCase().includes(q.trim().toLowerCase()))), [subject, q]);
@@ -219,7 +247,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
           <button type="button" onClick={() => setHidden(true)} className="min-h-[40px] shrink-0 rounded-xl bg-white px-3 text-xs font-black text-[#0B1220]">Back to the class board</button>
         </div>
         <div className="elab min-h-0 flex-1 overflow-auto overscroll-contain p-2 sm:p-4">
-          <div className="mx-auto max-w-6xl" style={{ zoom: entry.room ? 1 : scale }}><LabReportContext.Provider value={reportCtx}><Experiment /></LabReportContext.Provider></div>
+          <div className="mx-auto max-w-6xl" style={{ zoom: entry.room ? 1 : scale }}><LabReportContext.Provider value={reportCtx}><RoomClassContext.Provider value={roomClass}><Experiment /></RoomClassContext.Provider></LabReportContext.Provider></div>
         </div>
       </div>
     );
@@ -270,7 +298,12 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
               {trackSum.stuck > 0 && <span className="rounded-full bg-[#F87171] px-1.5 text-[11px] text-white">{trackSum.stuck} stuck</span>}
             </button>
           )}
-          <button type="button" onClick={() => { setSlug(null); setShared(false); setTracking(false); }} className={`${chip} bg-white/5 hover:bg-white/10`}>Change experiment</button>
+          {live && (entry.room || Object.keys(plans).length > 0) && (
+            <button type="button" onClick={() => setViewPlans(!viewPlans)} aria-pressed={viewPlans} className={`${chip} ${viewPlans ? "bg-white text-[#0B1220]" : "bg-white/10 hover:bg-white/15"}`}>
+              📋 Learners&apos; plans{Object.keys(plans).length ? ` · ${Object.keys(plans).length}` : ""}
+            </button>
+          )}
+          <button type="button" onClick={() => { setSlug(null); setShared(false); setTracking(false); setViewPlans(false); }} className={`${chip} bg-white/5 hover:bg-white/10`}>Change experiment</button>
         </div>
       )}
       {busy && <p role="status" className="bg-[#38BDF8]/15 px-4 py-2 text-sm font-bold text-[#BAE6FD]">{busy}</p>}
@@ -351,9 +384,10 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
       ) : (
         <div className="relative min-h-0 flex-1">
           <div className="elab absolute inset-0 isolate overflow-auto overscroll-contain p-2 sm:p-4">
-            <div ref={stage} className="mx-auto max-w-6xl" style={{ zoom: entry?.room ? 1 : scale }}>{Experiment && <Experiment />}</div>
+            <div ref={stage} className="mx-auto max-w-6xl" style={{ zoom: entry?.room ? 1 : scale }}>{Experiment && <RoomClassContext.Provider value={roomClass}><Experiment /></RoomClassContext.Provider>}</div>
           </div>
           {tracking && live && <LabTracker entries={trackList} quiet={quiet} onClose={() => setTracking(false)} />}
+          {viewPlans && <PlansPanel plans={plans} replies={replies} assignment={assign} onReply={reply} onClose={() => setViewPlans(false)} />}
         </div>
       )}
     </div>

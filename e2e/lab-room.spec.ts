@@ -161,14 +161,16 @@ test("free bench: apparatus react — a precipitate, heating to boiling, a lamp 
   await room(p).getByRole("button", { name: "Plan my practical" }).click();
   const plan = p.getByRole("dialog", { name: "Plan my practical" });
   const tile = (id: string) => plan.locator(`[data-bench-item="chemistry-${id}"]`);
-  const use = async (a: string, b: string) => { await tile(a).click({ position: { x: 46, y: 30 } }); await tile(b).click({ position: { x: 46, y: 30 } }); };
+  const use = async (a: string, b: string) => { await tile(a).getByRole("button").first().click(); await tile(b).getByRole("button").first().click(); };
+  // The bench is in 3D (drawn with WebGL); the pieces are also listed as buttons under it.
+  await expect(plan.getByRole("img", { name: /My bench in 3D/ }).locator("canvas")).toBeVisible({ timeout: 30_000 });
   // Copper(II) sulfate, then sodium hydroxide: a light blue precipitate.
   await use("copper-ii-sulfate", "test-tube");
   await expect(plan.getByRole("status", { name: "What happened" })).toContainText("Copper(II) sulfate poured in");
   await use("sodium-hydroxide", "test-tube");
   await expect(plan.getByRole("status", { name: "What happened" })).toContainText("light blue");
   await p.waitForTimeout(1200);
-  if (SHOTS) await plan.getByLabel("My bench").screenshot({ path: `${SHOTS}/bench-ppt.png` });
+  if (SHOTS) await plan.getByRole("img", { name: /My bench in 3D/ }).screenshot({ path: `${SHOTS}/bench-ppt.png` });
   // Water in a beaker, on the Bunsen, thermometer in: it heats to 100 °C and boils.
   await use("distilled-water", "beaker");
   await use("beaker", "bunsen-burner");
@@ -176,9 +178,9 @@ test("free bench: apparatus react — a precipitate, heating to boiling, a lamp 
   await plan.getByRole("toolbar", { name: "Bench controls" }).getByRole("button", { name: "×20" }).click();
   await expect(tile("thermometer")).toContainText("100 °C", { timeout: 60_000 });
   await expect(plan.getByRole("region", { name: "My observations" })).toContainText("boiling at 100 °C");
-  if (SHOTS) await plan.getByLabel("My bench").screenshot({ path: `${SHOTS}/bench-boil.png` });
+  if (SHOTS) await plan.getByRole("img", { name: /My bench in 3D/ }).screenshot({ path: `${SHOTS}/bench-boil.png` });
   // Trying something silly is explained, not ignored.
-  await tile("sodium-hydroxide").click({ position: { x: 46, y: 30 } }); await tile("bunsen-burner").getByText("Bunsen burner").click(); // the beaker on it covers its top
+  await use("sodium-hydroxide", "bunsen-burner");
   await expect(plan.getByRole("status", { name: "What happened" })).toContainText("Nothing happens");
 
   // Physics: a cell, switch, lamp and ammeter — close the switch and the lamp lights.
@@ -187,10 +189,63 @@ test("free bench: apparatus react — a precipitate, heating to boiling, a lamp 
   for (const [q, n] of [["batteries", "Batteries"], ["switch", "Switch"], ["electric bulb", "Electric bulb"], ["ammeter", "Ammeter"]]) { await room(p).getByPlaceholder(/Search/).fill(q); await room(p).getByRole("button", { name: `Pick the ${n}`, exact: true }).click(); }
   await room(p).getByRole("button", { name: "Plan my practical" }).click();
   const ph = (id: string) => plan.locator(`[data-bench-item="physics-${id}"]`);
-  const join = async (a: string, b: string) => { await ph(a).click({ position: { x: 46, y: 30 } }); await ph(b).click({ position: { x: 46, y: 30 } }); };
+  const join = async (a: string, b: string) => { await ph(a).getByRole("button").first().click(); await ph(b).getByRole("button").first().click(); };
   await join("switch", "batteries"); await join("electric-bulb", "switch"); await join("ammeter", "electric-bulb");
   await expect(plan.getByText("The switch is open")).toBeVisible();
   await ph("switch").getByRole("button", { name: "Close it" }).click();
   await expect(ph("ammeter")).toContainText(/0\.\d\d A/, { timeout: 10_000 });
-  if (SHOTS) { await p.waitForTimeout(800); await plan.getByLabel("My bench").screenshot({ path: `${SHOTS}/bench-circuit.png` }); }
+  if (SHOTS) { await p.waitForTimeout(800); await plan.getByRole("img", { name: /My bench in 3D/ }).screenshot({ path: `${SHOTS}/bench-circuit.png` }); }
+  // The flat view is still there, with the same bench.
+  await plan.getByRole("group", { name: "View" }).getByRole("button", { name: "▦ Flat" }).click();
+  await expect(plan.getByLabel("My bench", { exact: true })).toBeVisible();
+  await expect(ph("ammeter")).toContainText(/0\.\d\d A/);
+});
+
+test("the teacher sets a practical; a learner plans it on their phone and hands it in; the teacher replies", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const hub = realtimeHub(), server = classServer();
+  const open = async (who: "teacher" | "learner") => {
+    const ctx = await browser.newContext(who === "learner" ? { viewport: { width: 400, height: 820 }, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 860 } });
+    await hub.attach(ctx, who); await server.attach(ctx, who);
+    const page = await ctx.newPage();
+    await page.goto(who === "teacher" ? `/e2e-host?id=${SID}` : `/class/${SID}`, { waitUntil: "networkidle" });
+    await agree(page);
+    await expect(page.locator("canvas").first()).toBeVisible();
+    return page;
+  };
+  const teacher = await open("teacher"), learner = await open("learner");
+  await teacher.getByRole("button", { name: "Laboratory" }).click();
+  const lab = teacher.getByRole("dialog", { name: "Laboratory" });
+  await lab.getByRole("region", { name: "Lab rooms" }).getByRole("button", { name: "Chemistry Lab Room" }).click();
+  const set = room(teacher).getByRole("region", { name: "Set a practical" });
+  await set.getByLabel("Set a practical for the class to plan").selectOption({ label: "Acid–Alkali Titration" });
+  await set.getByLabel("Note (optional)").fill("Include a risk assessment");
+  await set.getByRole("button", { name: "Set it for the class" }).click();
+  await expect(set.getByText("Set for the class:")).toBeVisible();
+
+  // The learner's phone: the room opens with what was set.
+  const banner = learner.getByRole("status", { name: "Set by your teacher" });
+  await expect(banner).toContainText("Acid–Alkali Titration", { timeout: 30_000 });
+  await expect(banner).toContainText("Include a risk assessment");
+  await banner.getByRole("button", { name: "Plan it" }).click();
+  const plan = learner.getByRole("dialog", { name: "Plan my practical" });
+  await expect(plan.getByLabel("Which practical are you planning?")).toHaveValue("titration");
+  await plan.getByRole("button", { name: "＋ Add them" }).click();
+  await plan.getByLabel("Aim").fill("To find the concentration of hydrochloric acid.");
+  await plan.getByRole("button", { name: "📤 Hand in my plan" }).click();
+  await expect(plan.getByText(/✓ Handed in at/)).toBeVisible();
+
+  // The teacher sees it, and replies.
+  await lab.getByRole("button", { name: /Learners' plans · 1/ }).click({ timeout: 30_000 });
+  const plans = lab.getByRole("region", { name: "Learners' plans" });
+  await plans.getByRole("button", { name: /Acid–Alkali Titration/ }).click();
+  await expect(plans.getByText("🧰 8/8")).toBeVisible();
+  await expect(plans.getByText(/Missing from the plan: the variables/)).toBeVisible();
+  if (SHOTS) await teacher.screenshot({ path: `${SHOTS}/teacher-plans.png` });
+  await plans.getByRole("textbox", { name: /Reply to/ }).fill("Say what you will change and measure.");
+  await plans.getByRole("button", { name: /💬 Send to/ }).click();
+  await expect(plan.getByText("💬 Your teacher: Say what you will change and measure.")).toBeVisible({ timeout: 30_000 });
+  await plans.getByRole("button", { name: "✓ Approve" }).click();
+  await expect(plan.getByText(/✓ Your teacher: Good plan/)).toBeVisible({ timeout: 30_000 });
+  if (SHOTS) await learner.screenshot({ path: `${SHOTS}/learner-reply.png` });
 });
