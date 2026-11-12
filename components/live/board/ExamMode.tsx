@@ -12,6 +12,11 @@ import { UK_SETS } from "@/lib/ukPrimary";
 import { SCHEMES, gradeOf, schemeById, type GradeScheme } from "@/lib/examReport";
 import { CalculatorButton } from "@/components/live/PhoneCalculator";
 import { downloadExamCsv, downloadExamReports } from "@/lib/examDownloads";
+import dynamic from "next/dynamic";
+// The IGCSE practical paper maker draws the lab's apparatus: loaded only when the builder opens.
+const AtpBuilder = dynamic(() => import("@/components/lab/AtpPaper"), { ssr: false });
+import GraphPlot from "@/components/live/board/GraphPlot";
+import { shownAnswer } from "@/lib/exams";
 import { EXAM_MINUTES, EXAM_TOPICS, MAX_PAGE_MARKS, MAX_WRITTEN, clockLeft, isHandMarked, keepsOrder, needsMarking, pageDone, workingKey, spokenSpelling, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
 import { BookletLayout, MarkingDesk, PageFlow, WorkingPad } from "@/components/live/board/PaperPages";
 import type { Difficulty } from "@/lib/games/generators";
@@ -380,6 +385,10 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
             <fieldset className="mt-3"><legend className="text-xs font-black text-ink/60">Time</legend>
               <div className="mt-1 flex flex-wrap gap-1.5">{EXAM_MINUTES.map((m) => <button key={m} type="button" aria-pressed={minutes === m} onClick={() => setMinutes(m)} className={chip(minutes === m)}>{m} min</button>)}</div>
             </fieldset>
+            <AtpBuilder sessionId={sessionId} onPaper={(paper, p) => {
+              if (qs.length && !window.confirm(`Replace the ${qs.length} question${qs.length === 1 ? "" : "s"} below with this practical paper?`)) return;
+              setQs(paper); setBookletPages([]); ownTitle.current = false; setTitle(p.title); setMinutes(p.minutes); setCalcOk(true); setInOrder(true); setReview(true); pickScale("gcse");
+            }} />
             <section aria-label="KS2 SATs" className="mt-4 rounded-xl bg-[#EEF7F6] p-3 ring-1 ring-[#CDE7E5]">
               <p className="text-xs font-black text-[#0A4F52]">📘 KS2 SATs practice</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -531,6 +540,8 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
                     </div>
                   ) : q.kind === "page" ? (
                     <p className="mt-2 pl-5 text-xs font-bold text-ink/60">✍️ Learners write on this page and hand it in — you mark it.</p>
+                  ) : q.kind === "graph" ? (
+                    <p className="mt-2 pl-5 text-xs font-bold text-ink/60">📈 Learners plot the points{q.grid?.curve ? "" : " and draw the line of best fit"} on graph paper ({q.grid?.y} against {q.grid?.x}) — marked automatically.</p>
                   ) : q.kind === "written" ? (
                     <label className="mt-2 flex items-center gap-2 pl-5 text-xs font-bold text-ink/60">✍️ You mark it · Mark scheme notes
                       <input value={String(q.answer)} maxLength={400} onChange={(e) => setQ(i, { answer: e.target.value })} aria-label={`Mark scheme notes for question ${i + 1}`} placeholder="What earns the marks (only you see this until the exam ends) — optional" className={`${field} min-w-0 flex-1`} />
@@ -987,6 +998,8 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
               );
             })}
           </div>
+        ) : q.kind === "graph" && q.grid ? (
+          <GraphPlot grid={q.grid} value={answers[String(q.n)]} readOnly={kept.has(q.n)} onChange={(j) => answer(q.n, j, true)} />
         ) : q.kind === "written" ? (
           <label className="mt-4 block text-sm font-bold text-ink/60">Your answer <span className="font-semibold text-ink/45">({q.marks} mark{q.marks === 1 ? "" : "s"}{q.marks >= 2 ? " — explain, and use the text" : ""})</span>
             <textarea value={String(answers[String(q.n)] ?? "")} readOnly={kept.has(q.n)} maxLength={MAX_WRITTEN} rows={q.marks >= 3 ? 7 : q.marks === 2 ? 5 : 3} onChange={(e) => answer(q.n, e.target.value, true)}
@@ -1051,8 +1064,9 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
             <li key={i} className={`rounded-xl p-3 ring-1 ${r.right ? "bg-emerald-50 ring-emerald-200" : "bg-red-50 ring-red-200"}`}>
               <p className="text-sm font-black">{r.right ? "✓" : "✗"} {i + 1}. {r.q}</p>
               <p className="mt-0.5 text-xs font-semibold text-ink/70">
-                {r.kind === "written" ? <>You wrote: {String(r.given ?? "").trim() || "no answer"} · <b>{r.mark == null ? "not marked yet" : `${r.mark} / ${r.marks}`}</b>{!!String(r.answer ?? "").trim() && r.mark !== r.marks && <span className="block text-emerald-800">A full answer includes: {String(r.answer)}</span>}</> : r.kind === "page" ? (r.given == null ? "Not marked yet" : `Your teacher's mark: ${r.given} / ${r.marks}`) : <>You: {r.given == null || r.given === "" ? "no answer" : r.kind === "choice" ? r.options[Number(r.given)] : String(r.given)}</>}
-                {!r.right && r.kind !== "page" && r.kind !== "written" && <> · <span className="font-black text-emerald-800">Answer: {r.kind === "choice" ? r.options[Number(r.answer)] : String(r.answer).split("|")[0].trim()}</span></>}
+                {r.kind === "graph" ? <>Your graph: {String(r.given ?? "").trim() || "nothing plotted"} · <b>{r.mark ?? 0} / {r.marks}</b>{r.mark !== r.marks && !!String(r.answer ?? "").trim() && <span className="block text-emerald-800">{String(r.answer)}</span>}</>
+                : r.kind === "written" ? <>You wrote: {String(r.given ?? "").trim() || "no answer"} · <b>{r.mark == null ? "not marked yet" : `${r.mark} / ${r.marks}`}</b>{!!String(r.answer ?? "").trim() && r.mark !== r.marks && <span className="block text-emerald-800">A full answer includes: {String(r.answer)}</span>}</> : r.kind === "page" ? (r.given == null ? "Not marked yet" : `Your teacher's mark: ${r.given} / ${r.marks}`) : <>You: {r.given == null || r.given === "" ? "no answer" : r.kind === "choice" ? r.options[Number(r.given)] : String(r.given)}</>}
+                {!r.right && r.kind !== "page" && r.kind !== "written" && r.kind !== "graph" && <> · <span className="font-black text-emerald-800">Answer: {r.kind === "choice" ? r.options[Number(r.answer)] : shownAnswer(r.answer)}</span></>}
               </p>
             </li>
           ))}

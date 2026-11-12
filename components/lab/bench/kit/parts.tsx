@@ -5,8 +5,9 @@ import type { ReactNode } from "react";
 export function digits(cx: number, cy: number, text: string, unit: string, colour = "#F87171"): ReactNode {
   return (
     <g>
-      <rect x={cx - 100} y={cy - 40} width={200} height={80} rx={10} fill="#0B1220" stroke="#475569" strokeWidth={3} />
-      <text x={cx + 30} y={cy + 16} textAnchor="end" fontSize={44} fontWeight={700} fontFamily="ui-monospace, monospace" fill={colour}>{text}</text>
+      {/* Dark digits are a stopwatch's LCD: on its pale screen, so they can be read. */}
+      <rect x={cx - 100} y={cy - 40} width={200} height={80} rx={10} fill={/^#[0-3]/.test(colour) ? "#C9D6B8" : "#0B1220"} stroke="#475569" strokeWidth={3} />
+      <text x={cx + 30} y={cy + 15} textAnchor="end" fontSize={text.length > 4 ? 38 : 44} fontWeight={700} fontFamily="ui-monospace, monospace" fill={colour}>{text}</text>
       <text x={cx + 40} y={cy + 14} fontSize={22} fontWeight={800} fill={colour}>{unit}</text>
     </g>
   );

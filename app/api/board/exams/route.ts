@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { sessionViewer } from "@/lib/sessionAccess";
 import { rateLimit } from "@/lib/ratelimit";
-import { AI_EXAM_SYSTEM, GRACE_MS, aiExamPrompt, cleanAiExam, cleanExamQuestions, cleanGiven, MAX_BOOKLET, MAX_WRITTEN, cleanPageAnswer, cleanPageMarks, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageBlank, pageDone, pagesToMark, shownQ, slimAnswers, teacherMax, workingKey, type ExamQ } from "@/lib/exams";
+import { AI_EXAM_SYSTEM, GRACE_MS, aiExamPrompt, cleanAiExam, cleanExamQuestions, cleanGiven, cleanGraphGiven, graphAnswerText, graphGivenText, graphMarks, MAX_BOOKLET, MAX_WRITTEN, cleanPageAnswer, cleanPageMarks, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageBlank, pageDone, pagesToMark, shownQ, slimAnswers, teacherMax, workingKey, type ExamQ } from "@/lib/exams";
 import { isWarmUp, missedSpellings } from "@/lib/sats";
 import { nameKey } from "@/lib/stars";
 import { isSlideUrl } from "@/lib/whiteboard";
@@ -190,6 +190,7 @@ export async function GET(req: Request) {
         given: q.kind === "page" ? (myMarks[String(i)] ?? (pageBlank(given[String(i)]) ? 0 : null)) : given[String(i)] ?? null, // a page: the teacher's mark
         ...(q.method && myMarks[String(i)] != null ? { method: myMarks[String(i)] } : {}),
         ...(q.kind === "written" ? { mark: myMarks[String(i)] ?? (String(given[String(i)] ?? "").trim() ? null : 0) } : {}),
+        ...(q.kind === "graph" ? { given: graphGivenText(given[String(i)]), answer: graphAnswerText(q), mark: graphMarks(q, given[String(i)]) } : {}),
       }));
     }
     return NextResponse.json(out, { headers: { "Cache-Control": "no-store" } });
@@ -436,7 +437,7 @@ export async function POST(req: Request) {
         value = action === "page-done" ? { ...cleanPageAnswer(body?.value ?? had), done: new Date().toISOString() } : cleanPageAnswer(body?.value);
       } else {
         if (action === "page-done") return bad("That isn't a page.");
-        value = q.kind === "written" ? String(body?.value ?? "").replace(/\r/g, "").slice(0, MAX_WRITTEN) : cleanGiven(body?.value);
+        value = q.kind === "written" ? String(body?.value ?? "").replace(/\r/g, "").slice(0, MAX_WRITTEN) : q.kind === "graph" ? cleanGraphGiven(body?.value) : cleanGiven(body?.value);
       }
       const answers = { ...(entry.answers ?? {}), [String(n)]: value };
       const { error } = await admin.from("board_exam_entries").update({ answers }).eq("exam_id", e.id).eq("student_id", v.id);

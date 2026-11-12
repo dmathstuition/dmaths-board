@@ -1,4 +1,5 @@
 import { readFile } from "fs/promises";
+import { writeFileSync } from "fs";
 import { test, expect, type Browser, type BrowserContext } from "@playwright/test";
 import { SID, agree, classServer, realtimeHub } from "./helpers";
 import { keptOf, redoExtraMs, redoPaper, triesOf, withoutTries } from "../lib/examRedo";
@@ -648,4 +649,61 @@ test("send a learner back to redo: only the wrong ones (right answers kept), a m
   await teacher.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
   await expect(panel.getByRole("cell", { name: /0 \/ 3.*was 3 \/ 3/ })).toBeVisible({ timeout: 15_000 });
   await expect(exam.getByText("Handed in ✓")).toBeVisible({ timeout: 20_000 });
+});
+
+test("an IGCSE practical paper from the lab: figures, a results table, a graph plotted on the phone and marked", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const SHOTS = process.env.LAB_SHOTS;
+  const { teacher, learner } = await openClass(browser);
+  // The figures go up like a paper's pages: keep them to look at.
+  let figN = 0;
+  if (SHOTS) teacher.context().on("request", (r) => { if (/upload\/sign/.test(r.url()) && r.method() !== "OPTIONS") { const b = r.postDataBuffer(); if (b && b.length > 2000) writeFileSync(`${SHOTS}/atp-figure-${++figN}.jpg`, b); } });
+  let created: ExamQ[] = [];
+  teacher.on("request", (r) => { if (r.url().includes("/api/board/exams") && r.method() === "POST") { const b = JSON.parse(r.postData() ?? "{}"); if (b.action === "create") created = cleanExamQuestions(b.questions); } });
+
+  await teacher.getByRole("button", { name: "Exam mode" }).click();
+  const panel = teacher.getByRole("dialog", { name: "Exam mode" });
+  const atp = panel.getByRole("region", { name: "IGCSE practical paper" });
+  await atp.getByRole("button", { name: "Physics 0625" }).click();
+  await atp.getByRole("button", { name: /Choose the practicals/ }).click();
+  await atp.getByLabel("Ohm's law: current and p.d.").check();
+  await atp.getByRole("button", { name: "Make the paper" }).click();
+  await expect(atp.getByRole("status")).toContainText("✓ IGCSE Physics (0625) — Alternative to Practical", { timeout: 60_000 });
+  await expect(panel.getByLabel("Title")).toHaveValue("IGCSE Physics (0625) — Alternative to Practical");
+  await expect(panel.getByText(/Learners plot the points and draw the line of best fit/)).toBeVisible();
+  await expect(panel.getByLabel(/Calculator allowed/)).toBeChecked();
+  if (SHOTS) await panel.screenshot({ path: `${SHOTS}/atp-builder.png` });
+  await panel.getByRole("button", { name: /Start the exam \(\d+ questions, 60 min\)/ }).click();
+  await expect.poll(() => created.length, { timeout: 20_000 }).toBeGreaterThan(3);
+  const total = created.reduce((s, q) => s + q.marks, 0);
+  const graph = created.find((q) => q.kind === "graph")!;
+  const key = JSON.parse(String(graph.answer)) as { p: [number, number][]; m: number; c: number };
+
+  // The learner's phone: the paper in order, with its figures.
+  const exam = learner.getByRole("dialog", { name: /^Exam: IGCSE Physics/ });
+  await expect(exam.getByRole("button", { name: "Start the exam" })).toBeVisible({ timeout: 20_000 });
+  await exam.getByRole("button", { name: "Start the exam" }).click();
+  await expect(exam.getByText(/^1\s+Ohm's law/)).toBeVisible();
+  await expect(exam.getByRole("img", { name: /^The page for 1/ })).toBeVisible(); // Table 1.1
+  for (let i = 0; i < created.length && !(await exam.getByRole("group", { name: "Graph tools" }).isVisible()); i++) await exam.getByRole("button", { name: "Next →" }).click();
+
+  // Plot every point, then the line of best fit.
+  const paper = exam.getByRole("img", { name: /^Graph paper/ });
+  await paper.scrollIntoViewIfNeeded();
+  const box = (await paper.boundingBox())!, g = graph.grid!;
+  const at = (x: number, y: number) => ({ x: box.x + ((66 + ((x - g.x0) / (g.x1 - g.x0)) * 478) / 560) * box.width, y: box.y + ((16 + 446 - ((y - g.y0) / (g.y1 - g.y0)) * 446) / 520) * box.height });
+  for (const [x, y] of key.p) { const s = at(x, y); await learner.mouse.click(s.x, s.y); }
+  await expect(exam.getByText(`${key.p.length} points plotted`)).toBeVisible();
+  await exam.getByRole("button", { name: "／ Line of best fit" }).click();
+  const xs = key.p.map((q) => q[0]), lx = Math.min(...xs), hx = Math.max(...xs); // the line from the first point's x to the last's
+  const a = at(lx, key.m * lx + key.c), b = at(hx, key.m * hx + key.c);
+  await learner.mouse.click(a.x, a.y); await learner.mouse.click(b.x, b.y);
+  await expect(exam.getByText(/line drawn/)).toBeVisible();
+  if (SHOTS) await learner.screenshot({ path: `${SHOTS}/atp-graph-phone.png` });
+  await learner.waitForTimeout(900);
+  await exam.getByRole("navigation", { name: "Questions" }).getByRole("button").last().click(); // the last question: the plan
+  await expect(exam.getByText(/Plan an experiment/)).toBeVisible();
+  await exam.getByRole("button", { name: "Hand in", exact: true }).click();
+  await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
+  await expect(exam.getByText(`3 / ${total}`)).toBeVisible({ timeout: 15_000 }); // the graph's 3 marks; the rest left blank
 });

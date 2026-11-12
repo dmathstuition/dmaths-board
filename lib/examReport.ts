@@ -1,6 +1,6 @@
 // One learner's exam result and analysis, and the class's, for the reports
 // the teacher downloads (lib/examPdf.ts). Pure.
-import { markPaper, pageBlank, shownQ, type ExamQ } from "@/lib/exams";
+import { graphAnswerText, graphGivenText, markPaper, pageBlank, shownAnswer, shownQ, type ExamQ } from "@/lib/exams";
 
 export type ReportEntry = {
   id: string; name: string; answers: Record<string, unknown>; flags: number; flagLog: { at: string; reason: string }[];
@@ -70,9 +70,10 @@ export const GRADES = GCSE.grades;
 const answerText = (q: ExamQ, v: unknown): string => {
   if (v == null || v === "") return "";
   if (q.kind === "choice") { const i = Number(v); return Number.isInteger(i) && q.options[i] != null ? q.options[i] : ""; }
+  if (q.kind === "graph") return graphGivenText(v);
   return String(v).slice(0, 200);
 };
-const correctText = (q: ExamQ) => (q.kind === "page" || q.kind === "written" ? "Marked by the teacher" : q.kind === "choice" ? q.options[Number(q.answer)] ?? "" : String(q.answer));
+const correctText = (q: ExamQ) => (q.kind === "page" || q.kind === "written" ? "Marked by the teacher" : q.kind === "choice" ? q.options[Number(q.answer)] ?? "" : q.kind === "graph" ? graphAnswerText(q) : shownAnswer(q.answer));
 
 function remarkFor(pct: number, avg: number | null, blank: number, flags: number, scheme: GradeScheme): string {
   const g = gradeOf(pct, scheme), named = scheme.id === "gcse" ? `grade ${g}` : g;

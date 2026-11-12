@@ -19,7 +19,12 @@ import { cleanAnswerStrokes } from "@/lib/answerBoards";
 // kind "written": a written answer (a reading paper's 1-, 2- and 3-mark
 // questions) the teacher marks; answer = their mark-scheme notes (learners only
 // see them afterwards).
-export type ExamQ = { q: string; kind: "choice" | "typed" | "spell" | "page" | "written"; options: string[]; answer: number | string; marks: number; img?: string; hear?: boolean; method?: boolean };
+// kind "graph": learners plot points on a grid and draw the line of best fit
+// (an IGCSE practical paper). grid: the axes; answer: the points and line
+// expected, as JSON ({"p":[[x,y],…],"m":gradient,"c":intercept}). Marked
+// automatically: the plots, then the line.
+export type Grid = { x: string; y: string; x0: number; x1: number; y0: number; y1: number; curve?: boolean }; // curve: join the points with a smooth curve (no straight line to mark)
+export type ExamQ = { q: string; kind: "choice" | "typed" | "spell" | "page" | "written" | "graph"; options: string[]; answer: number | string; marks: number; img?: string; hear?: boolean; method?: boolean; grid?: Grid };
 export const MAX_EXAM_QUESTIONS = 60;
 export const MAX_PAGE_MARKS = 20;
 export const MAX_WRITTEN = 1500; // a written answer, in characters
@@ -41,6 +46,11 @@ export function cleanExamQuestions(v: unknown): ExamQ[] {
     const img = isSlideUrl(x?.img) ? { img: x.img as string } : {};
     if (x?.kind === "page") {
       if (img.img) out.push({ q, kind: "page", options: [], answer: "", marks: Math.max(1, Math.min(MAX_PAGE_MARKS, Math.round(Number(x?.marks) || 1))), img: img.img });
+      continue;
+    }
+    if (x?.kind === "graph") {
+      const grid = cleanGrid(x?.grid), key = cleanGraphKey(x?.answer);
+      if (grid && key) out.push({ q, kind: "graph", options: [], answer: JSON.stringify(key), marks: Math.max(2, marks), grid, ...img });
       continue;
     }
     if (x?.kind === "written") {
@@ -98,14 +108,14 @@ export const shownQ = (q: ExamQ) => (q.kind === "spell" ? gapped(q) : q.q);
 
 // What a learner's phone gets while the exam is open: no answers (a spelling
 // word only goes to the phone when the teacher lets learners hear it there).
-export type LearnerQ = { n: number; q: string; kind: ExamQ["kind"]; options: { i: number; text: string }[]; marks: number; img?: string; say?: string; method?: boolean };
+export type LearnerQ = { n: number; q: string; kind: ExamQ["kind"]; options: { i: number; text: string }[]; marks: number; img?: string; say?: string; method?: boolean; grid?: Grid };
 export function learnerPaper(examId: string, studentId: string, qs: ExamQ[], inOrder = false): LearnerQ[] {
   const { order, opts } = learnerOrder(examId, studentId, qs, keepsOrder(qs, inOrder));
   return order.map((n) => {
     const x = qs[n];
     return {
       n, q: shownQ(x), kind: x.kind, marks: x.marks, options: opts[n].map((i) => ({ i, text: x.options[i] })),
-      ...(x.img ? { img: x.img } : {}), ...(x.kind === "spell" && x.hear ? { say: spokenSpelling(x, n + 1) } : {}), ...(x.method ? { method: true } : {}),
+      ...(x.img ? { img: x.img } : {}), ...(x.grid ? { grid: x.grid } : {}), ...(x.kind === "spell" && x.hear ? { say: spokenSpelling(x, n + 1) } : {}), ...(x.method ? { method: true } : {}),
     };
   });
 }
@@ -131,12 +141,82 @@ export function typedRight(given: string, answer: string): boolean {
   return answer.split("|").some((alt) => {
     const a = tidy(alt);
     if (!a) return false;
+    // A range, for a reading read off a scale: "23.40..23.50" (both ends count).
+    const range = a.match(/^(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)$/);
+    if (range) { const gn = asNumber(given); return gn != null && gn >= Number(range[1]) - 1e-9 && gn <= Number(range[2]) + 1e-9; }
     // Numbers as numbers ("13/8" isn't "1 3/8", though both lose their spaces).
     const gn = asNumber(given), an = asNumber(alt);
     if (gn != null && an != null) return Math.abs(gn - an) < 1e-9 * Math.max(1, Math.abs(an));
     return g === a;
   });
 }
+// ── Graphs ──
+const finite = (v: unknown) => (typeof v === "number" ? Number.isFinite(v) : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)));
+export function cleanGrid(v: unknown): Grid | null {
+  const g = v as Partial<Grid> | null;
+  if (!g || ![g.x0, g.x1, g.y0, g.y1].every(finite)) return null;
+  const x0 = Number(g.x0), x1 = Number(g.x1), y0 = Number(g.y0), y1 = Number(g.y1);
+  if (!(x1 > x0 && y1 > y0)) return null;
+  return { x: str(g.x, 60).trim() || "x", y: str(g.y, 60).trim() || "y", x0, x1, y0, y1, ...(g.curve ? { curve: true } : {}) };
+}
+export type GraphKey = { p: [number, number][]; m: number; c: number };
+function cleanGraphKey(v: unknown): GraphKey | null {
+  let k: any = v;
+  if (typeof v === "string") { try { k = JSON.parse(v); } catch { return null; } }
+  const p = (Array.isArray(k?.p) ? k.p : []).filter((q: any) => Array.isArray(q) && finite(q[0]) && finite(q[1])).slice(0, 20).map((q: any) => [Number(q[0]), Number(q[1])] as [number, number]);
+  if (p.length < 2 || !finite(k?.m) || !finite(k?.c)) return null;
+  return { p, m: Number(k.m), c: Number(k.c) };
+}
+// What a learner drew: their points, and their line (two points on it).
+export type GraphGiven = { p: [number, number][]; l: [[number, number], [number, number]] | null };
+export const MAX_GRAPH_POINTS = 20;
+export function parseGraphGiven(v: unknown): GraphGiven {
+  let k: any = v;
+  if (typeof v === "string") { try { k = JSON.parse(v); } catch { k = null; } }
+  const pt = (q: any): [number, number] | null => (Array.isArray(q) && finite(q[0]) && finite(q[1]) ? [Math.round(Number(q[0]) * 1e4) / 1e4, Math.round(Number(q[1]) * 1e4) / 1e4] : null);
+  const p = (Array.isArray(k?.p) ? k.p : []).map(pt).filter(Boolean).slice(0, MAX_GRAPH_POINTS) as [number, number][];
+  const a = Array.isArray(k?.l) ? pt(k.l[0]) : null, b = Array.isArray(k?.l) ? pt(k.l[1]) : null;
+  return { p, l: a && b && (a[0] !== b[0] || a[1] !== b[1]) ? [a, b] : null };
+}
+// Kept as a short string, like any other answer.
+export const cleanGraphGiven = (v: unknown): string => { const g = parseGraphGiven(v); return g.p.length || g.l ? JSON.stringify(g) : ""; };
+// How close a plot must be: a little over half a small square on a 10 × 10 grid of big squares (5 small in each).
+export const PLOT_TOL = 0.012;
+// The marks a graph earns: the plots (all but one mark: lose one for each point
+// missed), then one for a line of best fit — its slope within 10% and passing
+// close to the middle of the points.
+export function graphMarks(q: Pick<ExamQ, "kind" | "answer" | "marks" | "grid">, given: unknown): number {
+  if (q.kind !== "graph" || !q.grid) return 0;
+  const key = cleanGraphKey(q.answer), g = parseGraphGiven(given);
+  if (!key) return 0;
+  const { x0, x1, y0, y1 } = q.grid, tx = PLOT_TOL * (x1 - x0), ty = PLOT_TOL * (y1 - y0);
+  const missed = key.p.filter(([x, y]) => !g.p.some(([a, b]) => Math.abs(a - x) <= tx && Math.abs(b - y) <= ty)).length;
+  const plots = Math.max(0, q.marks - (q.grid.curve ? 0 : 1) - missed);
+  let line = 0;
+  if (g.l && !q.grid.curve) {
+    const [[ax, ay], [bx, by]] = g.l;
+    if (bx !== ax) {
+      const m = (by - ay) / (bx - ax), mx = key.p.reduce((s, p) => s + p[0], 0) / key.p.length, my = key.p.reduce((s, p) => s + p[1], 0) / key.p.length;
+      const slopeOk = Math.abs(m - key.m) <= Math.max(0.1 * Math.abs(key.m), 0.02 * (y1 - y0) / (x1 - x0));
+      const throughMiddle = Math.abs(ay + m * (mx - ax) - my) <= 0.03 * (y1 - y0);
+      if (slopeOk && throughMiddle) line = 1;
+    }
+  }
+  return Math.min(q.marks, plots + line);
+}
+export function graphGivenText(v: unknown): string {
+  const g = parseGraphGiven(v);
+  if (!g.p.length && !g.l) return "";
+  return `${g.p.length} point${g.p.length === 1 ? "" : "s"} plotted${g.l ? ", line drawn" : ", no line"}`;
+}
+const num4 = (n: number) => String(Math.round(n * 1000) / 1000);
+export function graphAnswerText(q: Pick<ExamQ, "answer" | "grid">): string {
+  const k = cleanGraphKey(q.answer);
+  return k ? `Points: ${k.p.map(([x, y]) => `(${num4(x)}, ${num4(y)})`).join(" ")}${(q as ExamQ).grid?.curve ? "; a smooth curve through them" : `; best-fit line, gradient ≈ ${num4(k.m)}`}` : "";
+}
+
+// A typed answer as a person reads it: the first form, a range as "23.40 to 23.50".
+export const shownAnswer = (a: unknown) => String(a ?? "").split("|")[0].trim().replace(/^(-?[\d.]+)\.\.(-?[\d.]+)$/, "$1 to $2");
 export const cleanGiven = (v: unknown): string | number | null =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 && v < 10 ? v : typeof v === "string" ? v.slice(0, 120) : null;
 
@@ -208,6 +288,7 @@ export const spelledRight = (given: string, word: string) => !!spellTidy(given) 
 
 export function isRight(q: ExamQ, given: unknown): boolean {
   if (given == null || q.kind === "page" || q.kind === "written") return false;
+  if (q.kind === "graph") return graphMarks(q, given) === q.marks;
   if (q.kind === "choice") return Number(given) === q.answer;
   if (q.kind === "spell") return spelledRight(String(given), String(q.answer));
   return typedRight(String(given), String(q.answer));
@@ -219,10 +300,10 @@ export function reviewItems(qs: ExamQ[], answers: Record<string, unknown>, pageM
   return qs.map((q, i) => {
     const v = answers?.[String(i)], mark = pageMarks?.[String(i)];
     const given = q.kind === "page" ? (pageBlank(v) ? "" : "Written on the page") : q.kind === "written" ? String(v ?? "").trim()
-      : q.kind === "choice" ? (v == null || v === "" ? "" : q.options[Number(v)] ?? "") : String(v ?? "").trim();
-    const answer = q.kind === "page" ? "" : q.kind === "written" ? String(q.answer ?? "").trim() : q.kind === "choice" ? q.options[Number(q.answer)] ?? "" : String(q.answer).split("|")[0].trim();
+      : q.kind === "choice" ? (v == null || v === "" ? "" : q.options[Number(v)] ?? "") : q.kind === "graph" ? graphGivenText(v) : String(v ?? "").trim();
+    const answer = q.kind === "page" ? "" : q.kind === "graph" ? graphAnswerText(q) : q.kind === "written" ? String(q.answer ?? "").trim() : q.kind === "choice" ? q.options[Number(q.answer)] ?? "" : shownAnswer(q.answer);
     const right = q.kind !== "page" && isRight(q, v);
-    const got = q.kind === "page" || q.kind === "written" ? Math.min(q.marks, Math.max(0, Number(mark) || 0)) : right ? q.marks : q.method ? Math.min(teacherMax(q), Math.max(0, Number(mark) || 0)) : 0;
+    const got = q.kind === "page" || q.kind === "written" ? Math.min(q.marks, Math.max(0, Number(mark) || 0)) : q.kind === "graph" ? graphMarks(q, v) : right ? q.marks : q.method ? Math.min(teacherMax(q), Math.max(0, Number(mark) || 0)) : 0;
     const pending = q.kind === "page" ? mark == null && !pageBlank(v) : q.kind === "written" ? mark == null && !writtenBlank(v) : !!q.method && !right && mark == null && !workingBlank(answers?.[workingKey(i)]);
     return { q: shownQ(q), kind: q.kind, given, answer, got, marks: q.marks, right: got === q.marks && q.marks > 0, ...(pending ? { pending: true } : {}) };
   });
@@ -231,7 +312,7 @@ export function reviewItems(qs: ExamQ[], answers: Record<string, unknown>, pageM
 // pageMarks: the teacher's marks for pages (added up with everything marked automatically).
 export function markPaper(qs: ExamQ[], answers: Record<string, unknown>, pageMarks: Record<string, number> = {}): { score: number; total: number; right: boolean[] } {
   const given = (q: ExamQ, i: number) => Math.max(0, Math.min(teacherMax(q), Math.round(Number(pageMarks?.[String(i)]) || 0)));
-  const got = qs.map((q, i) => (q.kind === "page" || q.kind === "written" ? given(q, i) : isRight(q, answers?.[String(i)]) ? q.marks : q.method ? given(q, i) : 0));
+  const got = qs.map((q, i) => (q.kind === "page" || q.kind === "written" ? given(q, i) : q.kind === "graph" ? graphMarks(q, answers?.[String(i)]) : isRight(q, answers?.[String(i)]) ? q.marks : q.method ? given(q, i) : 0));
   return { score: got.reduce((a, b) => a + b, 0), total: qs.reduce((s, q) => s + q.marks, 0), right: qs.map((q, i) => q.marks > 0 && got[i] === q.marks) };
 }
 

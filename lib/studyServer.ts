@@ -46,7 +46,7 @@ export async function missedFor(sessionId: string, studentId: string): Promise<{
       const qs = Array.isArray(e.questions) ? e.questions : [];
       const m = markPaper(qs, entry.answers ?? {});
       qs.forEach((q, i) => {
-        if (m.right[i] || q.kind === "page" || q.kind === "written") return; // a page marked by hand has no single answer to practise
+        if (m.right[i] || q.kind === "page" || q.kind === "written" || q.kind === "graph") return; // a page marked by hand has no single answer to practise
         const v = entry.answers?.[String(i)];
         const given = q.kind === "choice" ? (v == null || v === "" ? "" : q.options[Number(v)] ?? "") : String(v ?? "");
         missed.push({ from: `Exam Q${i + 1}`, q: shownQ(q), options: q.kind === "choice" ? q.options : [], answer: q.kind === "choice" ? q.options[Number(q.answer)] ?? null : String(q.answer).split("|")[0].trim(), given });
@@ -100,7 +100,7 @@ export async function lessonText(sessionId: string): Promise<LessonText | null> 
   ]);
   for (const qz of quizzes.data ?? []) for (const q of (Array.isArray((qz as any).questions) ? (qz as any).questions : [])) questions.push({ q: String(q?.q ?? ""), answer: Array.isArray(q?.options) ? String(q.options[Number(q.answer)] ?? "") || null : null, from: "Quiz" });
   if (!exams.error) for (const ex of exams.data ?? []) for (const q of (Array.isArray((ex as any).questions) ? (ex as any).questions : []) as ExamQ[]) {
-    if (q.kind === "page" || q.kind === "written") continue;
+    if (q.kind === "page" || q.kind === "written" || q.kind === "graph") continue;
     questions.push({ q: shownQ(q), answer: q.kind === "choice" ? q.options[Number(q.answer)] ?? null : String(q.answer).split("|")[0].trim(), from: "Exam" });
   }
   for (const m of marks.data ?? []) if ((m as any).question) questions.push({ q: String((m as any).question), answer: null, from: "Class work" });
