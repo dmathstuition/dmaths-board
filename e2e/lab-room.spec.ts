@@ -75,19 +75,21 @@ test("lab room: pick apparatus, plan a titration — checked, risk-assessed — 
   const lab = p.getByRole("dialog", { name: "Laboratory" });
   await lab.getByRole("region", { name: "Lab rooms" }).getByRole("button", { name: "Chemistry Lab Room" }).click();
   await expect(room(p)).toBeVisible({ timeout: 30_000 });
-  if (SHOTS) await p.screenshot({ path: `${SHOTS}/room-shelves.png` });
+  // On a phone too, the 3D lab is the first thing in the room.
+  await expect(room(p).getByRole("img", { name: /My bench in 3D/ }).locator("canvas")).toBeVisible({ timeout: 30_000 });
+  if (SHOTS) { await p.waitForTimeout(1500); await p.screenshot({ path: `${SHOTS}/room-shelves.png` }); }
 
   // Pick two things from the shelves.
   await room(p).getByPlaceholder(/Search/).fill("burette");
   await room(p).getByRole("button", { name: "Pick the Burette", exact: true }).click();
   await room(p).getByPlaceholder(/Search/).fill("hydrochloric");
   await room(p).getByRole("button", { name: "Pick the Hydrochloric acid" }).click();
-  await expect(room(p).getByText("🧰 My bench · 2")).toBeVisible();
+  await expect(room(p).getByRole("button", { name: "Put back the Hydrochloric acid", exact: true })).toBeVisible();
 
   // Plan: the titration needs more — add what's missing.
   await room(p).getByRole("button", { name: "Plan my practical" }).click();
   const plan = p.getByRole("dialog", { name: "Plan my practical" });
-  await expect(plan.getByLabel("My bench").getByText("Burette")).toBeVisible();
+  await expect(plan.getByLabel("My apparatus").getByText("Burette")).toBeVisible();
   await plan.getByLabel("Which practical are you planning?").selectOption({ label: "Acid–Alkali Titration" });
   await expect(plan.getByText(/2 of 8\. Still needed: .*Volumetric pipette/)).toBeVisible();
   await expect(plan.getByRole("button", { name: "▶ Start the practical" })).toBeDisabled();
@@ -155,15 +157,16 @@ test("free bench: apparatus react — a precipitate, heating to boiling, a lamp 
   const lab = p.getByRole("dialog", { name: "Laboratory" });
   await lab.getByRole("region", { name: "Lab rooms" }).getByRole("button", { name: "Chemistry Lab Room" }).click();
   await expect(room(p)).toBeVisible({ timeout: 30_000 });
-  await expect(room(p).getByRole("img", { name: "The chemistry laboratory" })).toBeVisible();
-  const pick = async (search: string, name: string) => { await room(p).getByPlaceholder(/Search/).fill(search); await room(p).getByRole("button", { name: `Pick the ${name}`, exact: true }).click(); };
+  // The 3D lab is the first thing in the room, with a few things already out on the bench.
+  const plan = room(p).getByRole("region", { name: "Lab bench" });
+  await expect(plan.getByRole("img", { name: /My bench in 3D/ }).locator("canvas")).toBeVisible({ timeout: 30_000 });
+  await expect(plan.locator('[data-bench-item="chemistry-bunsen-burner"]')).toBeVisible();
+  if (SHOTS) await p.screenshot({ path: `${SHOTS}/room-3d.png` });
+  const pick = async (search: string, name: string) => { await room(p).getByPlaceholder(/Search/).fill(search); const b = room(p).getByRole("button", { name: `Pick the ${name}`, exact: true }); await expect(b.or(room(p).getByRole("button", { name: `Put back the ${name}`, exact: true }))).toBeVisible(); if (await b.isVisible()) await b.click(); };
   for (const [q, n] of [["copper(II) sulfate", "Copper(II) sulfate"], ["sodium hydroxide", "Sodium hydroxide"], ["test tube", "Test tube"], ["distilled", "Distilled water"], ["beaker", "Beaker"], ["bunsen", "Bunsen burner"], ["thermometer", "Thermometer"]]) await pick(q, n);
-  await room(p).getByRole("button", { name: "Plan my practical" }).click();
-  const plan = p.getByRole("dialog", { name: "Plan my practical" });
   const tile = (id: string) => plan.locator(`[data-bench-item="chemistry-${id}"]`);
   const use = async (a: string, b: string) => { await tile(a).getByRole("button").first().click(); await tile(b).getByRole("button").first().click(); };
   // The bench is in 3D (drawn with WebGL); the pieces are also listed as buttons under it.
-  await expect(plan.getByRole("img", { name: /My bench in 3D/ }).locator("canvas")).toBeVisible({ timeout: 30_000 });
   // Copper(II) sulfate, then sodium hydroxide: a light blue precipitate.
   await use("copper-ii-sulfate", "test-tube");
   await expect(plan.getByRole("status", { name: "What happened" })).toContainText("Copper(II) sulfate poured in");
@@ -184,10 +187,8 @@ test("free bench: apparatus react — a precipitate, heating to boiling, a lamp 
   await expect(plan.getByRole("status", { name: "What happened" })).toContainText("Nothing happens");
 
   // Physics: a cell, switch, lamp and ammeter — close the switch and the lamp lights.
-  await plan.getByRole("button", { name: "Back to the shelves" }).click();
   await room(p).getByRole("tab", { name: "Physics lab" }).click();
-  for (const [q, n] of [["batteries", "Batteries"], ["switch", "Switch"], ["electric bulb", "Electric bulb"], ["ammeter", "Ammeter"]]) { await room(p).getByPlaceholder(/Search/).fill(q); await room(p).getByRole("button", { name: `Pick the ${n}`, exact: true }).click(); }
-  await room(p).getByRole("button", { name: "Plan my practical" }).click();
+  for (const [q, n] of [["batteries", "Batteries"], ["switch", "Switch"], ["electric bulb", "Electric bulb"], ["ammeter", "Ammeter"]]) await pick(q, n);
   const ph = (id: string) => plan.locator(`[data-bench-item="physics-${id}"]`);
   const join = async (a: string, b: string) => { await ph(a).getByRole("button").first().click(); await ph(b).getByRole("button").first().click(); };
   await join("switch", "batteries"); await join("electric-bulb", "switch"); await join("ammeter", "electric-bulb");
