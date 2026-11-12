@@ -6,6 +6,7 @@ import type { QuizView } from "@/lib/liveQuiz";
 import { ANSWER_STYLE, Shape, useCountdown } from "@/components/live/QuizBits";
 import { Podium } from "@/components/live/QuizHostStage";
 import { GameScene, MyTeam } from "@/components/live/QuizGames";
+import { Backdrop, Briefing, ChapterBanner, LiveHud, worldOf } from "@/components/live/QuizWorld";
 import { cleanGame, modeInfo, type GameState } from "@/lib/quizGames";
 import { clockSynced, useServerClock } from "@/lib/serverClock";
 
@@ -101,8 +102,11 @@ export default function QuizPlayer({ sessionId, myName, myId = "", onState, onDi
   // The round before, so the scene can move on from where it was.
   if (game && (seen.current.now?.quizId !== game.quizId || seen.current.now?.round !== game.round)) seen.current = { before: seen.current.now?.quizId === game.quizId ? seen.current.now : null, now: game };
   const scene = game && <div className="mt-5 w-full"><GameScene key={`${game.quizId}-${game.mode}`} g={game} from={seen.current.before} myId={myId} sound /></div>;
-  const shell = "relative flex min-h-[70vh] flex-col overflow-hidden rounded-[1.75rem] p-4 text-white sm:min-h-[520px] sm:p-6";
-  const stage = `${shell} quiz-stage`;
+  // With a game style, everything happens in the game's world (components/live/QuizWorld).
+  const world = game ? worldOf(game.mode) : null;
+  const shell = "relative isolate flex min-h-[70vh] flex-col overflow-hidden rounded-[1.75rem] p-4 text-white sm:min-h-[520px] sm:p-6";
+  const stage = `${shell} ${world ? "" : "quiz-stage"}`;
+  const backdrop = game && <Backdrop mode={game.mode} />;
   const top = (
     <div className="flex items-center justify-between text-sm font-black text-white/80">
       <span>{quiz.status === "lobby" || quiz.status === "ended" ? quiz.title : `${quiz.current + 1} of ${quiz.total}`}</span>
@@ -113,13 +117,14 @@ export default function QuizPlayer({ sessionId, myName, myId = "", onState, onDi
   if (quiz.status === "lobby") {
     return (
       <div className={stage}>
+        {backdrop}
         {top}
         <div className="m-auto text-center">
           <p className="quiz-pop font-display text-4xl font-black">You&apos;re in!</p>
           <p className="mt-2 text-lg font-bold text-white/80">See your name on the screen?</p>
           <div className="quiz-bob mx-auto mt-6 flex w-fit gap-2">{[0, 1, 2, 3].map((k) => <span key={k} className="rounded-lg p-2" style={{ background: ANSWER_STYLE[k].color }}><Shape i={k} className="h-6 w-6" /></span>)}</div>
           {game && <p className="quiz-pop mt-6 text-2xl font-black">{modeInfo(game.mode).emoji} {modeInfo(game.mode).name}</p>}
-          {game && <p className="mt-1 text-sm font-bold text-white/80">{modeInfo(game.mode).hint}</p>}
+          {game && <Briefing mode={game.mode} />}
           {game && <MyTeam g={game} myId={myId} className="quiz-pop mt-3 inline-block !px-5 !py-2 !text-xl" />}
           <p className="mt-6 text-sm text-white/70">{quiz.total} question{quiz.total === 1 ? "" : "s"} · answer fast for more points · keep a streak for bonus 🔥</p>
         </div>
@@ -132,10 +137,13 @@ export default function QuizPlayer({ sessionId, myName, myId = "", onState, onDi
     if (mine) {
       return (
         <div className={stage}>
+          {backdrop}
           {top}
           <div className="m-auto text-center">
+            {world && <p className="mb-4 text-6xl" aria-hidden><span className="qw-rev">{world.hero}</span></p>}
             <span className="quiz-pop mx-auto flex h-24 w-24 items-center justify-center rounded-3xl" style={{ background: ANSWER_STYLE[mine.choice].color }}><Shape i={mine.choice} className="h-12 w-12" /></span>
             <p className="mt-5 font-display text-3xl font-black">Answer locked in</p>
+            {world && <p className="mt-1 text-lg font-black text-amber-200">{world.locked}</p>}
             {(() => {
               const key = `${quiz.id}:${quiz.current}`;
               const said = sure?.key === key ? sure.sure : null;
@@ -158,17 +166,24 @@ export default function QuizPlayer({ sessionId, myName, myId = "", onState, onDi
     // The question screen always fits the screen (phones upright or sideways):
     // the answers share the space left under the question instead of a fixed height.
     return (
-      <div ref={boxRef} className="relative flex h-[calc(100dvh-16px)] max-h-[760px] min-h-[300px] scroll-mt-2 flex-col overflow-hidden rounded-[1.75rem] p-3 text-white quiz-stage sm:p-5 [@media(max-height:520px)]:p-2.5">
+      <div ref={boxRef} className={`relative isolate flex h-[calc(100dvh-16px)] max-h-[760px] min-h-[300px] scroll-mt-2 flex-col overflow-hidden rounded-[1.75rem] p-3 text-white sm:p-5 [@media(max-height:520px)]:p-2.5 ${world ? "" : "quiz-stage"}`}>
+        {backdrop}
         {top}
+        {game && (
+          <div className="mt-2 grid gap-1.5 [@media(max-height:560px)]:hidden">
+            <ChapterBanner mode={game.mode} idx={quiz.current} total={quiz.total} small />
+            <LiveHud g={game} myId={myId} compact />
+          </div>
+        )}
         <div className="mt-2 flex items-start gap-3 rounded-2xl bg-white p-3 text-ink sm:mt-3 sm:p-4 [@media(max-height:520px)]:py-2">
           <p className="max-h-[30vh] flex-1 overflow-y-auto font-display text-lg font-black leading-snug [@media(max-height:520px)]:text-base">{q.q}</p>
           <Speak text={`${q.q}. ${q.options.map((o, i) => `Option ${i + 1}: ${o}.`).join(" ")}`} />
-          <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full font-black text-white ${left <= 5 ? "bg-red-500" : "bg-violet-600"}`} aria-label={`${left} seconds left`}>{left}</span>
+          <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full font-black text-white ${left <= 5 ? "bg-red-500" : "bg-violet-600"}`} style={world && left > 5 ? { background: world.ribbon } : undefined} aria-label={`${left} seconds left`}>{left}</span>
         </div>
         <div className="mt-2 grid min-h-0 flex-1 auto-rows-fr grid-cols-2 gap-2 sm:mt-3 sm:gap-3 [@media(max-height:520px)]:grid-cols-4">
           {q.options.map((o, k) => (
             <button key={k} type="button" disabled={left === 0 || sending !== null} onClick={() => answer(k)}
-              className={`flex min-h-[56px] flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl p-2 text-center font-black shadow-lg transition active:scale-95 disabled:opacity-50 sm:gap-2 sm:p-3 ${sending === k ? "ring-4 ring-white" : ""}`}
+              className={`qw-btn flex min-h-[56px] flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl p-2 text-center font-black transition active:scale-95 disabled:opacity-50 sm:gap-2 sm:p-3 ${sending === k ? "ring-4 ring-white" : ""}`}
               style={{ background: ANSWER_STYLE[k].color }} aria-label={`${ANSWER_STYLE[k].shape}: ${o}`}>
               <Shape i={k} className="h-7 w-7 shrink-0 [@media(min-height:640px)]:h-10 [@media(min-height:640px)]:w-10" />
               <span className="line-clamp-3 text-[15px] leading-snug">{o}</span>
@@ -185,12 +200,14 @@ export default function QuizPlayer({ sessionId, myName, myId = "", onState, onDi
     const right = !!mine?.correct;
     return (
       <div className={quiz.status === "reveal" ? `${shell} ${right ? "bg-emerald-600" : "bg-rose-600"}` : stage}>
+        {quiz.status !== "reveal" && backdrop}
         {top}
         <div className="m-auto text-center">
           {quiz.status === "reveal" ? (
             <>
               <p className="quiz-pop font-display text-5xl font-black">{mine ? (right ? "Correct!" : "Incorrect") : "Time's up"}</p>
               <p className="quiz-pop mt-3 text-5xl" aria-hidden>{right ? "✔" : "✖"}</p>
+              {world && <p className="quiz-pop mt-2 text-xl font-black" style={{ animationDelay: "150ms" }}>{right ? world.right : world.wrong}</p>}
               {right && (mine?.streak ?? 0) >= 2 && <p className="mt-3 inline-block rounded-full bg-white/20 px-4 py-1.5 font-black">🔥 Answer streak {mine?.streak}</p>}
               <p className="mt-4 rounded-2xl bg-black/20 px-6 py-3 font-display text-3xl font-black">+{mine?.points ?? 0}</p>
               {!right && q && q.answer !== null && <p className="mt-3 text-white/85">Answer: <b>{q.options[q.answer]}</b></p>}
@@ -210,6 +227,7 @@ export default function QuizPlayer({ sessionId, myName, myId = "", onState, onDi
   // Ended — podium.
   return (
     <div className={stage}>
+      {backdrop}
       {top}
       {scene}
       <Podium rows={quiz.leaderboard} title={quiz.title} me={myName} />

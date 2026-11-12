@@ -9,6 +9,7 @@ import type { QuizView } from "@/lib/liveQuiz";
 import { formatCode } from "@/lib/liveSession";
 import { ANSWER_STYLE, Leaderboard, Shape, secondsLeft, useCountdown } from "@/components/live/QuizBits";
 import { GAME_STEP, GameScene, ModePicker, TeamsPreview } from "@/components/live/QuizGames";
+import { Backdrop, Briefing, ChapterBanner, LiveHud, ReadyRow, worldOf } from "@/components/live/QuizWorld";
 import { assignTeams, computeGame, isMode, modeInfo, shuffleTeams, type GameMode, type Player, type Scored } from "@/lib/quizGames";
 import { useClassScale } from "@/lib/classScale";
 import { clockSynced, useServerClock } from "@/lib/serverClock";
@@ -141,7 +142,9 @@ export default function QuizHostStage({ sessionId, code, people, base, onActive 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [left, quiz?.answered, quiz?.status, quiz?.current, q?.startedAt]);
 
-  const stage = "quiz-stage relative min-h-[460px] overflow-hidden rounded-[1.75rem] p-5 text-white shadow-[0_30px_60px_-30px_rgba(76,29,149,.8)] sm:p-8";
+  // With a game style, the whole quiz happens inside the game's world (components/live/QuizWorld).
+  const world = worldOf(mode);
+  const stage = `${world ? "" : "quiz-stage"} relative isolate min-h-[460px] overflow-hidden rounded-[1.75rem] p-5 text-white shadow-[0_30px_60px_-30px_rgba(76,29,149,.8)] sm:p-8`;
 
   // ── Pick a quiz ──
   if (!quiz || (quiz.status === "ended" && quiz.id === dismissed)) return picker();
@@ -195,6 +198,7 @@ export default function QuizHostStage({ sessionId, code, people, base, onActive 
 
   return (
     <div className={stage}>
+      <Backdrop mode={mode} />
       {/* Top strip: PIN always visible for latecomers */}
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-bold text-white/80">
         <span className="truncate">{quiz.title}{mode !== "classic" && <span className="ml-2 rounded-full bg-amber-300 px-2.5 py-0.5 text-xs font-black text-[#3b2600]">{modeInfo(mode).emoji} {modeInfo(mode).name}</span>}</span>
@@ -214,26 +218,30 @@ export default function QuizHostStage({ sessionId, code, people, base, onActive 
             {!here.length && <li className="quiz-bob text-white/60">Waiting for learners to join…</li>}
           </ul>
           {setup && <ModePicker mode={mode} onPick={(m) => setSetup({ ...setup, mode: m })} />}
+          <Briefing mode={mode} />
           {game && modeInfo(mode).teams && <TeamsPreview teams={game.teams} onShuffle={() => setSetup({ ...setup!, teams: shuffleTeams(players) })} />}
         </div>
       )}
 
       {quiz.status === "question" && q && (
         <div className="mt-5">
-          <div className="quiz-pop rounded-2xl bg-white px-5 py-6 text-center text-ink shadow-xl">
+          {world && <div className="mb-3"><ChapterBanner mode={mode} idx={quiz.current} total={quiz.total} /></div>}
+          <div className={`quiz-pop rounded-2xl bg-white px-5 py-6 text-center text-ink shadow-xl ${world ? "border-t-8" : ""}`} style={world ? { borderColor: world.ribbon } : undefined}>
             <p className="font-display text-2xl font-black leading-snug sm:text-3xl">{q.q}</p>
           </div>
           <div className="my-5 flex items-center justify-between">
-            <span className={`flex h-20 w-20 items-center justify-center rounded-full text-3xl font-black ${left <= 5 ? "bg-red-500" : "bg-violet-500"} ring-4 ring-white/30`} aria-label={`${left} seconds left`}>{left}</span>
+            <span className={`flex h-20 w-20 items-center justify-center rounded-full text-3xl font-black ${left <= 5 ? "bg-red-500" : "bg-violet-500"} ring-4 ring-white/30`} style={world && left > 5 ? { background: world.ribbon } : undefined} aria-label={`${left} seconds left`}>{left}</span>
             <span className="text-right"><span className="block font-display text-4xl font-black">{quiz.answered}</span><span className="text-sm font-bold text-white/70">answer{quiz.answered === 1 ? "" : "s"}{quiz.roster ? ` of ${quiz.roster}` : ""}</span></span>
           </div>
+          {world && <div className="-mt-2 mb-4"><ReadyRow mode={mode} answered={quiz.answered} roster={quiz.roster} /></div>}
           <div className="grid gap-3 sm:grid-cols-2">
             {q.options.map((o, k) => (
-              <div key={k} className="quiz-rise flex min-h-[72px] items-center gap-3 rounded-2xl px-4 py-3 text-lg font-black shadow-lg" style={{ background: ANSWER_STYLE[k].color, animationDelay: `${k * 70}ms` }}>
+              <div key={k} className="qw-btn quiz-rise flex min-h-[72px] items-center gap-3 rounded-2xl px-4 py-3 text-lg font-black" style={{ background: ANSWER_STYLE[k].color, animationDelay: `${k * 70}ms` }}>
                 <Shape i={k} className="h-8 w-8 flex-shrink-0" /><span>{o}</span>
               </div>
             ))}
           </div>
+          {world && <div className="mt-4"><LiveHud g={game} /></div>}
         </div>
       )}
 

@@ -1145,6 +1145,58 @@ html:not(.dark) .portal-sky { color: #0B1220; }
 @keyframes quizBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 .quiz-bob { animation: quizBob 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .quiz-rise, .quiz-pop, .quiz-grow, .quiz-bob { animation: none; } }
+/* Live quiz game worlds (components/live/QuizWorld): the moving backdrops and game panels. */
+.qw-light { background: radial-gradient(circle, rgba(254,249,195,.55) 0%, rgba(254,249,195,0) 70%); animation: qwFlicker 4s ease-in-out infinite; }
+@keyframes qwFlicker { 0%, 100% { opacity: .85; } 50% { opacity: 1; } 52% { opacity: .55; } 54% { opacity: 1; } }
+.qw-road { background: repeating-linear-gradient(90deg, #FDE047 0 40px, transparent 40px 80px); animation: qwRoad .45s linear infinite; }
+@keyframes qwRoad { to { background-position: -80px 0; } }
+.qw-streak { right: -140px; animation: qwStreak 1.2s linear infinite; }
+@keyframes qwStreak { from { transform: translateX(0); } to { transform: translateX(-140vw); } }
+.qw-stars { background-image: radial-gradient(1.6px 1.6px at 10% 20%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 30% 70%, #fff 50%, transparent 51%), radial-gradient(1.2px 1.2px at 55% 35%, #E0E7FF 50%, transparent 51%), radial-gradient(1px 1px at 75% 85%, #fff 50%, transparent 51%), radial-gradient(1.8px 1.8px at 88% 15%, #FDE68A 50%, transparent 51%), radial-gradient(1px 1px at 45% 90%, #fff 50%, transparent 51%), radial-gradient(1.3px 1.3px at 65% 55%, #fff 50%, transparent 51%); background-size: 260px 260px; animation: qwDrift 70s linear infinite; }
+.qw-stars-slow { background-size: 170px 170px; animation-duration: 130s; animation-direction: reverse; }
+@keyframes qwDrift { to { transform: translate(-260px, 260px); } }
+.qw-shoot { opacity: 0; animation: qwShoot 7s ease-in 1.5s infinite; }
+@keyframes qwShoot { 0% { opacity: 0; transform: translate(0, 0) rotate(-30deg); } 3% { opacity: 1; } 11% { opacity: 0; transform: translate(-280px, 160px) rotate(-30deg); } 100% { opacity: 0; transform: translate(-280px, 160px) rotate(-30deg); } }
+.qw-cloud { left: -180px; filter: blur(1px); box-shadow: 30px -10px 0 -2px rgba(255,255,255,.8), 60px 0 0 -4px rgba(255,255,255,.7); animation: qwCloud 40s linear infinite; }
+@keyframes qwCloud { to { transform: translateX(calc(100vw + 360px)); } }
+.qw-sail { animation: qwSail 45s linear infinite, qwBobY 3s ease-in-out infinite; }
+@keyframes qwSail { from { left: -12%; } to { left: 108%; } }
+@keyframes qwBobY { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-6px) rotate(3deg); } }
+.qw-waves { background: radial-gradient(40px 12px at 40px 0, transparent 60%, rgba(255,255,255,.35) 63%, transparent 72%) 0 0 / 80px 24px repeat; animation: qwWaves 6s linear infinite; }
+.qw-waves-slow { background-size: 130px 34px; animation-duration: 11s; animation-direction: reverse; }
+@keyframes qwWaves { to { background-position: 80px 0; } }
+.qw-gull { animation: qwGull 4s ease-in-out infinite; }
+@keyframes qwGull { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(30px, -10px); } }
+.qw-flag { transform-origin: 0 100%; animation: qwFlag 1.6s ease-in-out infinite; }
+@keyframes qwFlag { 0%, 100% { transform: skewY(0); } 50% { transform: skewY(-7deg); } }
+.qw-spot { background: conic-gradient(from 165deg at 50% 0%, transparent 0deg, rgba(199,210,254,.3) 8deg, transparent 20deg); animation: qwSpot 7s ease-in-out infinite alternate; }
+.qw-spot-b { animation-delay: -3.5s; animation-direction: alternate-reverse; }
+@keyframes qwSpot { from { transform: rotate(-20deg); } to { transform: rotate(20deg); } }
+.qw-crowd { background: radial-gradient(13px 15px at 14px 16px, #2E2A6B 70%, transparent 72%) 0 0 / 28px 32px repeat-x; animation: qwCrowd .7s ease-in-out infinite alternate; }
+@keyframes qwCrowd { to { transform: translateY(-5px); } }
+.qw-torch { animation: qwTorch .3s ease-in-out infinite alternate; }
+@keyframes qwTorch { to { transform: scale(1.1, .9); opacity: .85; } }
+.qw-lava { background: linear-gradient(0deg, #F97316 0%, rgba(249,115,22,.45) 45%, rgba(249,115,22,0) 100%); animation: qwLava 3s ease-in-out infinite; }
+@keyframes qwLava { 0%, 100% { opacity: .65; } 50% { opacity: 1; } }
+.qw-ember { opacity: 0; box-shadow: 0 0 6px 2px rgba(251,146,60,.8); animation: qwEmber 4s ease-in infinite; }
+@keyframes qwEmber { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(24px, -460px); opacity: 0; } }
+.qw-eyes { animation: qwBlink 5s steps(1) infinite; }
+@keyframes qwBlink { 0%, 93%, 100% { opacity: .8; } 94%, 97% { opacity: 0; } }
+.qw-banner { animation: qwBanner .6s cubic-bezier(.16,.84,.44,1) both; }
+@keyframes qwBanner { from { transform: translateY(-14px) scale(.92); opacity: 0; } to { transform: none; opacity: 1; } }
+.qw-ready { filter: drop-shadow(0 0 6px rgba(253,224,71,.85)); animation: qwReady .5s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes qwReady { from { transform: scale(.4); } to { transform: scale(1); } }
+.qw-meter { transition: width 1s cubic-bezier(.16,.84,.44,1); }
+.qw-knot { transition: left 1.2s cubic-bezier(.34,1.56,.64,1); }
+.qw-rev { display: inline-block; animation: qwRev .22s ease-in-out infinite alternate; }
+@keyframes qwRev { from { transform: translateX(-3px) rotate(-3deg); } to { transform: translateX(3px) rotate(3deg); } }
+.qw-btn { box-shadow: inset 0 -6px 0 rgba(0,0,0,.22), 0 10px 18px -10px rgba(0,0,0,.6); }
+.qw-btn:active:not(:disabled) { box-shadow: inset 0 -2px 0 rgba(0,0,0,.22); transform: translateY(3px); }
+@media (prefers-reduced-motion: reduce) {
+  .qw-light, .qw-road, .qw-streak, .qw-stars, .qw-shoot, .qw-cloud, .qw-sail, .qw-waves, .qw-gull, .qw-flag, .qw-spot, .qw-crowd, .qw-torch, .qw-lava, .qw-ember, .qw-eyes, .qw-banner, .qw-ready, .qw-rev { animation: none; }
+  .qw-streak, .qw-shoot, .qw-ember { display: none; }
+  .qw-meter, .qw-knot { transition: none; }
+}
 /* Live quiz game styles (components/live/QuizGames): tug of war, team battle, boss battle, race. */
 .qg-slide { transition: transform 1.2s cubic-bezier(.34,1.56,.64,1); }
 .qg-bar { transition: width 1s cubic-bezier(.16,.84,.44,1) .5s; }

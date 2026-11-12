@@ -59,6 +59,7 @@ test("tug of war, boss battle, race and team battle on the live quiz", async ({ 
   // One question: the learner answers, the teacher shows the answer, then the game.
   const play = async (q: number, tap: string, step: string, shotName?: string) => {
     await expect(learner.getByRole("button", { name: new RegExp(`: ${tap}$`) })).toBeVisible({ timeout: 20_000 });
+    if (shotName) { await shot(teacher, `${shotName}-question`); await shot(learner, `${shotName}-question-phone`); }
     await learner.getByRole("button", { name: new RegExp(`: ${tap}$`) }).click();
     await expect(learner.getByText("Answer locked in")).toBeVisible({ timeout: 20_000 });
     await teacher.getByRole("button", { name: "Skip timer" }).click();
@@ -82,12 +83,20 @@ test("tug of war, boss battle, race and team battle on the live quiz", async ({ 
   await expect(learner.getByText("🔴 Team Red").first()).toBeVisible({ timeout: 20_000 }); // the learner knows their team before it starts
   await shot(teacher, "tug-lobby");
   await shot(learner, "tug-lobby-phone");
+  await expect(teacher.getByLabel("How to play")).toContainText("Two teams, one rope");
   await teacher.getByRole("button", { name: "▶ Start" }).click();
+  // The question is a stage of the story, with the live rope while they answer.
+  await expect(teacher.getByLabel("Round 1 of 2: Take the strain")).toBeVisible({ timeout: 20_000 });
+  await expect(teacher.getByLabel(/^Rope: level/)).toBeVisible();
+  await expect(learner.getByLabel("Round 1 of 2: Take the strain")).toBeVisible({ timeout: 20_000 });
   await play(0, "4", "Pull! →", "tug");
+  await expect(learner.getByText("Your team heaves! 💪")).toBeVisible();
   const tug = teacher.getByRole("img", { name: /^Tug of war after 1 of 2 questions/ });
   await expect(tug).toHaveAccessibleName(/Team Blue is pulling ahead/, { timeout: 20_000 });
   await shot(teacher, "tug");
   await teacher.getByRole("button", { name: "Next question →" }).click();
+  await expect(teacher.getByLabel("Round 2 of 2: Final pull! 🪢")).toBeVisible({ timeout: 20_000 });
+  await expect(teacher.getByLabel(/^Rope: Team Blue is ahead/)).toBeVisible();
   await play(1, "9", "Podium 🏆");
   await expect(teacher.getByText("Team Blue wins the tug of war!")).toBeVisible({ timeout: 20_000 });
   await expect(learner.getByText("Team Blue won the tug of war this time")).toBeVisible({ timeout: 20_000 });
@@ -98,7 +107,9 @@ test("tug of war, boss battle, race and team battle on the live quiz", async ({ 
   await style.getByRole("radio", { name: /Boss battle/ }).click();
   await expect(learner.getByText("Boss battle")).toBeVisible({ timeout: 20_000 });
   await teacher.getByRole("button", { name: "▶ Start" }).click();
+  await expect(teacher.getByLabel("The Number Dragon: 100 health; 3 hearts left")).toBeVisible({ timeout: 20_000 });
   await play(0, "4", "Fight the boss! →", "boss");
+  await expect(learner.getByText("You struck the dragon! 💥")).toBeVisible();
   // Three of four were right: 54 damage, and no heart lost.
   await expect(teacher.getByRole("img", { name: "Boss battle after 1 of 2 questions: the Number Dragon has 46 health; the class has 3 hearts left" })).toBeVisible({ timeout: 20_000 });
   await expect(learner.getByRole("img", { name: /the Number Dragon has 46 health/ })).toBeVisible({ timeout: 20_000 });
@@ -128,14 +139,18 @@ test("tug of war, boss battle, race and team battle on the live quiz", async ({ 
   await expect(learner.getByRole("region", { name: "Space race" }).getByRole("listitem", { name: /^Emmanuel: 1st place/ })).toBeVisible({ timeout: 20_000 });
   await shot(teacher, "space");
   await teacher.getByRole("button", { name: "Next question →" }).click();
-  await play(1, "9", "Podium 🏆");
+  await expect(teacher.getByLabel("Stage 2 of 2: Final approach to the stars ⭐")).toBeVisible({ timeout: 20_000 });
+  await expect(learner.getByLabel("Your game")).toContainText("You: 1st of 4", { timeout: 20_000 });
+  await play(1, "9", "Podium 🏆", "space2");
   await expect(teacher.getByText("Emmanuel reaches the stars first! 🚀")).toBeVisible({ timeout: 20_000 });
 
   // ── Treasure hunt ──
   await launchAnother();
   await style.getByRole("radio", { name: /Treasure hunt/ }).click();
   await teacher.getByRole("button", { name: "▶ Start" }).click();
-  await play(0, "4", "Open the chests! →");
+  await expect(teacher.getByLabel("Island 1 of 2: Parrot Bay")).toBeVisible({ timeout: 20_000 });
+  await play(0, "4", "Open the chests! →", "treasure");
+  await expect(learner.getByText("Chest unlocked! 💰")).toBeVisible();
   const hunt = teacher.getByRole("region", { name: "Treasure hunt" });
   await expect(hunt.getByRole("listitem", { name: /^Learner 2: 4th place, 0 gold, last chest: Empty chest$/ })).toBeVisible({ timeout: 20_000 });
   await expect(hunt.getByRole("listitem", { name: /^Emmanuel: \d(st|nd|rd|th) place, \d+ gold, last chest: / })).toBeVisible();
