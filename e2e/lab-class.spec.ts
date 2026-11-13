@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { SID, agree, classServer, realtimeHub } from "./helpers";
+import { SYMBOLS, licenceRight, looksOf, type Symbol } from "../lib/lab/licence";
 
 // A practical lesson like a real lab: the teacher shows how (learners watch the
 // teacher's bench live), gives the task, then each learner does it on their
@@ -45,6 +46,24 @@ test("watch the teacher, then your turn: the task, observations, and help from t
   await task.getByRole("textbox").fill("Write an observation after each step, with units.");
   await task.getByRole("button", { name: "Give the task" }).click();
   await expect(mine.getByRole("status", { name: "Your task" })).toContainText("Write an observation after each step", { timeout: 20_000 });
+  // Their first practical: the lab safety licence comes first (hazard symbols and lab rules).
+  const lic = mine.getByRole("region", { name: "Lab safety licence" });
+  await expect(lic).toBeVisible({ timeout: 20_000 });
+  for (let i = 0; i < 10; i++) {
+    const pic = lic.getByRole("img", { name: /^A hazard symbol showing / });
+    let right: string | null;
+    if (await pic.count()) { const label = (await pic.getAttribute("aria-label"))!; const s = (Object.keys(SYMBOLS) as Symbol[]).find((k) => label.endsWith(looksOf(k)))!; right = SYMBOLS[s].name; }
+    else right = licenceRight((await lic.locator("p.text-lg").textContent())!.trim());
+    if (i === 1) { await lic.getByRole("radio").filter({ hasNotText: right! }).first().click(); await expect(lic.getByRole("status")).toContainText("Not quite."); } // one wrong: still passes
+    else { await lic.getByRole("radio", { name: right!, exact: true }).click(); await expect(lic.getByRole("status")).toContainText("Right."); }
+    if (i === 0 && SHOTS) await learner.screenshot({ path: `${SHOTS}/licence-question.png` });
+    await lic.getByRole("button", { name: /Next →|See my result/ }).click();
+  }
+  await expect(mine.getByText("You've got your lab safety licence!")).toBeVisible();
+  await expect(mine.getByText("9 / 10 right · you need 8")).toBeVisible();
+  if (SHOTS) await learner.screenshot({ path: `${SHOTS}/licence-passed.png` });
+  await mine.getByRole("button", { name: "Go to the practical →" }).click();
+  await expect(lab.getByText("1 passed")).toBeVisible({ timeout: 20_000 }); // the teacher sees it
   await expect(mine.getByText(/^Step 1 of \d+$/)).toBeVisible({ timeout: 20_000 });
 
   // The learner does step 1 themselves: pick up, then put it in place.

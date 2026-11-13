@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { SID, agree, classServer, realtimeHub } from "./helpers";
+import { SID, agree, classServer, realtimeHub, withLicence } from "./helpers";
 
 // The laboratory on the board: the teacher opens an experiment, puts it on the
 // board as a page everyone can annotate, and lets learners try it themselves.
@@ -12,6 +12,7 @@ test("an experiment goes on the board and learners can try it", async ({ browser
     const ctx = await browser.newContext();
     await hub.attach(ctx, who);
     await server.attach(ctx, who);
+    if (who === "learner") await withLicence(ctx);
     await ctx.route("**/api/live-sessions/slides", (r) => r.fulfill({ json: { uploads: [{ path: `slides/${SID}/lab-1.jpg`, token: "t", url: `${base}/storage/v1/object/public/materials/slides/${SID}/lab-1.jpg` }] } }));
     await ctx.route("**/storage/v1/object/upload/sign/**", (r) => { if (r.request().method() !== "OPTIONS") uploaded++; return r.fulfill({ status: r.request().method() === "OPTIONS" ? 204 : 200, headers: cors, json: { Key: "x" } }); });
     await ctx.route("**/storage/v1/object/public/**", (r) => r.fulfill({ status: 200, contentType: "image/svg+xml", headers: cors, body: '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000"><rect width="100%" height="100%" fill="#0B1220"/></svg>' }));

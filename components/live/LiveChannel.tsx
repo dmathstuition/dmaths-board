@@ -33,7 +33,7 @@ const SKIPPABLE = new Set(["board-live", "board-laser"]);
 // class of 100 that's 1 delivery instead of 100. Learners use it once the
 // teacher's messages say the teacher is listening there (`_up`); if a send
 // there fails, it goes the old way.
-const UPLINK = new Set(["ab-answer", "pulse", "poll-vote", "blocks-move", "ask", "quiz-sure", "lab-progress", "buzz", "chat-say", "react", "away", "rollcall-here", "drill-ans", "lab-plan"]);
+const UPLINK = new Set(["ab-answer", "pulse", "poll-vote", "blocks-move", "ask", "quiz-sure", "lab-progress", "buzz", "chat-say", "react", "away", "rollcall-here", "drill-ans", "lab-plan", "lab-licence"]);
 const UP_FRESH_MS = 120_000;
 
 export function LiveChannelProvider({ sessionId, host = false, children }: { sessionId: string; host?: boolean; children: ReactNode }) {

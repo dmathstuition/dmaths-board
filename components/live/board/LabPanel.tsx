@@ -14,6 +14,8 @@ import { START_EVENT } from "@/components/lab/room/LabRoom";
 import { RoomClassContext, type RoomClass } from "@/components/lab/room/roomContext";
 import PlansPanel from "@/components/lab/room/PlansPanel";
 import { addPlan, cleanAssignment, cleanReply, cleanReport, type Assignment, type PlanReport, type Reply } from "@/lib/lab/room/planShare";
+import LicenceQuiz from "@/components/lab/Licence";
+import { LICENCE_KEY, readLicence, type Licence } from "@/lib/lab/licence";
 import { QUICK_HELP, cleanFrame, cleanMode, cleanNudge, cleanTask, type DemoFrame, type LabMode, type Nudge } from "@/lib/lab/demo";
 import { addReport, cleanProgress, summary, type LabEntry as TrackEntry, type LabProgress } from "@/lib/lab/labTrack";
 
@@ -100,6 +102,12 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
   const shared = mode !== null;
   const setShared = useCallback((on: boolean) => setMode(on ? "try" : null), [setMode]);
   const [task, setTask] = useKeptState(keep, "lab:task", "");               // teacher: the task for their turn
+  // The lab safety licence: learners pass it once, on their phone, before their first practical.
+  const [licence, setLicenceOn] = useKeptState(keep, "lab:licence", true);  // teacher: needed before a practical
+  const [licensed, setLicensed] = useKeptState<Record<string, { name: string; score: number; of: number }>>(keep, "lab:licensed", {}); // teacher: who has it
+  const [theirLicence, setTheirLicence] = useKeptState(keep, "lab:theirLicence", true); // learner: the teacher wants it
+  const [myLicence, setMyLicence] = useState<Licence | null>(null);                    // learner: theirs, kept on the phone
+  useEffect(() => { try { setMyLicence(readLicence(localStorage.getItem(LICENCE_KEY))); } catch { /* storage blocked */ } }, []);
   const [taskDraft, setTaskDraft] = useState(task);
   const [theirs, setTheirs] = useKeptState<string | null>(keep, "lab:theirs", null); // learner: what the teacher opened
   const [theirMode, setTheirMode] = useKeptState<LabMode>(keep, "lab:theirMode", "try"); // learner
@@ -125,7 +133,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
   }, []);
   const [shooting, setShooting] = useState(false); // full size while a picture is taken
   const scale = shooting ? 1 : (zoom ?? fit);
-  const sharedRef = useRef({ slug, mode, task }); sharedRef.current = { slug, mode, task };
+  const sharedRef = useRef({ slug, mode, task, licence }); sharedRef.current = { slug, mode, task, licence };
 
   const [track, setTrack] = useKeptState<Record<string, TrackEntry>>(keep, "lab:track", {}); // teacher: each learner's progress
   const [tracking, setTracking] = useKeptState(keep, "lab:tracking", false);           // teacher: looking at the tracker
@@ -143,9 +151,14 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
       if (s && s !== theirsRef.current) { setHidden(false); setHadTurn(false); setFrame(null); }
       const m = cleanMode(p.mode);
       if (s && m === "try") setHadTurn(true);
-      theirsRef.current = s; setTheirs(s); setTheirMode(m); setTheirTask(cleanTask(p.task));
+      theirsRef.current = s; setTheirs(s); setTheirMode(m); setTheirTask(cleanTask(p.task)); setTheirLicence(p.licence !== false);
     },
     "lab-demo": (p) => { if (host || !p?.host) return; const f = cleanFrame(p); if (f) setFrame(f); },
+    "lab-licence": (p) => {
+      if (!host || typeof p?.by !== "string" || !p.by) return;
+      const score = Math.round(Number(p.score)), of = Math.round(Number(p.of));
+      if (Number.isFinite(score) && Number.isFinite(of) && score >= 0 && score <= of && of <= 20) setLicensed((m) => (m[p.by]?.score === score ? m : { ...m, [p.by.slice(0, 80)]: { name: String(p.name ?? "Learner").slice(0, 60), score, of } }));
+    },
     "lab-nudge": (p) => { if (host || !p?.host) return; const n = cleanNudge(p); if (n && n.to === myId) setNudge(n); },
     "lab-progress": (p) => { if (host) setTrack((m) => addReport(m, cleanProgress(p), Date.now())); },
     // Lab rooms: the practical set for the class, plans handed in, and replies.
@@ -178,12 +191,21 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
   useEffect(() => {
     if (!host || !live) return;
     const r = sharedRef.current;
-    const tell = () => send("lab-open", { host: true, slug: r.mode ? r.slug : null, mode: r.mode ?? "try", task: r.mode === "try" ? r.task : "" });
+    const tell = () => send("lab-open", { host: true, slug: r.mode ? r.slug : null, mode: r.mode ?? "try", task: r.mode === "try" ? r.task : "", licence: r.licence });
     tell();
     if (!mode) return;
     const t = setInterval(tell, 4000 * repeat);
     return () => clearInterval(t);
-  }, [host, live, mode, task, slug, send, repeat]);
+  }, [host, live, mode, task, slug, licence, send, repeat]);
+  // Learner: a licence already on this phone is shown to the teacher when a practical opens.
+  useEffect(() => {
+    if (host || !live || !myId || !myLicence || !theirs) return;
+    send("lab-licence", { by: myId, name: myName, score: myLicence.score, of: myLicence.of });
+  }, [host, live, myId, myName, myLicence, theirs, send]);
+  const passLicence = (l: Licence) => {
+    try { localStorage.setItem(LICENCE_KEY, JSON.stringify(l)); } catch { /* storage blocked: it lasts until the page closes */ }
+    setMyLicence(l);
+  };
 
   // Teacher showing the class: their bench goes out a few times a second at
   // most, and again now and then so a phone that joins late catches up.
@@ -273,6 +295,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
     if (!entry) return null;
     const Experiment = EXPERIMENTS[entry.slug];
     const watching = !mine && theirMode === "watch" && !!entry.practical;
+    const needsLicence = !watching && theirLicence && !myLicence && (!!entry.practical || !!entry.room);
     if (hidden) {
       return (
         <button type="button" onClick={() => setHidden(false)} className="fixed left-1/2 top-2 z-[96] flex max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-full bg-[#0B1220] px-4 py-2.5 text-sm font-black text-white shadow-2xl ring-1 ring-white/20">
@@ -308,7 +331,8 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
                 : <p className="mt-10 text-center text-sm font-bold text-white/70">Waiting for your teacher to start the practical…</p>}
             </div>
           )}
-          {(!watching || hadTurn) && (
+          {needsLicence && <LicenceQuiz name={myName} onPass={passLicence} />}
+          {(!watching || hadTurn) && !needsLicence && (
             <div className={`mx-auto max-w-6xl ${watching ? "hidden" : ""}`} style={{ zoom: entry.room ? 1 : scale }}><LabReportContext.Provider value={reportCtx}><RoomClassContext.Provider value={roomClass}><Experiment /></RoomClassContext.Provider></LabReportContext.Provider></div>
           )}
         </div>
@@ -360,6 +384,12 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
               <button type="button" onClick={() => setMode(mode === "try" ? null : "try")} aria-pressed={mode === "try"} title="Each learner does it on their own phone"
                 className={`min-h-[34px] whitespace-nowrap rounded-lg px-2.5 text-xs font-black ${mode === "try" ? "bg-[#38BDF8] text-[#0B1220]" : "hover:bg-white/10"}`}>✋ Their turn</button>
             </div>
+          )}
+          {live && (entry.practical || entry.room) && (
+            <label className={`${chip} bg-white/5`} title="Learners pass a short quiz on hazard symbols and lab rules before their first practical (once — it's kept on their phone)">
+              <input type="checkbox" checked={licence} onChange={(e) => setLicenceOn(e.target.checked)} className="h-4 w-4 accent-[#38BDF8]" /> 🪪 Safety licence first
+              {Object.keys(licensed).length > 0 && <span className="rounded-full bg-emerald-500/20 px-1.5 text-[11px] text-emerald-200">{Object.keys(licensed).length} passed</span>}
+            </label>
           )}
           {live && (shared || trackList.length > 0) && (
             <button type="button" onClick={() => setTracking(!tracking)} aria-pressed={tracking} className={`${chip} ${tracking ? "bg-white text-[#0B1220]" : "bg-white/10 hover:bg-white/15"}`}>
@@ -469,7 +499,7 @@ export default function LabPanel({ host, open, onOpen, onClose, onSnapshot, live
           <div className="elab absolute inset-0 isolate overflow-auto overscroll-contain p-2 sm:p-4">
             <div ref={stage} className="mx-auto max-w-6xl" style={{ zoom: entry?.room ? 1 : scale }}>{Experiment && <LabReportContext.Provider value={teacherCtx}><RoomClassContext.Provider value={roomClass}><Experiment /></RoomClassContext.Provider></LabReportContext.Provider>}</div>
           </div>
-          {tracking && live && <LabTracker entries={trackList} quiet={quiet} onClose={() => setTracking(false)} onHelp={help} sent={nudges} quick={QUICK_HELP} />}
+          {tracking && live && <LabTracker entries={trackList} quiet={quiet} onClose={() => setTracking(false)} onHelp={help} sent={nudges} quick={QUICK_HELP} licensed={licence ? licensed : undefined} />}
           {viewPlans && <PlansPanel plans={plans} replies={replies} assignment={assign} onReply={reply} onClose={() => setViewPlans(false)} />}
         </div>
       )}

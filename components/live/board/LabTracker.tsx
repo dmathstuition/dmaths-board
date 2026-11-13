@@ -21,9 +21,10 @@ export function useNow(ms = 5000) {
   return now;
 }
 
-export default function LabTracker({ entries, quiet, onClose, onHelp, sent = {}, quick = [] }: {
+export default function LabTracker({ entries, quiet, onClose, onHelp, sent = {}, quick = [], licensed }: {
   entries: LabEntry[]; quiet: number; onClose: () => void;
   onHelp?: (to: string, text: string) => void; sent?: Record<string, Nudge>; quick?: string[];
+  licensed?: Record<string, { name: string; score: number; of: number }>; // the safety licence, when it's needed
 }) {
   const now = useNow();
   const [open, setOpen] = useState<string | null>(null);
@@ -36,6 +37,7 @@ export default function LabTracker({ entries, quiet, onClose, onHelp, sent = {},
         <p className="text-xs font-bold text-white/60">
           {sum.total ? <>{sum.total} trying · <span className={sum.stuck ? "text-[#FCA5A5]" : ""}>{sum.stuck} stuck</span> · {sum.done} finished{sum.away ? ` · ${sum.away} away` : ""}</> : "Waiting for learners to open it…"}
         </p>
+        {licensed && <p className="text-xs font-bold text-emerald-300" title={Object.values(licensed).map((l) => `${l.name} · ${l.score}/${l.of}`).join("\n")}>🪪 {Object.keys(licensed).length} with a safety licence</p>}
         <button type="button" onClick={onClose} className="ml-auto min-h-[40px] rounded-xl bg-white px-3 text-xs font-black text-[#0B1220]">Back to the experiment</button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
@@ -50,7 +52,7 @@ export default function LabTracker({ entries, quiet, onClose, onHelp, sent = {},
                 <li key={e.by} className={`rounded-2xl bg-white/5 p-3 ${look.ring}`}>
                   <button type="button" onClick={() => setOpen(more ? null : e.by)} aria-expanded={more} className="block w-full text-left">
                     <div className="flex items-center gap-2">
-                      <p className="min-w-0 flex-1 truncate text-sm font-black">{e.name}</p>
+                      <p className="min-w-0 flex-1 truncate text-sm font-black">{e.name}{licensed?.[e.by] && <span className="ml-1" title={`Safety licence · ${licensed[e.by].score}/${licensed[e.by].of}`} aria-label="has a safety licence">🪪</span>}</p>
                       <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-black ${look.badge}`}>{look.label}</span>
                     </div>
                     <div className="mt-2 flex items-center gap-2">

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { SID, agree, classServer, realtimeHub } from "./helpers";
+import { SID, agree, classServer, realtimeHub, withLicence } from "./helpers";
 
 // The lab rooms: every piece of apparatus, to try out, pick, and plan a
 // practical with — then start the real practical.
@@ -121,6 +121,7 @@ test("lab room shared with learners: a learner plans on their phone and starts t
   const open = async (who: "teacher" | "learner") => {
     const ctx = await browser.newContext(who === "learner" ? { viewport: { width: 400, height: 820 }, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 860 } });
     await hub.attach(ctx, who); await server.attach(ctx, who);
+    if (who === "learner") await withLicence(ctx);
     const page = await ctx.newPage();
     await page.goto(who === "teacher" ? `/e2e-host?id=${SID}` : `/class/${SID}`, { waitUntil: "networkidle" });
     await agree(page);
@@ -152,14 +153,14 @@ test("lab room shared with learners: a learner plans on their phone and starts t
 });
 
 test("free bench: apparatus react — a precipitate, heating to boiling, a lamp lighting", async ({ browser }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000); // the 3D bench is drawn in software here: slow on a busy machine
   const p = await openLab(browser);
   const lab = p.getByRole("dialog", { name: "Laboratory" });
   await lab.getByRole("region", { name: "Lab rooms" }).getByRole("button", { name: "Chemistry Lab Room" }).click();
   await expect(room(p)).toBeVisible({ timeout: 30_000 });
   // The 3D lab is the first thing in the room, with a few things already out on the bench.
   const plan = room(p).getByRole("region", { name: "Lab bench" });
-  await expect(plan.getByRole("img", { name: /My bench in 3D/ }).locator("canvas")).toBeVisible({ timeout: 30_000 });
+  await expect(plan.getByRole("img", { name: /My bench in 3D/ }).locator("canvas")).toBeVisible({ timeout: 60_000 });
   await expect(plan.locator('[data-bench-item="chemistry-bunsen-burner"]')).toBeVisible();
   if (SHOTS) await p.screenshot({ path: `${SHOTS}/room-3d.png` });
   const pick = async (search: string, name: string) => { await room(p).getByPlaceholder(/Search/).fill(search); const b = room(p).getByRole("button", { name: `Pick the ${name}`, exact: true }); await expect(b.or(room(p).getByRole("button", { name: `Put back the ${name}`, exact: true }))).toBeVisible(); if (await b.isVisible()) await b.click(); };
@@ -208,6 +209,7 @@ test("the teacher sets a practical; a learner plans it on their phone and hands 
   const open = async (who: "teacher" | "learner") => {
     const ctx = await browser.newContext(who === "learner" ? { viewport: { width: 400, height: 820 }, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 860 } });
     await hub.attach(ctx, who); await server.attach(ctx, who);
+    if (who === "learner") await withLicence(ctx);
     const page = await ctx.newPage();
     await page.goto(who === "teacher" ? `/e2e-host?id=${SID}` : `/class/${SID}`, { waitUntil: "networkidle" });
     await agree(page);

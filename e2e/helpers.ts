@@ -168,3 +168,7 @@ export async function within(seconds: number, check: () => Promise<boolean>) {
   }
   return -1;
 }
+
+// A learner who already has their lab safety licence on this phone (lib/lab/licence.ts).
+export const withLicence = (ctx: import("@playwright/test").BrowserContext) =>
+  ctx.addInitScript(() => { try { localStorage.setItem("dm-lab-licence", JSON.stringify({ at: Date.now(), score: 10, of: 10 })); } catch { /* storage blocked */ } });
