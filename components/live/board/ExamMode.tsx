@@ -18,6 +18,8 @@ const AtpBuilder = dynamic(() => import("@/components/lab/AtpPaper"), { ssr: fal
 // A practical test's bench: loaded only when an exam has one.
 const BenchQuestion = dynamic(() => import("@/components/live/board/BenchQuestion"), { ssr: false, loading: () => <p className="mt-3 text-sm font-bold text-ink/60">Setting out your bench…</p> });
 import GraphPlot from "@/components/live/board/GraphPlot";
+import CbtScreen from "@/components/live/board/CbtScreen";
+import { JAMB_ENGLISH, JAMB_SIZES, JAMB_SUBJECTS, cbtBatches, cbtTitle, isCbt, sectionScores, type JambSize } from "@/lib/cbt";
 import { shownAnswer } from "@/lib/exams";
 import { EXAM_MINUTES, EXAM_TOPICS, MAX_PAGE_MARKS, MAX_WRITTEN, clockLeft, isHandMarked, keepsOrder, needsMarking, pageDone, workingKey, spokenSpelling, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
 import { BookletLayout, MarkingDesk, PageFlow, WorkingPad } from "@/components/live/board/PaperPages";
@@ -37,7 +39,7 @@ type Meta = { booklet?: string[]; id: string; title: string; minutes: number; re
 type Entry = { tries?: ExamTry[]; extraMs?: number; extraQs?: ExamQ[]; pageMarks?: Record<string, number>; toMark?: number[]; id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null;
   answers?: Record<string, unknown>; startedAt?: string | null; submittedAt?: string | null };
 type Analysis = { score: number; total: number; right: number; wrong: number; blank: number; average: number | null; best: number | null; takers: number; position: number | null; flags: number };
-type Review = { q: string; kind: ExamQ["kind"]; options: string[]; answer: number | string; given: unknown; right: boolean; marks: number; mark?: number | null };
+type Review = { q: string; kind: ExamQ["kind"]; options: string[]; answer: number | string; given: unknown; right: boolean; marks: number; mark?: number | null; sec?: string };
 
 // Extra time in minutes, to one decimal place (25% of 10 minutes is 2.5).
 const extraMins = (ms = 0) => String(Math.round(ms / 6000) / 10);
@@ -232,6 +234,32 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
   const [aiCount, setAiCount] = useState(10);
   const [aiKind, setAiKind] = useState<"mixed" | "choice" | "typed">("mixed");
   const [aiBusy, setAiBusy] = useState(false);
+  // JAMB UTME practice on the CBT screen: Use of English and three more subjects.
+  const [jamb, setJamb] = useState<string[]>(["Mathematics", "Physics", "Chemistry"]);
+  const [jambSize, setJambSize] = useState<JambSize>("full");
+  const [jambBusy, setJambBusy] = useState<string | null>(null);
+  const [jambNote, setJambNote] = useState<string | null>(null);
+  async function makeJamb() {
+    if (jamb.length !== 3) { setJambBusy(null); setJambNote("Choose three subjects to go with Use of English."); return; }
+    if (qs.length && !window.confirm(`Replace the ${qs.length} question${qs.length === 1 ? "" : "s"} below with a JAMB CBT paper?`)) return;
+    const size = JAMB_SIZES[jambSize], got: ExamQ[] = [];
+    try {
+      for (const sec of [JAMB_ENGLISH, ...jamb]) {
+        const want = sec === JAMB_ENGLISH ? size.english : size.other, seen = new Set<string>();
+        for (const b of cbtBatches(sec, want)) {
+          setJambBusy(`Writing ${sec} questions… (${got.length} of ${size.english + 3 * size.other} so far)`);
+          const { ok, j } = await api({ action: "ai", sessionId, topic: b.topic, level: b.level, count: b.count, kind: "choice", difficulty: "medium" });
+          if (!ok) throw new Error(j.error ?? "The A.I couldn't write questions just now");
+          for (const x of (j.questions ?? []) as ExamQ[]) if (x.kind === "choice" && !seen.has(x.q) && seen.size < want) { seen.add(x.q); got.push({ ...x, marks: 1, sec }); }
+        }
+      }
+      setQs(got); ownTitle.current = false; setTitle(cbtTitle(jamb)); setMinutes(size.minutes); setCalcOk(true); setInOrder(false); setReview(true);
+      setJambNote(`✓ A JAMB CBT paper: ${got.length} questions in four subjects, ${size.minutes} minutes. Each learner gets the subjects as tabs, their own order of questions, flag-and-return and the calculator — scored like JAMB, each subject out of 100 (out of 400). Check the questions below before you start.`);
+    } catch (e) {
+      if (got.length) setQs(got);
+      setJambNote(`Couldn't finish the paper (${e instanceof Error ? e.message : e})${got.length ? ` — ${got.length} questions were written; try again in a minute for the rest` : ""}.`);
+    } finally { setJambBusy(null); }
+  }
   const [aiNote, setAiNote] = useState<string | null>(null);
   async function askAi() {
     setAiBusy(true); setAiNote(null);
@@ -388,6 +416,28 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
             <fieldset className="mt-3"><legend className="text-xs font-black text-ink/60">Time</legend>
               <div className="mt-1 flex flex-wrap gap-1.5">{EXAM_MINUTES.map((m) => <button key={m} type="button" aria-pressed={minutes === m} onClick={() => setMinutes(m)} className={chip(minutes === m)}>{m} min</button>)}</div>
             </fieldset>
+            <section aria-label="JAMB CBT practice" className="mt-4 rounded-xl bg-[#EFF6FF] p-3 ring-1 ring-[#BFDBFE]">
+              <p className="text-xs font-black text-[#1E3A8A]">🖥 JAMB UTME practice — on the CBT screen</p>
+              <p className="mt-0.5 text-[11px] font-semibold text-[#1E3A8A]/80">Use of English and three more subjects, as tabs — the clock, the calculator, flag-and-return, and a JAMB score out of 400. The A.I writes the questions.</p>
+              <fieldset className="mt-2 flex flex-wrap gap-1.5">
+                <legend className="sr-only">Three subjects with Use of English</legend>
+                <span className="min-h-[34px] rounded-lg bg-[#1E3A8A] px-2.5 py-1.5 text-xs font-black text-white">✓ {JAMB_ENGLISH}</span>
+                {JAMB_SUBJECTS.map((s) => {
+                  const on = jamb.includes(s);
+                  return <button key={s} type="button" aria-pressed={on} onClick={() => setJamb((cur) => (on ? cur.filter((x) => x !== s) : cur.length < 3 ? [...cur, s] : cur))}
+                    className={`min-h-[34px] rounded-lg px-2.5 text-xs font-black ring-1 ${on ? "bg-[#1E3A8A] text-white ring-[#1E3A8A]" : "bg-white text-[#1E3A8A] ring-[#BFDBFE]"} ${!on && jamb.length >= 3 ? "opacity-40" : ""}`}>{on ? "✓ " : ""}{s}</button>;
+                })}
+              </fieldset>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label className="text-xs font-black text-[#1E3A8A]">Size{" "}
+                  <select value={jambSize} onChange={(e) => setJambSize(e.target.value as JambSize)} className="ml-1 rounded-lg bg-white px-2 py-1.5 text-xs font-black ring-1 ring-[#BFDBFE]">
+                    {(Object.keys(JAMB_SIZES) as JambSize[]).map((k) => <option key={k} value={k}>{JAMB_SIZES[k].label}</option>)}
+                  </select>
+                </label>
+                <button type="button" onClick={makeJamb} disabled={!!jambBusy || jamb.length !== 3} className="min-h-[40px] rounded-xl bg-[#1E3A8A] px-4 text-xs font-black text-white disabled:opacity-50">{jambBusy ? "Writing the paper…" : jamb.length === 3 ? "Make the CBT paper" : `Choose ${3 - jamb.length} more subject${jamb.length === 2 ? "" : "s"}`}</button>
+              </div>
+              {(jambBusy || jambNote) && <p role="status" className="mt-2 text-xs font-bold text-[#1E3A8A]">{jambBusy ?? jambNote}</p>}
+            </section>
             <AtpBuilder sessionId={sessionId} onPaper={(paper, p) => {
               if (qs.length && !window.confirm(`Replace the ${qs.length} question${qs.length === 1 ? "" : "s"} below with this practical paper?`)) return;
               setQs(paper); setBookletPages([]); ownTitle.current = false; setTitle(p.title); setMinutes(p.minutes); setCalcOk(true); setInOrder(true); setReview(true); pickScale("gcse");
@@ -636,7 +686,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
                       <td className="p-2">{e.answered} / {exam!.count}</td>
                       <td className="p-2">{e.flags ? <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-black text-red-700" title={e.flagLog.map((f) => `${new Date(f.at).toLocaleTimeString()} — ${f.reason}`).join("\n")}>⚠ {e.flags}×</span> : <span className="text-xs font-bold text-emerald-700">No</span>}</td>
                       <td className="p-2 text-xs font-black">{e.submitted ? <span className="text-emerald-700">Handed in</span> : e.tries?.length ? <span className="text-amber-800">Trying again…</span> : <span className="text-ink/55">Writing…</span>}</td>
-                      <td className="p-2 text-right font-black">{e.submitted ? `${e.score} / ${e.total}` : e.toMark ? `${e.live ?? 0} / ${e.total} so far` : running ? "—" : ""}{e.toMark?.length ? <span className="block text-[11px] font-bold text-amber-700">{e.toMark.length} to mark</span> : null}
+                      <td className="p-2 text-right font-black">{exam?.questions && isCbt(exam.questions) && e.answers && <span className="block text-[11px] font-black text-[#1E3A8A]">JAMB {sectionScores(exam.questions, e.answers).total} / {sectionScores(exam.questions, e.answers).outOf}</span>}{e.submitted ? `${e.score} / ${e.total}` : e.toMark ? `${e.live ?? 0} / ${e.total} so far` : running ? "—" : ""}{e.toMark?.length ? <span className="block text-[11px] font-bold text-amber-700">{e.toMark.length} to mark</span> : null}
                         {!!e.tries?.length && (() => { const t = e.tries[e.tries.length - 1]; return <span className="block text-[11px] font-bold text-ink/50">was {t.score} / {t.total}{e.submitted && e.score != null && e.score > t.score ? <span className="text-emerald-700"> ▲ +{e.score - t.score}</span> : null}</span>; })()}</td>
                       <td className="p-2 text-right">{e.submitted && e.total ? (() => { const p = Math.round(((e.score ?? 0) / e.total) * 100); return <span className={`rounded-md px-2 py-0.5 text-xs font-black ${p >= scheme.pass ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>{gradeOf(p, scheme)}</span>; })() : ""}</td>
                       <td className="p-2 text-right">
@@ -1010,6 +1060,19 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
     const hand = paper.some((x) => x.kind === "page"); // a paper the teacher marks, page by page
     const withBooklet = (body: React.ReactNode) => (booklet.length ? <BookletLayout pages={booklet}>{body}</BookletLayout> : body);
     const done = paper.filter((x) => (x.kind === "page" ? pageDone(answers[String(x.n)]) : answers[String(x.n)] != null && answers[String(x.n)] !== "")).length;
+    // JAMB UTME practice: the CBT screen.
+    if (isCbt(paper)) return shell(<>
+      {say && saySeen !== say.id && (
+        <div role="alert" className="flex items-start gap-2 rounded-xl bg-[#EEF7F6] p-3 ring-1 ring-[#CDE7E5]">
+          <p className="flex-1 text-sm font-black text-[#0A4F52]">📣 Your teacher: {say.text}</p>
+          <button type="button" onClick={() => setSaySeen(say.id)} className="min-h-[36px] rounded-lg bg-[#0E6E72] px-3 text-xs font-black text-white">OK</button>
+        </div>
+      )}
+      {warned > 0 && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-black text-red-700 ring-1 ring-red-200">⚠️ You left the exam page{warned > 1 ? ` ${warned} times` : ""}. Your teacher has been told.</p>}
+      {note && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{note}</p>}
+      <CbtScreen examId={exam.id} title={exam.title} paper={paper} answers={answers} onAnswer={(n, i) => answer(n, i)} at={Math.min(at, paper.length - 1)} setAt={setAt}
+        left={left} calculator={exam.calculator !== false} onSubmit={() => submit()} />
+    </>, true);
     return shell(<>
       <div className="sticky top-0 z-10 -mx-3 flex items-center gap-2 bg-[#FFF7ED]/95 px-3 py-2 backdrop-blur sm:-mx-6 sm:px-6">
         <p className="min-w-0 flex-1 truncate text-sm font-black">{exam.title}</p>
@@ -1116,6 +1179,7 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
         {marking && marking.left === 0 && <p className="mt-3 text-sm font-bold text-emerald-700">✓ Your teacher has marked every page.</p>}
         {exam.status === "open" && <p className="mt-3 text-sm font-semibold text-ink/60">{exam.review ? "You can see the right answers when the exam ends." : "Wait for your teacher."}</p>}
         {over && analysis && <ExamAnalysis a={analysis} />}
+        {over && review?.some((r) => r.sec) && <JambScore review={review} />}
         {over && analysis && analysis.score < analysis.total && <FixMistakes sessionId={sessionId} />}
         {over && analysis && analysis.score < analysis.total && exam.spelling && <FixMistakes sessionId={sessionId} page="spelling" label="✏️ Practise my spellings" />}
         <button type="button" onClick={() => { if (over && seenKey) markSeen(seenKey); else setHidden(true); }} className="mt-4 min-h-[44px] rounded-xl bg-[#C2451C] px-5 text-sm font-black text-white">{over ? "Done — back to the class" : "Back to the class"}</button>
@@ -1139,6 +1203,19 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
     </>);
   }
   return null;
+}
+
+// A JAMB CBT paper's result: each subject out of 100, the total out of 400.
+function JambScore({ review }: { review: Review[] }) {
+  const secs = [...new Set(review.map((r) => r.sec).filter((s): s is string => !!s))];
+  const rows = secs.map((sec) => { const list = review.filter((r) => r.sec === sec), right = list.filter((r) => r.right).length; return { sec, right, of: list.length, score: list.length ? Math.round((right / list.length) * 100) : 0 }; });
+  const total = rows.reduce((a, r) => a + r.score, 0);
+  return (
+    <section aria-label="JAMB score" className="mt-3 rounded-xl bg-[#EFF6FF] p-3 text-left ring-1 ring-[#BFDBFE]">
+      <p className="text-center text-sm font-black text-[#1E3A8A]">JAMB score: <span className="text-2xl">{total}</span> / {rows.length * 100}</p>
+      <ul className="mt-2 grid gap-1 text-sm">{rows.map((r) => <li key={r.sec} className="flex justify-between gap-2 font-bold"><span>{r.sec}</span><span className="tabular-nums">{r.score} / 100 <span className="text-xs text-ink/50">({r.right}/{r.of})</span></span></li>)}</ul>
+    </section>
+  );
 }
 
 // How a learner did: their mark, against the class, and right / wrong / blank.

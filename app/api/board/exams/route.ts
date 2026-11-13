@@ -45,6 +45,7 @@ import { cleanRedoMinutes, keptOf, redoExtraMs, redoPaper, triesOf, withoutTries
 // earlier try is kept in answers._tries (lib/examRedo), their own deadline is
 // set with extra_ms, and an ended exam opens again until they finish. A reading paper: the
 // booklet's pages (board_exams.booklet) are shown beside the questions.
+export const maxDuration = 60; // the A.I writing a batch of questions can take a while
 export const dynamic = "force-dynamic";
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
 const MISSING = /board_exam/i;
@@ -187,7 +188,7 @@ export async function GET(req: Request) {
         takers: pcts.length, position: pcts.length ? better + 1 : null, flags: entry.flags,
       };
       if (e.review) out.review = myQs.map((q, i) => ({
-        q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, right: m.right[i], marks: q.marks,
+        q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, right: m.right[i], marks: q.marks, ...(q.sec ? { sec: q.sec } : {}),
         given: q.kind === "page" ? (myMarks[String(i)] ?? (pageBlank(given[String(i)]) ? 0 : null)) : given[String(i)] ?? null, // a page: the teacher's mark
         ...(q.method && myMarks[String(i)] != null ? { method: myMarks[String(i)] } : {}),
         ...(q.kind === "written" ? { mark: myMarks[String(i)] ?? (String(given[String(i)] ?? "").trim() ? null : 0) } : {}),
@@ -209,7 +210,7 @@ export async function POST(req: Request) {
       if (!v?.host) return bad("Only the class's teacher can set an exam.", 403);
       const topic = String(body?.topic ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
       if (topic.length < 3) return bad("Say what the questions should be on, e.g. \"Simultaneous equations\".");
-      if (!rateLimit(`exam-ai:${v.id}`, 6, 60_000)) return bad("Give the A.I a minute before asking again.", 429);
+      if (!rateLimit(`exam-ai:${v.id}`, 12, 60_000)) return bad("Give the A.I a minute before asking again.", 429);
       if (!rateLimit(`exam-ai-day:${v.id}`, 60, 86_400_000)) return bad("That's today's A.I question limit — try again tomorrow.", 429);
       const kind = ["choice", "typed"].includes(body?.kind) ? body.kind : "mixed";
       const ask = { topic, level: String(body?.level ?? "").slice(0, 60), count: Math.max(1, Math.min(30, Math.round(Number(body?.count) || 10))), kind,

@@ -47,7 +47,7 @@ function examServer() {
         } : null };
         if (e && !e.submitted && exam.status === "open") { out.paper = learnerPaper(exam.id, tries.length ? `${me.id}:${tries.length}` : me.id, qs, exam.inOrder); out.personalFrom = exam.questions.length; }
         if (e && exam.status === "closed") { const m = markPaper(qs, e.answers, e.marks ?? {});
-          out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = qs.map((q, i) => ({ q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks,
+          out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = qs.map((q, i) => ({ q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks, ...(q.sec ? { sec: q.sec } : {}),
             ...(q.kind === "bench" ? { given: [benchGivenText(e.answers[String(i)]), ...benchLines(q.bench!.slug, e.answers[String(i)] as any)].join("\n"), mark: benchGot(q, e.answers[String(i)]) } : {}) })); }
         return r.fulfill({ json: out });
       }
@@ -793,4 +793,58 @@ test("a practical test: each learner does the practical on their own bench, reco
   await expect(exam.getByText(/Your practical: 1 \/ \d+/)).toBeVisible();
   await expect(exam.getByText(new RegExp(`✓ ${first!.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`))).toBeVisible();
   if (SHOTS) await learner.screenshot({ path: `${SHOTS}/test-results-phone.png`, fullPage: true });
+});
+
+test("JAMB UTME practice on the CBT screen: subjects as tabs, keys, flag-and-return, scored out of 400", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const SHOTS = process.env.LAB_SHOTS;
+  const { teacher, learner } = await openClass(browser);
+  await teacher.getByRole("button", { name: "Exam mode" }).click();
+  const panel = teacher.getByRole("dialog", { name: "Exam mode" });
+  const jamb = panel.getByRole("region", { name: "JAMB CBT practice" });
+  await expect(jamb.getByRole("button", { name: "✓ Mathematics" })).toBeVisible(); // three chosen to start with
+  await jamb.getByLabel("Size").selectOption("short");
+  await jamb.getByRole("button", { name: "Make the CBT paper" }).click();
+  await expect(jamb.getByRole("status")).toContainText("✓ A JAMB CBT paper: 4 questions in four subjects, 30 minutes", { timeout: 30_000 });
+  await expect(panel.getByLabel("Title")).toHaveValue("JAMB UTME practice — Use of English, Mathematics, Physics, Chemistry");
+  await panel.getByRole("button", { name: /Start the exam \(4 questions, 30 min\)/ }).click();
+
+  const exam = learner.getByRole("dialog", { name: /^Exam: JAMB UTME practice/ });
+  await expect(exam.getByRole("button", { name: "Start the exam" })).toBeVisible({ timeout: 20_000 });
+  await exam.getByRole("button", { name: "Start the exam" }).click();
+  const tabs = exam.getByRole("tablist", { name: "Subjects" });
+  await expect(tabs.getByRole("tab")).toHaveText([/^Use of English/, /^Mathematics/, /^Physics/, /^Chemistry/]);
+  await expect(tabs.getByRole("tab", { name: /Use of English/ })).toHaveAttribute("aria-selected", "true");
+  await expect(exam.getByRole("timer", { name: "Time left" })).toBeVisible();
+  await expect(exam.getByRole("button", { name: "🧮 Calculator" })).toBeVisible();
+  // English: answer it right, and flag it to come back to.
+  await expect(exam.getByText(/JAMB UTME Use of English/)).toBeVisible();
+  await exam.getByRole("radio", { name: /Carbon dioxide/ }).click();
+  await learner.keyboard.press("f");
+  await expect(exam.getByRole("navigation", { name: "Use of English questions" }).getByRole("button", { name: "Question 1, answered, flagged" })).toBeVisible();
+  if (SHOTS) await learner.screenshot({ path: `${SHOTS}/cbt-phone.png` });
+  // N goes on to the next subject's question; answer Maths right with a key.
+  await learner.keyboard.press("n");
+  await expect(tabs.getByRole("tab", { name: /Mathematics/ })).toHaveAttribute("aria-selected", "true");
+  const right = await exam.getByRole("radio", { name: /Carbon dioxide/ }).textContent();
+  await learner.keyboard.press(right!.trim()[0].toLowerCase()); // its letter: A–D
+  await expect(exam.getByRole("radio", { name: /Carbon dioxide/ })).toHaveAttribute("aria-checked", "true");
+  // Physics by its tab: a wrong answer. Chemistry left blank.
+  await tabs.getByRole("tab", { name: /Physics/ }).click();
+  await exam.getByRole("radio", { name: /Helium/ }).click();
+  await expect(tabs.getByRole("tab", { name: /Physics/ })).toContainText("1/1");
+  await learner.waitForTimeout(900);
+  await exam.getByRole("button", { name: "Submit" }).click();
+  await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
+  await expect(exam.getByText("2 / 4")).toBeVisible({ timeout: 15_000 });
+  await expect(panel.getByText("JAMB 200 / 400")).toBeVisible({ timeout: 15_000 }); // the teacher sees the JAMB score
+
+  // When it ends: each subject out of 100.
+  await panel.getByRole("button", { name: "End exam" }).click();
+  const score = exam.getByRole("region", { name: "JAMB score" });
+  await expect(score).toBeVisible({ timeout: 20_000 });
+  await expect(score).toContainText("JAMB score: 200 / 400");
+  await expect(score.getByRole("listitem").filter({ hasText: "Physics" })).toContainText("0 / 100");
+  await expect(score.getByRole("listitem").filter({ hasText: "Mathematics" })).toContainText("100 / 100");
+  if (SHOTS) await learner.screenshot({ path: `${SHOTS}/cbt-result.png` });
 });

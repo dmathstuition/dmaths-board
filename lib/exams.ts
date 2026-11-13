@@ -27,13 +27,14 @@ export type Grid = { x: string; y: string; x0: number; x1: number; y0: number; y
 // kind "bench": a practical test — the learner does the practical (bench.slug)
 // on their own bench and records their readings; marked against their own
 // bench by the server (lib/lab/benchExam.ts), which keeps the mark as `got`.
-export type ExamQ = { q: string; kind: "choice" | "typed" | "spell" | "page" | "written" | "graph" | "bench"; options: string[]; answer: number | string; marks: number; img?: string; hear?: boolean; method?: boolean; grid?: Grid; bench?: { slug: string } };
+// sec: the section (subject) of a CBT paper — JAMB UTME practice (lib/cbt.ts).
+export type ExamQ = { q: string; kind: "choice" | "typed" | "spell" | "page" | "written" | "graph" | "bench"; options: string[]; answer: number | string; marks: number; img?: string; hear?: boolean; method?: boolean; grid?: Grid; bench?: { slug: string }; sec?: string };
 export const MAX_BENCH_MARKS = 40;
-export const MAX_EXAM_QUESTIONS = 60;
+export const MAX_EXAM_QUESTIONS = 180; // a full JAMB UTME paper
 export const MAX_PAGE_MARKS = 20;
 export const MAX_WRITTEN = 1500; // a written answer, in characters
 export const MAX_BOOKLET = 40;   // pages in a reading booklet
-export const EXAM_MINUTES = [5, 10, 15, 20, 30, 40, 45, 60, 90] as const;
+export const EXAM_MINUTES = [5, 10, 15, 20, 30, 40, 45, 60, 90, 120] as const;
 // How long after the end an answer still counts (a slow connection).
 export const GRACE_MS = 20_000;
 
@@ -46,41 +47,47 @@ export function cleanExamQuestions(v: unknown): ExamQ[] {
     const x = raw as any;
     const q = str(x?.q, 400).trim();
     if (!q) continue;
+    const before = out.length;
+    pushOne(x, q);
+    const sec = str(x?.sec, 40).replace(/\s+/g, " ").trim();
+    if (sec && out.length > before) out[out.length - 1].sec = sec;
+  }
+  return out;
+  function pushOne(x: any, q: string) {
     const marks = Math.max(1, Math.min(10, Math.round(Number(x?.marks) || 1)));
     const img = isSlideUrl(x?.img) ? { img: x.img as string } : {};
     if (x?.kind === "page") {
       if (img.img) out.push({ q, kind: "page", options: [], answer: "", marks: Math.max(1, Math.min(MAX_PAGE_MARKS, Math.round(Number(x?.marks) || 1))), img: img.img });
-      continue;
+      return;
     }
     if (x?.kind === "bench") {
       const slug = str(x?.bench?.slug, 60).trim();
       if (/^[a-z0-9-]+$/.test(slug)) out.push({ q, kind: "bench", options: [], answer: "", marks: Math.max(1, Math.min(MAX_BENCH_MARKS, Math.round(Number(x?.marks) || 1))), bench: { slug } });
-      continue;
+      return;
     }
     if (x?.kind === "graph") {
       const grid = cleanGrid(x?.grid), key = cleanGraphKey(x?.answer);
       if (grid && key) out.push({ q, kind: "graph", options: [], answer: JSON.stringify(key), marks: Math.max(2, marks), grid, ...img });
-      continue;
+      return;
     }
     if (x?.kind === "written") {
       out.push({ q, kind: "written", options: [], answer: str(x?.answer, 400).trim(), marks });
-      continue;
+      return;
     }
     if (x?.kind === "spell") {
       const answer = str(x?.answer, 60).trim();
       if (answer && /^[\p{L}' -]+$/u.test(answer)) out.push({ q, kind: "spell", options: [], answer, marks, ...(x?.hear === false ? {} : { hear: true }) });
-      continue;
+      return;
     }
     if (x?.kind === "typed") {
       const answer = str(x?.answer, 120).trim();
       if (answer) out.push({ q, kind: "typed", options: [], answer, marks, ...img, ...(x?.method === true && marks >= 2 ? { method: true } : {}) });
-      continue;
+      return;
     }
     const options = (Array.isArray(x?.options) ? x.options : []).map((o: unknown) => str(o, 160).trim()).filter(Boolean).slice(0, 6);
     const answer = Math.round(Number(x?.answer));
     if (options.length >= 2 && answer >= 0 && answer < options.length) out.push({ q, kind: "choice", options, answer, marks, ...img });
   }
-  return out;
 }
 
 // ── Each learner gets the questions, and each question's options, in their own order ──
@@ -93,9 +100,16 @@ function shuffled(n: number, r: () => number): number[] {
 }
 // The order this learner sees: question numbers, and for each question the option numbers.
 // inOrder: everyone gets the paper as it was set (a real paper, a spelling test).
-export function learnerOrder(examId: string, studentId: string, qs: Pick<ExamQ, "options">[], inOrder = false): { order: number[]; opts: number[][] } {
+export function learnerOrder(examId: string, studentId: string, qs: Pick<ExamQ, "options" | "sec">[], inOrder = false): { order: number[]; opts: number[][] } {
   if (inOrder) return { order: qs.map((_, i) => i), opts: qs.map((q) => q.options.map((_, i) => i)) };
   const r = rng(hash(`${examId}|${studentId}`));
+  // A paper in sections (a JAMB CBT paper): each subject keeps its place, its questions shuffled within it.
+  if (qs.some((q) => q.sec)) {
+    const secs: (string | undefined)[] = [];
+    qs.forEach((q) => { if (!secs.includes(q.sec)) secs.push(q.sec); });
+    const order = secs.flatMap((sec) => { const idx = qs.map((q, i) => (q.sec === sec ? i : -1)).filter((i) => i >= 0); return shuffled(idx.length, r).map((k) => idx[k]); });
+    return { order, opts: qs.map((q) => shuffled(q.options.length, r)) };
+  }
   return { order: shuffled(qs.length, r), opts: qs.map((q) => shuffled(q.options.length, r)) };
 }
 // Spelling tests and real papers always keep their order (the teacher reads the
@@ -117,14 +131,14 @@ export const shownQ = (q: ExamQ) => (q.kind === "spell" ? gapped(q) : q.q);
 
 // What a learner's phone gets while the exam is open: no answers (a spelling
 // word only goes to the phone when the teacher lets learners hear it there).
-export type LearnerQ = { n: number; q: string; kind: ExamQ["kind"]; options: { i: number; text: string }[]; marks: number; img?: string; say?: string; method?: boolean; grid?: Grid; bench?: { slug: string } };
+export type LearnerQ = { n: number; q: string; kind: ExamQ["kind"]; options: { i: number; text: string }[]; marks: number; img?: string; say?: string; method?: boolean; grid?: Grid; bench?: { slug: string }; sec?: string };
 export function learnerPaper(examId: string, studentId: string, qs: ExamQ[], inOrder = false): LearnerQ[] {
   const { order, opts } = learnerOrder(examId, studentId, qs, keepsOrder(qs, inOrder));
   return order.map((n) => {
     const x = qs[n];
     return {
       n, q: shownQ(x), kind: x.kind, marks: x.marks, options: opts[n].map((i) => ({ i, text: x.options[i] })),
-      ...(x.img ? { img: x.img } : {}), ...(x.grid ? { grid: x.grid } : {}), ...(x.bench ? { bench: x.bench } : {}), ...(x.kind === "spell" && x.hear ? { say: spokenSpelling(x, n + 1) } : {}), ...(x.method ? { method: true } : {}),
+      ...(x.img ? { img: x.img } : {}), ...(x.grid ? { grid: x.grid } : {}), ...(x.bench ? { bench: x.bench } : {}), ...(x.sec ? { sec: x.sec } : {}), ...(x.kind === "spell" && x.hear ? { say: spokenSpelling(x, n + 1) } : {}), ...(x.method ? { method: true } : {}),
     };
   });
 }
