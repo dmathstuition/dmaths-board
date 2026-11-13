@@ -6,7 +6,8 @@ import { benchForTeacher, benchLines, withMarks } from "../lib/lab/benchExam";
 import { practicalFor } from "../lib/lab/bench/all";
 import { seeded } from "../lib/lab/bench/run";
 import { keptOf, redoExtraMs, redoPaper, triesOf, withoutTries } from "../lib/examRedo";
-import { benchGivenText, benchGot, cleanExamQuestions, cleanPageAnswer, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageDone, pagesToMark, shownQ, slimAnswers, workingKey, type ExamQ } from "../lib/exams";
+import { cleanPractice } from "../lib/topicPractice";
+import { benchGivenText, benchGot, checkResult, checkedAll, checkedKey, cleanExamQuestions, cleanPageAnswer, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageDone, pagesToMark, shownQ, slimAnswers, workingKey, type ExamQ } from "../lib/exams";
 
 // Exam mode with a stand-in for /api/board/exams that keeps the exam in memory
 // and marks with the real marking code.
@@ -45,9 +46,9 @@ function examServer() {
           score: e.submitted ? markPaper(qs, e.answers, e.marks ?? {}).score : null,
           ...(hand && e.submitted ? { marking: { left: pagesToMark(qs, e.answers, e.marks ?? {}, true).length, pages: qs.filter((q) => q.kind === "page").length } } : {}),
         } : null };
-        if (e && !e.submitted && exam.status === "open") { out.paper = learnerPaper(exam.id, tries.length ? `${me.id}:${tries.length}` : me.id, qs, exam.inOrder); out.personalFrom = exam.questions.length; }
+        if (e && !e.submitted && exam.status === "open") { out.paper = learnerPaper(exam.id, tries.length ? `${me.id}:${tries.length}` : me.id, qs, exam.inOrder); out.personalFrom = exam.questions.length; out.checked = checkedAll(qs, e.answers); }
         if (e && exam.status === "closed") { const m = markPaper(qs, e.answers, e.marks ?? {});
-          out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = qs.map((q, i) => ({ q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks, ...(q.sec ? { sec: q.sec } : {}),
+          out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = qs.map((q, i) => ({ q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks, ...(q.sec ? { sec: q.sec } : {}), ...(q.why ? { why: q.why } : {}),
             ...(q.kind === "bench" ? { given: [benchGivenText(e.answers[String(i)]), ...benchLines(q.bench!.slug, e.answers[String(i)] as any)].join("\n"), mark: benchGot(q, e.answers[String(i)]) } : {}) })); }
         return r.fulfill({ json: out });
       }
@@ -56,6 +57,10 @@ function examServer() {
         { q: `${b.topic}: which gas do plants take in?`, kind: "choice", options: ["Oxygen", "Carbon dioxide", "Nitrogen", "Helium"], answer: 1, marks: 1 },
         { q: `${b.topic}: what colour is chlorophyll?`, kind: "typed", options: [], answer: "green", marks: 1 },
       ].slice(0, b.count) } });
+      if (b.action === "ai-practice") return r.fulfill({ json: { questions: cleanPractice({ questions: [
+        { q: `${b.topic}: solve x² − 5x + 6 = 0. The roots are…`, kind: "choice", options: ["2 and 3", "−2 and −3", "1 and 6", "−1 and 6"], answer: 0, marks: 1, why: "1. Factorise: (x − 2)(x − 3) = 0.\n2. So x = 2 or x = 3." },
+        { q: `${b.topic}: what is the sum of the roots of x² − 7x + 10 = 0?`, kind: "typed", answer: "7", marks: 2, why: "Sum of roots = −b/a = 7." },
+      ] }, b.topic) } });
       if (b.action === "create") { const questions = cleanExamQuestions(b.questions); exam = { booklet: Array.isArray(b.booklet) ? b.booklet : [], id: "exam-1", title: b.title, minutes: b.minutes, review: b.review, calculator: b.calculator !== false, inOrder: b.inOrder === true, personal: questions.some((q) => q.kind === "spell") ? Number(b.personal) || 0 : 0, status: "open", endsAt: Date.now() + b.minutes * 60_000, questions }; return r.fulfill({ json: { id: exam.id } }); }
       if (b.action === "close") { close(); return r.fulfill({ json: { ok: true } }); }
       if (b.action === "wipe-paper") {
@@ -92,8 +97,16 @@ function examServer() {
       if (b.action === "start") { entries.set(me.id, { name: me.name, answers: {}, flags: 0, submitted: false, score: null, total: null, extraMs: 0, extraQs: exam!.personal ? [OWN_WORD] : [] }); return r.fulfill({ json: { ok: true } }); }
       const e = entries.get(me.id)!;
       if (b.action === "working") { e.answers[workingKey(b.n)] = { ink: cleanPageAnswer(b.value).ink }; return r.fulfill({ json: { ok: true } }); }
+      if (b.action === "check") {
+        const q = qsOf(e)[b.n];
+        if (!q?.practice) return r.fulfill({ status: 400, json: { error: "That question is marked at the end." } });
+        if (e.answers[String(b.n)] == null) return r.fulfill({ status: 400, json: { error: "Answer it first." } });
+        e.answers[checkedKey(b.n)] = true;
+        return r.fulfill({ json: { ok: true, ...checkResult(q, e.answers[String(b.n)]) } });
+      }
       if (b.action === "answer" || b.action === "page-done") {
         if (keptOf(e.answers).includes(b.n)) return r.fulfill({ status: 409, json: { error: "You got that one right last time — it's kept." } });
+        if (qsOf(e)[b.n]?.practice && e.answers[checkedKey(b.n)]) return r.fulfill({ status: 409, json: { error: "You've checked that one — go on to the next." } });
         if (qsOf(e)[b.n]?.kind === "page") {
           if (pageDone(e.answers[String(b.n)])) return r.fulfill({ status: 409, json: { error: "You've handed in that page." } });
           e.answers[String(b.n)] = { ...cleanPageAnswer(b.value), ...(b.action === "page-done" ? { done: new Date().toISOString() } : {}) };
@@ -163,7 +176,7 @@ test("exam mode: a timed test on a learner's phone, leaving the page flagged, ma
   await panel.getByRole("button", { name: /Remove question 4/ }).click();
   await panel.getByRole("button", { name: /Remove question 3/ }).click();
   // And some questions made from a topic.
-  await panel.getByLabel("Topic").selectOption({ label: "Pythagoras Pursuit" });
+  await panel.getByRole("combobox", { name: /^Topic/ }).selectOption({ label: "Pythagoras Pursuit" });
   await panel.getByLabel("How many", { exact: true }).fill("2");
   await panel.getByRole("button", { name: "Add 2 questions" }).click();
   await expect(panel.getByLabel("Question 4", { exact: true })).toHaveValue(/Right-angled triangle|ladder|distance/);
@@ -847,4 +860,48 @@ test("JAMB UTME practice on the CBT screen: subjects as tabs, keys, flag-and-ret
   await expect(score.getByRole("listitem").filter({ hasText: "Physics" })).toContainText("0 / 100");
   await expect(score.getByRole("listitem").filter({ hasText: "Mathematics" })).toContainText("100 / 100");
   if (SHOTS) await learner.screenshot({ path: `${SHOTS}/cbt-result.png` });
+});
+
+test("topic practice: WAEC/NECO/IGCSE-style questions, each checked as you go with a worked solution", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const SHOTS = process.env.LAB_SHOTS;
+  const { teacher, learner } = await openClass(browser);
+  await teacher.getByRole("button", { name: "Exam mode" }).click();
+  const panel = teacher.getByRole("dialog", { name: "Exam mode" });
+  const pr = panel.getByRole("region", { name: "Topic practice" });
+  await pr.getByLabel("Topic").fill("Quadratic equations");
+  await pr.getByLabel("Exam style").selectOption("igcse");
+  await pr.getByRole("button", { name: "Make the practice" }).click();
+  await expect(pr.getByRole("status")).toContainText("✓ 2 Cambridge IGCSE questions on Quadratic equations");
+  await expect(panel.getByLabel("Title")).toHaveValue("Mathematics practice — Quadratic equations");
+  await expect(panel.getByText(/Checked as they go · Quadratic equations/).first()).toBeVisible();
+  await panel.getByRole("button", { name: /Start the exam \(2 questions, 40 min\)/ }).click();
+
+  const exam = learner.getByRole("dialog", { name: /^Exam: Mathematics practice/ });
+  await expect(exam.getByRole("button", { name: "Start the exam" })).toBeVisible({ timeout: 20_000 });
+  await exam.getByRole("button", { name: "Start the exam" }).click();
+  // 1: a wrong answer — marked at once, the right one shown, and how to get it. It can't be changed after.
+  await expect(exam.getByRole("button", { name: "Answer it, then check" })).toBeDisabled();
+  await exam.getByRole("radio", { name: /^[A-D] 1 and 6$/ }).click();
+  await exam.getByRole("button", { name: "✓ Check my answer" }).click();
+  const told = exam.getByRole("region", { name: "Your answer, checked" });
+  await expect(told).toContainText("✗ Not quite — the answer is 2 and 3");
+  await expect(told).toContainText("Factorise: (x − 2)(x − 3) = 0");
+  await expect(exam.getByRole("radio", { name: /^[A-D] 2 and 3$/ })).toHaveAttribute("aria-disabled", "true"); // locked once checked
+  await exam.getByRole("radio", { name: /^[A-D] 2 and 3$/ }).click({ force: true });
+  await expect(exam.getByRole("radio", { name: /^[A-D] 1 and 6$/ })).toHaveAttribute("aria-checked", "true");
+  if (SHOTS) await learner.screenshot({ path: `${SHOTS}/practice-checked.png` });
+  // 2: a typed answer, right.
+  await exam.getByRole("button", { name: "Next →" }).click();
+  await exam.getByLabel("Your answer").fill("7");
+  await exam.getByRole("button", { name: "✓ Check my answer" }).click();
+  await expect(exam.getByRole("region", { name: "Your answer, checked" })).toContainText("✓ Right!");
+  await expect(exam.getByRole("textbox", { name: "Your answer" })).toHaveAttribute("readonly", "");
+  await exam.getByRole("button", { name: "Hand in", exact: true }).click();
+  await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
+  await expect(exam.getByText("2 / 3")).toBeVisible({ timeout: 15_000 });
+  // The results keep the worked solutions.
+  await panel.getByRole("button", { name: "End exam" }).click();
+  await expect(exam.getByRole("list", { name: "Your answers" })).toBeVisible({ timeout: 20_000 });
+  await expect(exam.getByText(/💡 1\. Factorise/)).toBeVisible();
 });

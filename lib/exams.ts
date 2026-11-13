@@ -28,7 +28,10 @@ export type Grid = { x: string; y: string; x0: number; x1: number; y0: number; y
 // on their own bench and records their readings; marked against their own
 // bench by the server (lib/lab/benchExam.ts), which keeps the mark as `got`.
 // sec: the section (subject) of a CBT paper — JAMB UTME practice (lib/cbt.ts).
-export type ExamQ = { q: string; kind: "choice" | "typed" | "spell" | "page" | "written" | "graph" | "bench"; options: string[]; answer: number | string; marks: number; img?: string; hear?: boolean; method?: boolean; grid?: Grid; bench?: { slug: string }; sec?: string };
+// practice: marked the moment the learner checks it, with its worked solution
+// (why) — topic practice (lib/topicPractice.ts); topic: what it's on.
+export type ExamQ = { q: string; kind: "choice" | "typed" | "spell" | "page" | "written" | "graph" | "bench"; options: string[]; answer: number | string; marks: number; img?: string; hear?: boolean; method?: boolean; grid?: Grid; bench?: { slug: string }; sec?: string;
+  practice?: boolean; why?: string; topic?: string };
 export const MAX_BENCH_MARKS = 40;
 export const MAX_EXAM_QUESTIONS = 180; // a full JAMB UTME paper
 export const MAX_PAGE_MARKS = 20;
@@ -49,8 +52,17 @@ export function cleanExamQuestions(v: unknown): ExamQ[] {
     if (!q) continue;
     const before = out.length;
     pushOne(x, q);
+    if (out.length === before) continue;
+    const last = out[out.length - 1];
     const sec = str(x?.sec, 40).replace(/\s+/g, " ").trim();
-    if (sec && out.length > before) out[out.length - 1].sec = sec;
+    if (sec) last.sec = sec;
+    const topic = str(x?.topic, 60).replace(/\s+/g, " ").trim();
+    if (topic) last.topic = topic;
+    if (x?.practice === true && (last.kind === "choice" || last.kind === "typed")) {
+      last.practice = true;
+      const why = str(x?.why, 700).trim();
+      if (why) last.why = why;
+    }
   }
   return out;
   function pushOne(x: any, q: string) {
@@ -131,14 +143,14 @@ export const shownQ = (q: ExamQ) => (q.kind === "spell" ? gapped(q) : q.q);
 
 // What a learner's phone gets while the exam is open: no answers (a spelling
 // word only goes to the phone when the teacher lets learners hear it there).
-export type LearnerQ = { n: number; q: string; kind: ExamQ["kind"]; options: { i: number; text: string }[]; marks: number; img?: string; say?: string; method?: boolean; grid?: Grid; bench?: { slug: string }; sec?: string };
+export type LearnerQ = { n: number; q: string; kind: ExamQ["kind"]; options: { i: number; text: string }[]; marks: number; img?: string; say?: string; method?: boolean; grid?: Grid; bench?: { slug: string }; sec?: string; practice?: boolean; topic?: string };
 export function learnerPaper(examId: string, studentId: string, qs: ExamQ[], inOrder = false): LearnerQ[] {
   const { order, opts } = learnerOrder(examId, studentId, qs, keepsOrder(qs, inOrder));
   return order.map((n) => {
     const x = qs[n];
     return {
       n, q: shownQ(x), kind: x.kind, marks: x.marks, options: opts[n].map((i) => ({ i, text: x.options[i] })),
-      ...(x.img ? { img: x.img } : {}), ...(x.grid ? { grid: x.grid } : {}), ...(x.bench ? { bench: x.bench } : {}), ...(x.sec ? { sec: x.sec } : {}), ...(x.kind === "spell" && x.hear ? { say: spokenSpelling(x, n + 1) } : {}), ...(x.method ? { method: true } : {}),
+      ...(x.img ? { img: x.img } : {}), ...(x.grid ? { grid: x.grid } : {}), ...(x.bench ? { bench: x.bench } : {}), ...(x.sec ? { sec: x.sec } : {}), ...(x.practice ? { practice: true } : {}), ...(x.topic ? { topic: x.topic } : {}), ...(x.kind === "spell" && x.hear ? { say: spokenSpelling(x, n + 1) } : {}), ...(x.method ? { method: true } : {}),
     };
   });
 }
@@ -240,6 +252,21 @@ export function graphAnswerText(q: Pick<ExamQ, "answer" | "grid">): string {
 
 // A typed answer as a person reads it: the first form, a range as "23.40 to 23.50".
 export const shownAnswer = (a: unknown) => String(a ?? "").split("|")[0].trim().replace(/^(-?[\d.]+)\.\.(-?[\d.]+)$/, "$1 to $2");
+// ── Topic practice: checking one answer ──
+// Where a learner's "I've checked this one" is kept, next to their answer.
+export const checkedKey = (n: number) => `c${n}`;
+export type Checked = { right: boolean; answer: number | string; why: string };
+// What a learner is told when they check an answer: right or not, the right answer, and the worked solution.
+export function checkResult(q: ExamQ, given: unknown): Checked {
+  return { right: isRight(q, given), answer: q.kind === "choice" ? Number(q.answer) : shownAnswer(q.answer), why: q.why ?? "" };
+}
+// Every practice answer a learner has checked so far (to show again after a refresh).
+export function checkedAll(qs: ExamQ[], answers: Record<string, unknown>): Record<string, Checked> {
+  const out: Record<string, Checked> = {};
+  qs.forEach((q, i) => { if (q.practice && answers?.[checkedKey(i)]) out[String(i)] = checkResult(q, answers[String(i)]); });
+  return out;
+}
+
 // ── Practical tests ──
 // The marks the server worked out for a learner's bench (never the learner's own say).
 export function benchGot(q: Pick<ExamQ, "marks">, given: unknown): number {

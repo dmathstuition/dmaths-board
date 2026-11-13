@@ -20,7 +20,8 @@ const BenchQuestion = dynamic(() => import("@/components/live/board/BenchQuestio
 import GraphPlot from "@/components/live/board/GraphPlot";
 import CbtScreen from "@/components/live/board/CbtScreen";
 import { JAMB_ENGLISH, JAMB_SIZES, JAMB_SUBJECTS, cbtBatches, cbtTitle, isCbt, sectionScores, type JambSize } from "@/lib/cbt";
-import { shownAnswer } from "@/lib/exams";
+import { shownAnswer, type Checked } from "@/lib/exams";
+import { PRACTICE_COUNTS, PRACTICE_STYLES, PRACTICE_SUBJECTS, practiceTitle, type PracticeStyle } from "@/lib/topicPractice";
 import { EXAM_MINUTES, EXAM_TOPICS, MAX_PAGE_MARKS, MAX_WRITTEN, clockLeft, isHandMarked, keepsOrder, needsMarking, pageDone, workingKey, spokenSpelling, topicQuestions, type ExamQ, type LearnerQ } from "@/lib/exams";
 import { BookletLayout, MarkingDesk, PageFlow, WorkingPad } from "@/components/live/board/PaperPages";
 import type { Difficulty } from "@/lib/games/generators";
@@ -39,7 +40,7 @@ type Meta = { booklet?: string[]; id: string; title: string; minutes: number; re
 type Entry = { tries?: ExamTry[]; extraMs?: number; extraQs?: ExamQ[]; pageMarks?: Record<string, number>; toMark?: number[]; id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null;
   answers?: Record<string, unknown>; startedAt?: string | null; submittedAt?: string | null };
 type Analysis = { score: number; total: number; right: number; wrong: number; blank: number; average: number | null; best: number | null; takers: number; position: number | null; flags: number };
-type Review = { q: string; kind: ExamQ["kind"]; options: string[]; answer: number | string; given: unknown; right: boolean; marks: number; mark?: number | null; sec?: string };
+type Review = { q: string; kind: ExamQ["kind"]; options: string[]; answer: number | string; given: unknown; right: boolean; marks: number; mark?: number | null; sec?: string; why?: string };
 
 // Extra time in minutes, to one decimal place (25% of 10 minutes is 2.5).
 const extraMins = (ms = 0) => String(Math.round(ms / 6000) / 10);
@@ -239,6 +240,24 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
   const [jambSize, setJambSize] = useState<JambSize>("full");
   const [jambBusy, setJambBusy] = useState<string | null>(null);
   const [jambNote, setJambNote] = useState<string | null>(null);
+  // Topic practice: questions on one topic, each marked as it's checked, with a worked solution.
+  const [prSubject, setPrSubject] = useState<string>(PRACTICE_SUBJECTS[0]);
+  const [prTopic, setPrTopic] = useState("");
+  const [prStyle, setPrStyle] = useState<PracticeStyle>("waec");
+  const [prCount, setPrCount] = useState<number>(10);
+  const [prBusy, setPrBusy] = useState(false);
+  const [prNote, setPrNote] = useState<string | null>(null);
+  async function makePractice() {
+    if (prTopic.trim().length < 3) { setPrNote("Say the topic, e.g. \"Quadratic equations\"."); return; }
+    setPrBusy(true); setPrNote(null);
+    const { ok, j } = await api({ action: "ai-practice", sessionId, subject: prSubject, topic: prTopic.trim(), style: prStyle, count: prCount, difficulty: level });
+    setPrBusy(false);
+    if (!ok) { setPrNote(j.error ?? "The A.I couldn't write the practice just now — try again."); return; }
+    const got: ExamQ[] = j.questions ?? [];
+    setQs((cur) => [...cur.filter((q) => q.practice), ...got].slice(0, 60)); ownTitle.current = false; setTitle(practiceTitle(prSubject, prTopic.trim()));
+    setMinutes(40); setCalcOk(true); setInOrder(true); setReview(true);
+    setPrNote(`✓ ${got.length} ${PRACTICE_STYLES[prStyle].label} questions on ${prTopic.trim()} — each with a worked solution. Learners check every answer as they go: it's marked at once and the solution shown. Make another topic to add more.`);
+  }
   async function makeJamb() {
     if (jamb.length !== 3) { setJambBusy(null); setJambNote("Choose three subjects to go with Use of English."); return; }
     if (qs.length && !window.confirm(`Replace the ${qs.length} question${qs.length === 1 ? "" : "s"} below with a JAMB CBT paper?`)) return;
@@ -416,6 +435,26 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
             <fieldset className="mt-3"><legend className="text-xs font-black text-ink/60">Time</legend>
               <div className="mt-1 flex flex-wrap gap-1.5">{EXAM_MINUTES.map((m) => <button key={m} type="button" aria-pressed={minutes === m} onClick={() => setMinutes(m)} className={chip(minutes === m)}>{m} min</button>)}</div>
             </fieldset>
+            <section aria-label="Topic practice" className="mt-4 rounded-xl bg-[#F0FDF4] p-3 ring-1 ring-[#BBF7D0]">
+              <p className="text-xs font-black text-[#166534]">📚 Topic practice — WAEC / NECO / IGCSE style</p>
+              <p className="mt-0.5 text-[11px] font-semibold text-[#166534]/80">Past-paper-style questions on one topic. Learners check each answer as they go — marked at once, with a worked solution — and the results go into the class results like any test.</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-[auto_1fr_auto_auto]">
+                <label className="text-xs font-black text-[#166534]">Subject
+                  <select value={prSubject} onChange={(e) => setPrSubject(e.target.value)} className="mt-1 block w-full rounded-lg bg-white px-2 py-2 text-xs font-black ring-1 ring-[#BBF7D0]">{PRACTICE_SUBJECTS.map((s) => <option key={s}>{s}</option>)}</select>
+                </label>
+                <label className="text-xs font-black text-[#166534]">Topic
+                  <input value={prTopic} onChange={(e) => setPrTopic(e.target.value)} maxLength={120} placeholder="e.g. Quadratic equations" className={`${field} mt-1`} />
+                </label>
+                <label className="text-xs font-black text-[#166534]">Exam style
+                  <select value={prStyle} onChange={(e) => setPrStyle(e.target.value as PracticeStyle)} className="mt-1 block w-full rounded-lg bg-white px-2 py-2 text-xs font-black ring-1 ring-[#BBF7D0]">{(Object.keys(PRACTICE_STYLES) as PracticeStyle[]).map((k) => <option key={k} value={k}>{PRACTICE_STYLES[k].label}</option>)}</select>
+                </label>
+                <label className="text-xs font-black text-[#166534]">Questions
+                  <select value={prCount} onChange={(e) => setPrCount(Number(e.target.value))} className="mt-1 block w-full rounded-lg bg-white px-2 py-2 text-xs font-black ring-1 ring-[#BBF7D0]">{PRACTICE_COUNTS.map((n) => <option key={n} value={n}>{n}</option>)}</select>
+                </label>
+              </div>
+              <button type="button" onClick={makePractice} disabled={prBusy} className="mt-2 min-h-[40px] rounded-xl bg-[#166534] px-4 text-xs font-black text-white disabled:opacity-50">{prBusy ? "Writing the questions and solutions…" : "Make the practice"}</button>
+              {prNote && <p role="status" className="mt-2 text-xs font-bold text-[#166534]">{prNote}</p>}
+            </section>
             <section aria-label="JAMB CBT practice" className="mt-4 rounded-xl bg-[#EFF6FF] p-3 ring-1 ring-[#BFDBFE]">
               <p className="text-xs font-black text-[#1E3A8A]">🖥 JAMB UTME practice — on the CBT screen</p>
               <p className="mt-0.5 text-[11px] font-semibold text-[#1E3A8A]/80">Use of English and three more subjects, as tabs — the clock, the calculator, flag-and-return, and a JAMB score out of 400. The A.I writes the questions.</p>
@@ -621,6 +660,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
                       )}
                     </div>
                   )}
+                  {q.practice && <p className="mt-2 pl-5 text-xs text-ink/60"><b className="text-[#166534]">✓ Checked as they go{q.topic ? ` · ${q.topic}` : ""}</b>{q.why ? <> · 💡 {q.why}</> : null}</p>}
                 </li>
               ))}
             </ol>
@@ -951,6 +991,8 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
   const kept = new Set<number>(Array.isArray(entry?.keep) ? entry.keep : []);
   const [saySeen, setSaySeen] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [checked, setChecked] = useState<Record<string, Checked>>({}); // topic practice: answers checked, with their solutions
+  const [checking, setChecking] = useState<number | null>(null);
   const [at, setAt] = useState(0);
   const [hidden, setHidden] = useState(false);
   const [warned, setWarned] = useState(0);
@@ -975,7 +1017,7 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
   useEffect(() => {
     if (!exam || !entry || seeded.current === `${exam.id}:${attempt}`) return;
     seeded.current = `${exam.id}:${attempt}`;
-    setAnswers(entry.answers ?? {}); setAt(0); setResult(null); setHidden(false); submitted.current = false; setWarned(0);
+    setAnswers(entry.answers ?? {}); setChecked(data?.checked ?? {}); setAt(0); setResult(null); setHidden(false); submitted.current = false; setWarned(0);
   }, [exam, entry, attempt]);
   // Leaving the exam page (another app, another tab) is reported.
   const lastFlag = useRef(0);
@@ -1007,10 +1049,22 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
   const pending = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   function answer(n: number, value: unknown, typed = false) {
     if (kept.has(n)) return; // right last time: kept
+    if (checked[String(n)]) return; // practice: checked — it stays as it was
     setAnswers((a) => ({ ...a, [String(n)]: value }));
     clearTimeout(pending.current[n]);
     const go = () => api({ action: "answer", examId: exam!.id, n, value }).then(({ ok, j }) => setNote(ok ? null : j.error ?? "An answer didn't save — check the internet."));
     if (typed) pending.current[n] = setTimeout(go, 600); else go();
+  }
+  // Topic practice: mark this one now and show the worked solution.
+  async function check(n: number) {
+    if (!exam || checked[String(n)] || checking != null) return;
+    setChecking(n);
+    const t = pending.current[n];
+    if (t) { clearTimeout(t); delete pending.current[n]; await api({ action: "answer", examId: exam.id, n, value: answers[String(n)] }); } // a typed answer still saving
+    const { ok, j } = await api({ action: "check", examId: exam.id, n });
+    setChecking(null);
+    if (ok) setChecked((c) => ({ ...c, [String(n)]: { right: !!j.right, answer: j.answer, why: String(j.why ?? "") } }));
+    else setNote(j.error ?? "Couldn't check that one — try again.");
   }
   async function submit(auto = false) {
     if (!exam) return;
@@ -1113,10 +1167,11 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
         {q.kind === "choice" ? (
           <div className="mt-4 grid gap-2" role="radiogroup" aria-label="Your answer">
             {q.options.map((o, k) => {
-              const on = answers[String(q.n)] === o.i;
+              const on = answers[String(q.n)] === o.i, c = checked[String(q.n)];
+              const mark = c ? (o.i === c.answer ? "right" : on ? "wrong" : null) : null;
               return (
-                <button key={o.i} type="button" role="radio" aria-checked={on} aria-disabled={kept.has(q.n) || undefined} onClick={() => answer(q.n, o.i)}
-                  className={`flex min-h-[52px] items-center gap-3 rounded-xl px-4 text-left text-base font-bold ring-2 ${on ? "bg-[#C2451C] text-white ring-[#C2451C]" : "bg-white ring-orange-100 hover:ring-orange-300"}`}>
+                <button key={o.i} type="button" role="radio" aria-checked={on} aria-disabled={kept.has(q.n) || !!c || undefined} onClick={() => answer(q.n, o.i)}
+                  className={`flex min-h-[52px] items-center gap-3 rounded-xl px-4 text-left text-base font-bold ring-2 ${mark === "right" ? "bg-emerald-50 text-emerald-900 ring-emerald-500" : mark === "wrong" ? "bg-red-50 text-red-900 ring-red-400" : on ? "bg-[#C2451C] text-white ring-[#C2451C]" : "bg-white ring-orange-100 hover:ring-orange-300"}`}>
                   <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-black ${on ? "bg-white text-[#C2451C]" : "bg-orange-50 text-[#C2451C]"}`}>{String.fromCharCode(65 + k)}</span>{o.text}
                 </button>
               );
@@ -1133,10 +1188,23 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
           </label>
         ) : (
           <label className="mt-4 block text-sm font-bold text-ink/60">{q.kind === "spell" ? "The missing word" : "Your answer"}
-            <input value={String(answers[String(q.n)] ?? "")} readOnly={kept.has(q.n)} maxLength={120} onChange={(e) => answer(q.n, e.target.value, true)} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
+            <input value={String(answers[String(q.n)] ?? "")} readOnly={kept.has(q.n) || !!checked[String(q.n)]} maxLength={120} onChange={(e) => answer(q.n, e.target.value, true)} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
               className="mt-1 w-full rounded-xl bg-white px-4 py-3 text-xl font-black text-ink ring-2 ring-orange-200 focus:outline-none focus:ring-[#C2451C]" />
           </label>
         )}
+        {q.practice && (() => {
+          const c = checked[String(q.n)], has = answers[String(q.n)] != null && answers[String(q.n)] !== "";
+          return c ? (
+            <section aria-label="Your answer, checked" className={`mt-4 rounded-xl p-3 text-sm ring-1 ${c.right ? "bg-emerald-50 ring-emerald-200" : "bg-amber-50 ring-amber-200"}`}>
+              <p className={`text-base font-black ${c.right ? "text-emerald-800" : "text-amber-900"}`}>{c.right ? "✓ Right!" : `✗ Not quite — the answer is ${q.kind === "choice" ? q.options.find((o) => o.i === c.answer)?.text ?? "" : c.answer}`}</p>
+              {c.why && <div className="mt-2"><p className="text-xs font-black uppercase tracking-wider text-ink/50">Worked solution</p><p className="mt-0.5 whitespace-pre-wrap leading-relaxed text-ink/85">{c.why}</p></div>}
+            </section>
+          ) : (
+            <button type="button" onClick={() => check(q.n)} disabled={!has || checking != null} className="mt-4 min-h-[48px] w-full rounded-xl bg-emerald-600 text-sm font-black text-white disabled:opacity-40">
+              {checking === q.n ? "Checking…" : has ? "✓ Check my answer" : "Answer it, then check"}
+            </button>
+          );
+        })()}
         {q.method && !kept.has(q.n) && <WorkingPad key={q.n} examId={exam.id} n={q.n} myId="learner" saved={answers[workingKey(q.n)]} api={api} onInk={(ink) => setAnswers((a) => ({ ...a, [workingKey(q.n)]: { ink } }))} />}
         <div className="mt-4 flex gap-2">
           <button type="button" disabled={at === 0} onClick={() => setAt(at - 1)} className="min-h-[48px] flex-1 rounded-xl bg-orange-50 text-sm font-black text-[#C2451C] disabled:opacity-40">← Back</button>
@@ -1195,6 +1263,7 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
                 : r.kind === "graph" ? <>Your graph: {String(r.given ?? "").trim() || "nothing plotted"} · <b>{r.mark ?? 0} / {r.marks}</b>{r.mark !== r.marks && !!String(r.answer ?? "").trim() && <span className="block text-emerald-800">{String(r.answer)}</span>}</>
                 : r.kind === "written" ? <>You wrote: {String(r.given ?? "").trim() || "no answer"} · <b>{r.mark == null ? "not marked yet" : `${r.mark} / ${r.marks}`}</b>{!!String(r.answer ?? "").trim() && r.mark !== r.marks && <span className="block text-emerald-800">A full answer includes: {String(r.answer)}</span>}</> : r.kind === "page" ? (r.given == null ? "Not marked yet" : `Your teacher's mark: ${r.given} / ${r.marks}`) : <>You: {r.given == null || r.given === "" ? "no answer" : r.kind === "choice" ? r.options[Number(r.given)] : String(r.given)}</>}
                 {!r.right && r.kind !== "page" && r.kind !== "written" && r.kind !== "graph" && r.kind !== "bench" && <> · <span className="font-black text-emerald-800">Answer: {r.kind === "choice" ? r.options[Number(r.answer)] : shownAnswer(r.answer)}</span></>}
+                {r.why && <span className="mt-1 block whitespace-pre-wrap text-ink/70">💡 {r.why}</span>}
               </p>
             </li>
           ))}

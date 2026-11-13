@@ -3,7 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { sessionViewer } from "@/lib/sessionAccess";
 import { rateLimit } from "@/lib/ratelimit";
 import { benchForTeacher, benchLines, withMarks } from "@/lib/lab/benchExam";
-import { AI_EXAM_SYSTEM, GRACE_MS, aiExamPrompt, cleanAiExam, cleanExamQuestions, benchGot, benchGivenText, hideBenchMarks, cleanGiven, cleanGraphGiven, graphAnswerText, graphGivenText, graphMarks, MAX_BOOKLET, MAX_WRITTEN, cleanPageAnswer, cleanPageMarks, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageBlank, pageDone, pagesToMark, shownQ, slimAnswers, teacherMax, workingKey, type ExamQ } from "@/lib/exams";
+import { AI_PRACTICE_SYSTEM, PRACTICE_STYLES, cleanPractice, practicePrompt, type PracticeStyle } from "@/lib/topicPractice";
+import { AI_EXAM_SYSTEM, GRACE_MS, aiExamPrompt, cleanAiExam, cleanExamQuestions, benchGot, benchGivenText, hideBenchMarks, checkResult, checkedAll, checkedKey, cleanGiven, cleanGraphGiven, graphAnswerText, graphGivenText, graphMarks, MAX_BOOKLET, MAX_WRITTEN, cleanPageAnswer, cleanPageMarks, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageBlank, pageDone, pagesToMark, shownQ, slimAnswers, teacherMax, workingKey, type ExamQ } from "@/lib/exams";
 import { isWarmUp, missedSpellings } from "@/lib/sats";
 import { nameKey } from "@/lib/stars";
 import { isSlideUrl } from "@/lib/whiteboard";
@@ -172,7 +173,7 @@ export async function GET(req: Request) {
       // Marked by hand (pages, method marks): how far the teacher has got.
       ...(hand && entry.submitted_at ? { marking: { left: pagesToMark(myQs, given0, myMarks, true).length, pages: myQs.filter((q) => q.kind === "page").length } } : {}),
     } : null };
-    if (entry && !entry.submitted_at && e.status === "open") { out.paper = learnerPaper(e.id, tries.length ? `${v.id}:${tries.length}` : v.id, myQs, !!e.in_order); out.personalFrom = e.questions.length; }
+    if (entry && !entry.submitted_at && e.status === "open") { out.paper = learnerPaper(e.id, tries.length ? `${v.id}:${tries.length}` : v.id, myQs, !!e.in_order); out.personalFrom = e.questions.length; out.checked = checkedAll(myQs, given0); }
     // Once it's over: how they did, against the class — and (if the teacher
     // allows it) their answers against the right ones.
     if (entry && e.status === "closed") {
@@ -193,6 +194,7 @@ export async function GET(req: Request) {
         ...(q.method && myMarks[String(i)] != null ? { method: myMarks[String(i)] } : {}),
         ...(q.kind === "written" ? { mark: myMarks[String(i)] ?? (String(given[String(i)] ?? "").trim() ? null : 0) } : {}),
         ...(q.kind === "graph" ? { given: graphGivenText(given[String(i)]), answer: graphAnswerText(q), mark: graphMarks(q, given[String(i)]) } : {}),
+        ...(q.why ? { why: q.why } : {}),
         ...(q.kind === "bench" ? { given: [benchGivenText(given[String(i)]), ...benchLines(q.bench?.slug ?? "", given[String(i)] as any)].join("\n"), answer: "Each reading is marked against your own bench.", mark: benchGot(q, given[String(i)]) } : {}),
       }));
     }
@@ -219,6 +221,25 @@ export async function POST(req: Request) {
       try {
         const reply = await aiChat({ system: AI_EXAM_SYSTEM, user: aiExamPrompt(ask), maxTokens: Math.min(6000, 400 + ask.count * 220) });
         questions = cleanAiExam(extractJson(reply), kind).slice(0, ask.count);
+      } catch (err) { return aiErrorResponse(err); }
+      if (!questions.length) return bad("The A.I reply wasn't usable — try again, or word the topic differently.", 502);
+      return NextResponse.json({ questions });
+    }
+    // Topic practice: the A.I writes questions with a worked solution for each.
+    if (action === "ai-practice") {
+      const v = await sessionViewer(String(body?.sessionId ?? "")).catch(() => null);
+      if (!v?.host) return bad("Only the class's teacher can set practice.", 403);
+      const subject = String(body?.subject ?? "").replace(/\s+/g, " ").trim().slice(0, 60), topic = String(body?.topic ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+      if (subject.length < 2 || topic.length < 3) return bad("Choose the subject and say the topic, e.g. \"Quadratic equations\".");
+      if (!rateLimit(`exam-ai:${v.id}`, 12, 60_000)) return bad("Give the A.I a minute before asking again.", 429);
+      if (!rateLimit(`exam-ai-day:${v.id}`, 60, 86_400_000)) return bad("That's today's A.I question limit — try again tomorrow.", 429);
+      const style: PracticeStyle = body?.style in PRACTICE_STYLES ? body.style : "waec";
+      const count = Math.max(1, Math.min(20, Math.round(Number(body?.count) || 10)));
+      const difficulty = ["easy", "medium", "hard"].includes(body?.difficulty) ? body.difficulty : "medium";
+      let questions: ExamQ[];
+      try {
+        const reply = await aiChat({ system: AI_PRACTICE_SYSTEM, user: practicePrompt({ subject, topic, style, count, difficulty }), maxTokens: Math.min(8000, 500 + count * 380) });
+        questions = cleanPractice(extractJson(reply), topic).slice(0, count);
       } catch (err) { return aiErrorResponse(err); }
       if (!questions.length) return bad("The A.I reply wasn't usable — try again, or word the topic differently.", 502);
       return NextResponse.json({ questions });
@@ -429,10 +450,25 @@ export async function POST(req: Request) {
       if (error) return dbFail(error.message);
       return NextResponse.json({ ok: true });
     }
+    // Topic practice: check one answer — it's marked, and the worked solution shown; it can't change after that.
+    if (action === "check") {
+      const n = Math.round(Number(body?.n));
+      const q = myQs[n];
+      if (!q?.practice) return bad("That question is marked at the end.");
+      const given = (entry.answers ?? {})[String(n)];
+      if (given == null || given === "") return bad("Answer it first.");
+      if (!(entry.answers ?? {})[checkedKey(n)]) {
+        const answers = { ...(entry.answers ?? {}), [checkedKey(n)]: true };
+        const { error } = await admin.from("board_exam_entries").update({ answers }).eq("exam_id", e.id).eq("student_id", v.id);
+        if (error) return dbFail(error.message);
+      }
+      return NextResponse.json({ ok: true, ...checkResult(q, given) });
+    }
     if (action === "answer" || action === "page-done") {
       const n = Math.round(Number(body?.n));
       if (!(n >= 0 && n < myQs.length)) return bad("Which question?");
       if (keptOf(entry.answers).includes(n)) return bad("You got that one right last time — it's kept.", 409);
+      if (myQs[n]?.practice && (entry.answers ?? {})[checkedKey(n)]) return bad("You've checked that one — go on to the next.", 409);
       const q = myQs[n], had = (entry.answers ?? {})[String(n)];
       let value: unknown;
       if (q.kind === "page") {
