@@ -20,6 +20,7 @@ import { AtomPanel, SortPanel, TransformPanel } from "@/components/live/board/Le
 import { TimesSquarePanel } from "@/components/live/board/TimesTables";
 import { BalancerPanel, FoodWebPanel, RayPanel } from "@/components/live/board/ScienceMore";
 import { AnglesPanel, BarPanel, ChancePanel, ColumnPanel, MachinePanel } from "@/components/live/board/MathsMore";
+import { DivisionPanel } from "@/components/live/board/DivisionPanel";
 import { ForcesPanel, ParticlePanel, PhPanel } from "@/components/live/board/SciencePlus";
 
 // The class tools that sit on top of the board: timer, dice, name picker,
@@ -51,6 +52,7 @@ export default function BoardWidgets({ w, host, onChange, boxW, names, onDraw, m
       {w.geoboard.on && <GeoboardPanel s={w.geoboard} host={host} boxW={boxW} onChange={(geoboard, final) => onChange({ ...w, geoboard }, final)} />}
       {w.balance.on && <BalancePanel s={w.balance} host={host} boxW={boxW} onChange={(balance, final) => onChange({ ...w, balance }, final)} />}
       {w.chart.on && <ChartPanel s={w.chart} host={host} boxW={boxW} onChange={(chart, final) => onChange({ ...w, chart }, final)} />}
+      {w.division.on && <DivisionPanel s={w.division} host={host} boxW={boxW} onChange={(division, final) => onChange({ ...w, division }, final)} />}
       {w.column.on && <ColumnPanel s={w.column} host={host} boxW={boxW} onChange={(column, final) => onChange({ ...w, column }, final)} />}
       {w.barmodel.on && <BarPanel s={w.barmodel} host={host} boxW={boxW} onChange={(barmodel, final) => onChange({ ...w, barmodel }, final)} />}
       {w.machine.on && <MachinePanel s={w.machine} host={host} boxW={boxW} onChange={(machine, final) => onChange({ ...w, machine }, final)} />}

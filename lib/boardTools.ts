@@ -8,6 +8,7 @@ import { DEFAULT_ATOM, DEFAULT_SORT, DEFAULT_TRANSFORM, cleanAtom, cleanSort, cl
 import { DEFAULT_SQUARE, cleanSquare, type SquareState } from "@/lib/tablesDrill";
 import { DEFAULT_FORCES, DEFAULT_PARTICLES, DEFAULT_PH, cleanForces, cleanParticles, cleanPh, type ForceState, type ParticleState, type PhState } from "@/lib/sciencePlus";
 import { DEFAULT_ANGLES, DEFAULT_BAR, DEFAULT_CHANCE, DEFAULT_COLUMN, DEFAULT_MACHINE, cleanAngles, cleanBar, cleanChance, cleanColumn, cleanMachine, type AngleState, type BarState, type ChanceState, type ColumnState, type MachineState } from "@/lib/mathsMore";
+import { DEFAULT_DIVISION, cleanDivision, type DivState } from "@/lib/division";
 import { DEFAULT_BALANCER, DEFAULT_FOODWEB, DEFAULT_RAYS, cleanBalancer, cleanFoodWeb, cleanRays, type BalancerState, type FoodWebState, type RayState } from "@/lib/scienceMore";
 import { DEFAULT_CIRCUIT, DEFAULT_LABELS, DEFAULT_PTABLE, cleanCircuit, cleanLabels, cleanPTable, type CircuitState, type LabelState, type PTableState } from "@/lib/scienceTools";
 import { DEFAULT_BALANCE, DEFAULT_CHART, DEFAULT_GEO, cleanBalance, cleanChart, cleanGeo, type BalanceState, type ChartState, type GeoState } from "@/lib/mathTools";
@@ -81,6 +82,7 @@ export type Widgets = {
   rays: RayState;        // ray diagrams
   foodweb: FoodWebState; // the food web builder
   column: ColumnState;   // column methods, a step at a time (lib/mathsMore.ts)
+  division: DivState;    // division broken down five ways, a step at a time (lib/division.ts)
   barmodel: BarState;    // the bar model
   machine: MachineState; // the function machine
   chance: ChanceState;   // coin, dice and spinner
@@ -115,7 +117,7 @@ export const DEFAULT_WIDGETS: Widgets = {
   ptable: DEFAULT_PTABLE, circuit: DEFAULT_CIRCUIT, labels: DEFAULT_LABELS,
   transform: DEFAULT_TRANSFORM, atom: DEFAULT_ATOM, sort: DEFAULT_SORT, tsquare: DEFAULT_SQUARE,
   balancer: DEFAULT_BALANCER, rays: DEFAULT_RAYS, foodweb: DEFAULT_FOODWEB,
-  column: DEFAULT_COLUMN, barmodel: DEFAULT_BAR, machine: DEFAULT_MACHINE, chance: DEFAULT_CHANCE, angles: DEFAULT_ANGLES,
+  column: DEFAULT_COLUMN, division: DEFAULT_DIVISION, barmodel: DEFAULT_BAR, machine: DEFAULT_MACHINE, chance: DEFAULT_CHANCE, angles: DEFAULT_ANGLES,
   particles: DEFAULT_PARTICLES, ph: DEFAULT_PH, forces: DEFAULT_FORCES,
 };
 
@@ -173,7 +175,7 @@ export function cleanWidgets(v: unknown): Widgets {
     ptable: cleanPTable(w?.ptable), circuit: cleanCircuit(w?.circuit), labels: cleanLabels(w?.labels),
     transform: cleanTransform(w?.transform), atom: cleanAtom(w?.atom), sort: cleanSort(w?.sort), tsquare: cleanSquare(w?.tsquare),
     balancer: cleanBalancer(w?.balancer), rays: cleanRays(w?.rays), foodweb: cleanFoodWeb(w?.foodweb),
-    column: cleanColumn(w?.column), barmodel: cleanBar(w?.barmodel), machine: cleanMachine(w?.machine), chance: cleanChance(w?.chance), angles: cleanAngles(w?.angles),
+    column: cleanColumn(w?.column), division: cleanDivision(w?.division), barmodel: cleanBar(w?.barmodel), machine: cleanMachine(w?.machine), chance: cleanChance(w?.chance), angles: cleanAngles(w?.angles),
     particles: cleanParticles(w?.particles), ph: cleanPh(w?.ph), forces: cleanForces(w?.forces),
   };
 }
