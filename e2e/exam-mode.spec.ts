@@ -7,6 +7,7 @@ import { practicalFor } from "../lib/lab/bench/all";
 import { seeded } from "../lib/lab/bench/run";
 import { keptOf, redoExtraMs, redoPaper, triesOf, withoutTries } from "../lib/examRedo";
 import { cleanPractice } from "../lib/topicPractice";
+import { cleanPageNote, noteKey, withNote, type PageNote } from "../lib/examAnnotate";
 import { benchGivenText, benchGot, checkResult, checkedAll, checkedKey, cleanExamQuestions, cleanPageAnswer, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageDone, pagesToMark, shownQ, slimAnswers, workingKey, type ExamQ } from "../lib/exams";
 
 // Exam mode with a stand-in for /api/board/exams that keeps the exam in memory
@@ -14,7 +15,7 @@ import { benchGivenText, benchGot, checkResult, checkedAll, checkedKey, cleanExa
 const OWN_WORD: ExamQ = { q: "It is necessary to wear a helmet.", kind: "spell", options: [], answer: "necessary", marks: 1, hear: true };
 function examServer() {
   let exam: { booklet: string[]; id: string; title: string; minutes: number; review: boolean; calculator: boolean; inOrder: boolean; personal: number; status: "open" | "closed"; endsAt: number; questions: ExamQ[] } | null = null;
-  type E = { name: string; answers: Record<string, unknown>; flags: number; submitted: boolean; score: number | null; total: number | null; marks?: Record<string, number>; extraMs: number; extraQs: ExamQ[] };
+  type E = { name: string; answers: Record<string, unknown>; flags: number; submitted: boolean; score: number | null; total: number | null; marks?: Record<string, number>; extraMs: number; extraQs: ExamQ[]; notes?: Record<string, PageNote> };
   const entries = new Map<string, E>();
   const qsOf = (e: E) => [...exam!.questions, ...e.extraQs];
   const meta = () => exam && { booklet: exam.booklet, id: exam.id, title: exam.title, minutes: exam.minutes, review: exam.review, calculator: exam.calculator, inOrder: keepsOrder(exam.questions, exam.inOrder), handMarked: isHandMarked(exam.questions), personal: exam.personal, spelling: exam.questions.some((q) => q.kind === "spell"), status: exam.status, endsAt: exam.endsAt, count: exam.questions.length, total: exam.questions.reduce((s, q) => s + q.marks, 0) };
@@ -48,7 +49,7 @@ function examServer() {
         } : null };
         if (e && !e.submitted && exam.status === "open") { out.paper = learnerPaper(exam.id, tries.length ? `${me.id}:${tries.length}` : me.id, qs, exam.inOrder); out.personalFrom = exam.questions.length; out.checked = checkedAll(qs, e.answers); }
         if (e && exam.status === "closed") { const m = markPaper(qs, e.answers, e.marks ?? {});
-          out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = qs.map((q, i) => ({ q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks, ...(q.sec ? { sec: q.sec } : {}), ...(q.why ? { why: q.why } : {}),
+          out.analysis = { score: m.score, total: m.total, right: m.right.filter(Boolean).length, wrong: m.right.filter((x) => !x).length, blank: 0, average: 75, best: 100, takers: 4, position: 1, flags: e.flags }; out.review = qs.map((q, i) => ({ q: shownQ(q), kind: q.kind, options: q.options, answer: q.answer, given: e.answers[String(i)] ?? null, right: m.right[i], marks: q.marks, ...(q.sec ? { sec: q.sec } : {}), ...(q.why ? { why: q.why } : {}), ...(e.notes?.[noteKey(i)] ? { noted: true, note: e.notes[noteKey(i)].note } : {}),
             ...(q.kind === "bench" ? { given: [benchGivenText(e.answers[String(i)]), ...benchLines(q.bench!.slug, e.answers[String(i)] as any)].join("\n"), mark: benchGot(q, e.answers[String(i)]) } : {}) })); }
         return r.fulfill({ json: out });
       }
@@ -85,17 +86,20 @@ function examServer() {
         return r.fulfill({ json: { ok: true, score: t.score, total: t.total } });
       }
       if (b.action === "extra") { const t = entries.get(b.studentId)!; t.extraMs = b.on === false ? 0 : Math.round(exam!.minutes * 0.25 * 60_000); return r.fulfill({ json: { ok: true, extraMs: t.extraMs } }); }
-      if (b.action === "page-view" || b.action === "mark") {
+      if (b.action === "page-view" || b.action === "mark" || b.action === "annotate") {
         const t = entries.get(b.studentId)!, q = qsOf(t)[b.n];
+        if (b.action === "annotate") { t.notes = withNote(t.notes ?? {}, b.n, cleanPageNote({ ink: b.ink, note: b.note })); return r.fulfill({ json: { ok: true } }); }
         if (b.action === "page-view") {
           const pa = cleanPageAnswer(t.answers[q.kind === "page" ? String(b.n) : workingKey(b.n)]);
-          return r.fulfill({ json: { ink: pa.ink, text: q.kind === "page" ? pa.text : String(t.answers[String(b.n)] ?? ""), done: true, mark: t.marks?.[String(b.n)] ?? null } });
+          return r.fulfill({ json: { ink: pa.ink, text: q.kind === "page" ? pa.text : String(t.answers[String(b.n)] ?? ""), done: true, mark: t.marks?.[String(b.n)] ?? null, teacher: t.notes?.[noteKey(b.n)] ?? { ink: [], note: "" } } });
         }
         t.marks = { ...(t.marks ?? {}), [String(b.n)]: b.mark };
         return r.fulfill({ json: { ok: true } });
       }
       if (b.action === "start") { entries.set(me.id, { name: me.name, answers: {}, flags: 0, submitted: false, score: null, total: null, extraMs: 0, extraQs: exam!.personal ? [OWN_WORD] : [] }); return r.fulfill({ json: { ok: true } }); }
       const e = entries.get(me.id)!;
+      if (b.action === "my-page") { const q = qsOf(e)[b.n], pa = cleanPageAnswer(e.answers[String(b.n)]);
+        return r.fulfill({ json: { img: q.img ?? null, title: q.q, ink: pa.ink, text: pa.text, mark: e.marks?.[String(b.n)] ?? null, marks: q.marks, teacher: e.notes?.[noteKey(b.n)] ?? { ink: [], note: "" } } }); }
       if (b.action === "working") { e.answers[workingKey(b.n)] = { ink: cleanPageAnswer(b.value).ink }; return r.fulfill({ json: { ok: true } }); }
       if (b.action === "check") {
         const q = qsOf(e)[b.n];
@@ -904,4 +908,96 @@ test("topic practice: WAEC/NECO/IGCSE-style questions, each checked as you go wi
   await panel.getByRole("button", { name: "End exam" }).click();
   await expect(exam.getByRole("list", { name: "Your answers" })).toBeVisible({ timeout: 20_000 });
   await expect(exam.getByText(/💡 1\. Factorise/)).toBeVisible();
+});
+
+test("marking on a learner's page: ticks, a cross, the pen and a comment; the ticks give the mark; the learner gets the page back; the marked paper as a PDF", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const SHOTS = process.env.LAB_SHOTS;
+  const maker = await browser.newPage();
+  await maker.setContent(["Cover", "1 Work out 348 + 276.   2 Work out 7 x 68.   3 Share 96 by 4."].map((t, i) =>
+    `<section style="height:1000px;${i < 1 ? "page-break-after:always;" : ""}font:40px sans-serif;padding:40px">${t}</section>`).join(""));
+  const pdf = await maker.pdf({ format: "A4" });
+  await maker.close();
+  const { teacher, learner } = await openClass(browser);
+  await teacher.getByRole("button", { name: "Exam mode" }).click();
+  const panel = teacher.getByRole("dialog", { name: "Exam mode" });
+  const sats = panel.getByRole("region", { name: "KS2 SATs" });
+  await sats.getByLabel("Upload a SATs paper").setInputFiles({ name: "Arithmetic check.pdf", mimeType: "application/pdf", buffer: pdf });
+  await expect(sats.getByText(/✓ \d pages ready/)).toBeVisible({ timeout: 60_000 });
+  for (let k = 0; k < 3; k++) await sats.getByRole("button", { name: "More marks for page 2" }).click();
+  await panel.getByRole("button", { name: /Start the exam \(1 questions?, 40 min\)/ }).click();
+
+  // The learner writes on the page and hands it in.
+  const exam = learner.getByRole("dialog", { name: "Exam: Arithmetic check" });
+  await exam.getByRole("button", { name: "Start the exam" }).click({ timeout: 20_000 });
+  const canvas = exam.getByRole("img", { name: "Write on the page" });
+  const box = (await canvas.boundingBox())!;
+  await learner.mouse.move(box.x + 60, box.y + 120); await learner.mouse.down();
+  for (let k = 1; k <= 8; k++) await learner.mouse.move(box.x + 60 + k * 15, box.y + 120 + (k % 2) * 12);
+  await learner.mouse.up();
+  await exam.getByLabel(/Or type your answers/).fill("624, 476, 23");
+  await expect(exam.getByText("✓ Saved")).toBeVisible({ timeout: 10_000 });
+  await exam.getByRole("button", { name: /Hand in the last page & finish/ }).click();
+  await learner.getByRole("alertdialog").getByRole("button", { name: "Yes, hand it in" }).click();
+  await expect(exam.getByText("Handed in ✓")).toBeVisible({ timeout: 15_000 });
+
+  // The teacher marks on the page: two ticks and a cross where they tap, a line with the pen, a comment.
+  const desk = panel.getByRole("region", { name: "Marking" });
+  await expect(desk.getByText("✍️ Marking · 1 page waiting")).toBeVisible({ timeout: 15_000 });
+  const page = desk.getByRole("img", { name: "Mark on the page" });
+  await expect(page).toBeVisible();
+  const pb = (await page.boundingBox())!;
+  const tools = desk.getByRole("group", { name: "Marking tools" });
+  await expect(tools.getByRole("button", { name: /Tick/ })).toHaveAttribute("aria-pressed", "true");
+  await page.click({ position: { x: pb.width * 0.3, y: 60 } });
+  await page.click({ position: { x: pb.width * 0.55, y: 60 } });
+  await tools.getByRole("button", { name: /Cross/ }).click();
+  await page.click({ position: { x: pb.width * 0.8, y: 60 } });
+  await expect(desk.getByLabel("Tick count")).toContainText("✓ 2 · ✗ 1");
+  await tools.getByRole("button", { name: /Pen/ }).click();
+  await teacher.mouse.move(pb.x + pb.width * 0.7, pb.y + 100); await teacher.mouse.down();
+  for (let k = 1; k <= 6; k++) await teacher.mouse.move(pb.x + pb.width * 0.7 + k * 12, pb.y + 100 + (k % 2) * 6);
+  await teacher.mouse.up();
+  // Undo takes the pen line off again; the ticks and the cross stay.
+  await desk.getByRole("button", { name: "↩ Undo" }).click();
+  await expect(desk.getByLabel("Tick count")).toContainText("✓ 2 · ✗ 1");
+  await desk.getByText("Quick comments", { exact: true }).click();
+  await desk.getByRole("group", { name: "Quick comments" }).getByRole("button", { name: "Show your working." }).click();
+  await expect(desk.getByLabel(/^Comment for Emmanuel/)).toHaveValue("Show your working.");
+  await desk.getByLabel(/^Comment for Emmanuel/).fill("Show your working. 96 ÷ 4 is 24, not 23.");
+  await expect(desk.getByText("Saved ✓")).toBeVisible({ timeout: 10_000 });
+  if (SHOTS) await teacher.screenshot({ path: `${SHOTS}/annotate-teacher.png` });
+  // One mark per tick, in one tap.
+  await desk.getByRole("button", { name: "Give 2 marks (one per tick)" }).click();
+  await expect(desk.getByText("✍️ Marking · nothing waiting")).toBeVisible({ timeout: 10_000 });
+  await expect(panel.getByRole("cell", { name: /2 \/ 3/ })).toBeVisible({ timeout: 15_000 });
+  // Looking again: the marking is still on the page.
+  await desk.getByText("Each learner's pages").click();
+  await desk.getByRole("button", { name: "Emmanuel, page 1: 2 of 3" }).click();
+  await expect(desk.getByLabel("Tick count")).toContainText("✓ 2 · ✗ 1");
+  await expect(desk.getByLabel(/^Comment for Emmanuel/)).toHaveValue("Show your working. 96 ÷ 4 is 24, not 23.");
+  // The marked paper, as a PDF to keep or send home.
+  const dl = teacher.waitForEvent("download");
+  await desk.getByRole("button", { name: "Download Emmanuel's marked paper (PDF)" }).click();
+  const file = await dl;
+  expect(file.suggestedFilename()).toBe("Emmanuel - Arithmetic check - marked paper.pdf");
+  const bytes = await readFile((await file.path())!);
+  expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+  expect(bytes.length).toBeGreaterThan(5000);
+  if (SHOTS) await file.saveAs(`${SHOTS}/marked-paper.pdf`);
+
+  // The learner gets the page back: the mark, the comment, and the teacher's marking on their writing.
+  await panel.getByRole("button", { name: "End exam" }).click();
+  await expect(exam.getByRole("list", { name: "Your answers" })).toBeVisible({ timeout: 20_000 });
+  await expect(exam.getByText("💬 Your teacher: Show your working. 96 ÷ 4 is 24, not 23.")).toBeVisible();
+  await exam.getByRole("button", { name: /See my marked page — your teacher wrote on it/ }).click();
+  const mine = learner.getByRole("dialog", { name: "Your marked page" });
+  await expect(mine.getByText("2 / 3")).toBeVisible();
+  await expect(mine.getByLabel("Your teacher's comment")).toContainText("96 ÷ 4 is 24, not 23");
+  await expect(mine.getByRole("img", { name: "The teacher's marking" })).toBeVisible();
+  // Something really is drawn on the teacher's layer.
+  expect(await mine.getByRole("img", { name: "The teacher's marking" }).evaluate((c: HTMLCanvasElement) => { const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data; for (let i = 3; i < d.length; i += 4) if (d[i]) return true; return false; })).toBe(true);
+  if (SHOTS) await learner.screenshot({ path: `${SHOTS}/annotate-learner.png` });
+  await mine.getByRole("button", { name: "Close" }).click();
+  await expect(mine).toHaveCount(0);
 });

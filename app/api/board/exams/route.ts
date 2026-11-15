@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { sessionViewer } from "@/lib/sessionAccess";
 import { rateLimit } from "@/lib/ratelimit";
 import { benchForTeacher, benchLines, withMarks } from "@/lib/lab/benchExam";
+import { cleanPageNote, noteKey, notesOf, withNote } from "@/lib/examAnnotate";
 import { AI_PRACTICE_SYSTEM, PRACTICE_STYLES, cleanPractice, practicePrompt, type PracticeStyle } from "@/lib/topicPractice";
 import { AI_EXAM_SYSTEM, GRACE_MS, aiExamPrompt, cleanAiExam, cleanExamQuestions, benchGot, benchGivenText, hideBenchMarks, checkResult, checkedAll, checkedKey, cleanGiven, cleanGraphGiven, graphAnswerText, graphGivenText, graphMarks, MAX_BOOKLET, MAX_WRITTEN, cleanPageAnswer, cleanPageMarks, currentPage, isHandMarked, keepsOrder, learnerPaper, markPaper, needsMarking, pageBlank, pageDone, pagesToMark, shownQ, slimAnswers, teacherMax, workingKey, type ExamQ } from "@/lib/exams";
 import { isWarmUp, missedSpellings } from "@/lib/sats";
@@ -165,6 +166,7 @@ export async function GET(req: Request) {
     const myQs = qsFor(e, entry);
     const hand = needsMarking(myQs);
     const myMarks = entry ? marksOf(e, entry) : {};
+    const myNotes = entry ? notesOf(entry.page_marks) : {};
     const out: any = { exam: meta, entry: entry ? {
       started: true, submitted: !!entry.submitted_at, flags: entry.flags, extraMs: extraOf(entry),
       attempt: tries.length + 1, ...(last ? { lastTry: { score: last.score, total: last.total, mode: last.mode }, keep: keptOf(entry.answers) } : {}),
@@ -195,6 +197,7 @@ export async function GET(req: Request) {
         ...(q.kind === "written" ? { mark: myMarks[String(i)] ?? (String(given[String(i)] ?? "").trim() ? null : 0) } : {}),
         ...(q.kind === "graph" ? { given: graphGivenText(given[String(i)]), answer: graphAnswerText(q), mark: graphMarks(q, given[String(i)]) } : {}),
         ...(q.why ? { why: q.why } : {}),
+        ...((q.kind === "page" || q.method) && myNotes[noteKey(i)] ? { noted: true, note: myNotes[noteKey(i)].note } : {}),
         ...(q.kind === "bench" ? { given: [benchGivenText(given[String(i)]), ...benchLines(q.bench?.slug ?? "", given[String(i)] as any)].join("\n"), answer: "Each reading is marked against your own bench.", mark: benchGot(q, given[String(i)]) } : {}),
       }));
     }
@@ -341,7 +344,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, extraMs: ms });
     }
 
-    if (action === "mark" || action === "page-view") {
+    if (action === "mark" || action === "page-view" || action === "annotate") {
       if (!v.host) return bad("Only the teacher can do that.", 403);
       const n = Math.round(Number(body?.n));
       const { data: row, error: rowErr } = await admin.from("board_exam_entries").select("*").eq("exam_id", e.id).eq("student_id", String(body?.studentId ?? "")).maybeSingle();
@@ -351,12 +354,21 @@ export async function POST(req: Request) {
       const qs = qsFor(e, r), q = qs[n];
       if (!q || teacherMax(q) <= 0) return bad("Which question?");
       const marks = marksOf(e, r);
+      // What the teacher has written on their pages (kept with the marks).
+      const notes = notesOf(r.page_marks);
+      if (action === "annotate") {
+        if (!rateLimit(`exam-annotate:${v.id}`, 240, 60_000)) return bad("Slow down a little.", 429);
+        const next = withNote(notes, n, cleanPageNote({ ink: body?.ink, note: body?.note }));
+        const { error } = await admin.from("board_exam_entries").update({ page_marks: { ...next, ...marks } }).eq("exam_id", e.id).eq("student_id", r.student_id);
+        if (error) return /page_marks/i.test(error.message) ? bad(NEEDS_MARKS, 501) : dbFail(error.message);
+        return NextResponse.json({ ok: true });
+      }
       if (action === "page-view") {
         // A page: the writing on it; a method mark: their working and their answer.
         const v0 = (r.answers ?? {})[q.kind === "page" ? String(n) : q.kind === "written" ? "" : workingKey(n)];
         const p = cleanPageAnswer(v0);
         const text = q.kind === "page" ? p.text : String((r.answers ?? {})[String(n)] ?? "");
-        return NextResponse.json({ ink: p.ink, text, done: pageDone(v0) || !!r.submitted_at, mark: marks[String(n)] ?? null }, { headers: { "Cache-Control": "no-store" } });
+        return NextResponse.json({ ink: p.ink, text, done: pageDone(v0) || !!r.submitted_at, mark: marks[String(n)] ?? null, teacher: notes[noteKey(n)] ?? { ink: [], note: "" } }, { headers: { "Cache-Control": "no-store" } });
       }
       if (!rateLimit(`exam-mark:${v.id}`, 300, 60_000)) return bad("Slow down a little.", 429);
       if (body?.mark == null) delete marks[String(n)];
@@ -366,7 +378,7 @@ export async function POST(req: Request) {
         marks[String(n)] = m;
       }
       const score = markPaper(qs, r.answers ?? {}, marks).score;
-      const { error } = await admin.from("board_exam_entries").update({ page_marks: marks, ...(r.submitted_at ? { score } : {}) }).eq("exam_id", e.id).eq("student_id", r.student_id);
+      const { error } = await admin.from("board_exam_entries").update({ page_marks: { ...notes, ...marks }, ...(r.submitted_at ? { score } : {}) }).eq("exam_id", e.id).eq("student_id", r.student_id);
       if (error) return /page_marks/i.test(error.message) ? bad(NEEDS_MARKS, 501) : dbFail(error.message);
       return NextResponse.json({ ok: true, score, marks });
     }
@@ -429,6 +441,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
     if (!entry) return bad("Start the exam first.", 409);
+
+    // A learner looks at one of their own pages once it's handed in: their
+    // writing, and what the teacher wrote on it (their mark and comment).
+    if (action === "my-page") {
+      const n = Math.round(Number(body?.n));
+      const qs = qsFor(e, entry), q = qs[n];
+      if (!q || (q.kind !== "page" && !q.method)) return bad("Which page?");
+      if (!entry.submitted_at) return bad("Hand in your exam first.", 409);
+      const mine = cleanPageAnswer((entry.answers ?? {})[q.kind === "page" ? String(n) : workingKey(n)]);
+      const mark = marksOf(e, entry)[String(n)] ?? null;
+      return NextResponse.json({ img: q.kind === "page" ? q.img ?? null : null, title: q.q, ink: mine.ink, text: q.kind === "page" ? mine.text : "", mark, marks: teacherMax(q),
+        teacher: notesOf(entry.page_marks)[noteKey(n)] ?? { ink: [], note: "" } }, { headers: { "Cache-Control": "no-store" } });
+    }
 
     if (action === "flag") {
       const reason = String(body?.reason ?? "left the exam page").slice(0, 60);

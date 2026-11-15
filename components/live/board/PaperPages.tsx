@@ -4,11 +4,15 @@
 //     with a finger (or type), then hand it in. A page handed in is locked:
 //     they can't go back to it.
 //   • MarkingDesk — the teacher: every page handed in, oldest first, with
-//     the learner's writing on it. One tap gives the mark and the next page
-//     opens. The marks for all the pages add up to the learner's score.
+//     the learner's writing on it. The teacher marks on the page — ticks,
+//     crosses, a pen, a comment (components/live/board/PageAnnotate.tsx) —
+//     and one tap gives the mark and the next page opens. The marks for all
+//     the pages add up to the learner's score; the learner gets the page back.
 import { useEffect, useRef, useState } from "react";
 import { drawStrokes, roundPt, type Stroke } from "@/lib/whiteboard";
 import { localPoint } from "@/components/live/board/rotation";
+import { AnnotatedPage, MarkTools, type MarkTool } from "@/components/live/board/PageAnnotate";
+import { TEACHER_PENS, type PageNote } from "@/lib/examAnnotate";
 import { MAX_PAGE_TEXT, isRight, pageBlank, pageDone, teacherMax, workingBlank, workingKey, writtenBlank, type ExamQ, type LearnerQ, type PageAnswer } from "@/lib/exams";
 
 const PENS = ["#0B1220", "#1657C9", "#DC2626"];
@@ -195,9 +199,31 @@ export function PageFlow({ examId, myId, paper, answers, setAnswers, api, ask, o
 export type MarkEntry = { id: string; name: string; submitted: boolean; submittedAt?: string | null; score: number | null; live: number | null; total: number | null;
   answers?: Record<string, unknown>; pageMarks?: Record<string, number>; toMark?: number[] };
 
-export function MarkingDesk({ examId, questions, entries, api, reload, running }: {
-  examId: string; questions: ExamQ[]; entries: MarkEntry[]; api: Api; reload: () => Promise<void>; running: boolean;
+export function MarkingDesk({ examId, questions, entries, api, reload, running, title = "Exam" }: {
+  examId: string; questions: ExamQ[]; entries: MarkEntry[]; api: Api; reload: () => Promise<void>; running: boolean; title?: string;
 }) {
+  // A learner's marked paper, as a PDF: every page with their writing and the marking on it.
+  const [pdfFor, setPdfFor] = useState<string | null>(null);
+  async function download(e: MarkEntry) {
+    if (pdfFor) return;
+    setPdfFor(e.id); setNote(null);
+    try {
+      await flush();
+      const ns = questions.map((q, i) => (q.kind === "page" ? i : -1)).filter((i) => i >= 0);
+      const pages = [];
+      for (const n of ns) {
+        const { ok, j } = await api({ action: "page-view", examId, studentId: e.id, n });
+        if (!ok) throw new Error(j?.error ?? "a page didn't open");
+        pages.push({ title: questions[n].q, img: questions[n].img ?? null, ink: j.ink ?? [], teacher: { ink: j.teacher?.ink ?? [], note: j.teacher?.note ?? "" }, mark: j.mark ?? null, marks: questions[n].marks, text: j.text ?? "" });
+      }
+      const { markedPaperPdf } = await import("@/lib/markedPaperPdf");
+      const { savePdf } = await import("@/lib/examPdf");
+      const bytes = await markedPaperPdf({ exam: title, name: e.name, date: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }), pages, score: e.submitted ? e.score : e.live, total: e.total });
+      savePdf(bytes, `${e.name} - ${title} - marked paper.pdf`);
+    } catch (err) {
+      setNote(`Couldn't make the marked paper (${err instanceof Error ? err.message : err}) — try again.`);
+    } finally { setPdfFor(null); }
+  }
   // What the teacher marks: pages, and method marks.
   const pageNs = questions.map((q, i) => (teacherMax(q) > 0 ? i : -1)).filter((i) => i >= 0);
   const pagesOnly = pageNs.every((n) => questions[n].kind === "page");
@@ -210,25 +236,46 @@ export function MarkingDesk({ examId, questions, entries, api, reload, running }
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  // The teacher's marking on the open page: saved a moment after each change.
+  const [marking, setMarking] = useState<PageNote>({ ink: [], note: "" });
+  const [tool, setTool] = useState<MarkTool>("tick");
+  const [colour, setColour] = useState(TEACHER_PENS[0]);
+  const [saved, setSaved] = useState<"saved" | "saving" | "unsaved" | null>(null);
+  const pend = useRef<{ id: string; n: number; p: PageNote; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const flush = async () => {
+    const x = pend.current;
+    if (!x) return;
+    clearTimeout(x.timer); pend.current = null; setSaved("saving");
+    const { ok, j } = await api({ action: "annotate", examId, studentId: x.id, n: x.n, ink: x.p.ink, note: x.p.note });
+    setSaved(ok ? "saved" : "unsaved");
+    if (!ok) setNote(j?.error ?? "Your marking on the page didn't save — try again.");
+  };
   const cur = pick ?? queue.find((x) => !skipped.has(key(x))) ?? queue[0] ?? null;
   const curKey = cur ? key(cur) : "";
   const who = cur ? entries.find((e) => e.id === cur.id) : null;
   useEffect(() => {
     if (!cur) { setView(null); return; }
     let gone = false;
-    setView(null);
+    setView(null); setMarking({ ink: [], note: "" }); setSaved(null);
     api({ action: "page-view", examId, studentId: cur.id, n: cur.n }).then(({ ok, j }) => {
       if (gone) return;
-      if (ok) setView({ k: key(cur), ink: j.ink ?? [], text: j.text ?? "", mark: j.mark ?? null });
+      if (ok) { setView({ k: key(cur), ink: j.ink ?? [], text: j.text ?? "", mark: j.mark ?? null }); setMarking({ ink: j.teacher?.ink ?? [], note: j.teacher?.note ?? "" }); }
       else setNote(j?.error ?? "Couldn't open that page — try again.");
     });
-    return () => { gone = true; };
+    return () => { gone = true; void flush(); }; // leaving the page: anything not saved yet goes now
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curKey, examId]);
 
+  function mark(p: PageNote) {
+    if (!cur) return;
+    setMarking(p); setSaved("unsaved");
+    if (pend.current) clearTimeout(pend.current.timer);
+    pend.current = { id: cur.id, n: cur.n, p, timer: setTimeout(() => void flush(), 700) };
+  }
   async function give(mark: number | null) {
     if (!cur) return;
     setBusy(true); setNote(null);
+    await flush(); // the marking on the page first, so the mark is saved with it
     const { ok, j } = await api({ action: "mark", examId, studentId: cur.id, n: cur.n, mark });
     setBusy(false);
     if (!ok) { setNote(j?.error ?? "That mark didn't save — try again."); return; }
@@ -247,16 +294,16 @@ export function MarkingDesk({ examId, questions, entries, api, reload, running }
       {!cur ? (
         <p className="mt-2 text-sm font-bold text-ink/60">{entries.length ? "Everything handed in so far is marked ✓" : ""} {running ? (pagesOnly ? "Pages appear here as learners hand them in." : "Working for method marks appears here when learners hand in (right answers get full marks by themselves).") : ""}</p>
       ) : (
-        <div className="mt-2 grid gap-3 lg:grid-cols-[1fr_260px]">
+        <div className="mt-2 grid gap-3 lg:grid-cols-[1fr_300px]">
           <div className="max-h-[70vh] overflow-auto rounded-xl bg-white ring-1 ring-orange-200">
             {view?.k === curKey && q!.kind === "written" ? (
               <div className="p-4">
                 <p className="text-sm font-black text-ink/70">{q!.q}</p>
                 <p className="mt-3 whitespace-pre-wrap rounded-xl bg-[#FFF7ED] p-3 font-semibold leading-relaxed text-ink ring-1 ring-orange-100" style={{ fontSize: `${zoom}rem` }} aria-label={`${who?.name ?? "Learner"}'s answer`}>{view.text.trim() || "(no answer)"}</p>
               </div>
-            ) : view?.k === curKey && q!.method ? <PageCanvas ink={view.ink} zoom={zoom} label={`${who?.name ?? "Learner"}'s working`} />
+            ) : view?.k === curKey && q!.method ? <AnnotatedPage ink={view.ink} teacher={marking.ink} zoom={zoom} tool={tool} colour={colour} onTeacher={(ink) => mark({ ...marking, ink })} label={`${who?.name ?? "Learner"}'s working`} />
               : view?.k === curKey && !q!.img ? <p className="p-6 text-center text-sm font-bold text-ink/55">The paper&apos;s pages were deleted — only what was typed is left.</p>
-              : view?.k === curKey ? <PageCanvas src={q!.img!} ink={view.ink} zoom={zoom} label={`${who?.name ?? "Learner"}'s ${q!.q}`} />
+              : view?.k === curKey ? <AnnotatedPage src={q!.img!} ink={view.ink} teacher={marking.ink} zoom={zoom} tool={tool} colour={colour} onTeacher={(ink) => mark({ ...marking, ink })} label={`${who?.name ?? "Learner"}'s ${q!.q}`} />
               : <p className="p-6 text-center text-sm font-bold text-ink/50">Opening the page…</p>}
           </div>
           <div className="grid content-start gap-2">
@@ -270,6 +317,9 @@ export function MarkingDesk({ examId, questions, entries, api, reload, running }
             <div className="flex gap-1" role="group" aria-label="Zoom the page">
               {[1, 1.5, 2].map((z) => <button key={z} type="button" onClick={() => setZoom(z)} aria-pressed={zoom === z} className={`h-8 rounded-lg px-2 text-xs font-black ${zoom === z ? "bg-ink text-white" : "bg-white ring-1 ring-orange-200"}`}>{z}×</button>)}
             </div>
+            {view?.k === curKey && q!.kind !== "written" && (q!.method || q!.img) && (
+              <MarkTools note={marking} tool={tool} setTool={setTool} colour={colour} setColour={setColour} max={teacherMax(q!)} name={who?.name ?? "Learner"} saved={saved} onChange={mark} onUse={(m) => give(m)} />
+            )}
             <p className="text-xs font-black text-ink/60">{view?.mark != null ? `Marked ${view.mark} / ${teacherMax(q!)} — change it:` : q!.method ? "Method mark for the working:" : "Give a mark:"}</p>
             <div className="grid grid-cols-4 gap-1.5" role="group" aria-label={`Mark ${who?.name ?? "the learner"}'s ${q!.method ? `working for Q${cur.n + 1}` : q!.q}`}>
               {Array.from({ length: teacherMax(q!) + 1 }, (_, m) => (
@@ -309,6 +359,7 @@ export function MarkingDesk({ examId, questions, entries, api, reload, running }
                     );
                   })}
                   <span className="ml-1 text-xs font-black text-ink/70">{e.submitted ? e.score : e.live} / {e.total}</span>
+                  {pagesOnly && <button type="button" onClick={() => download(e)} disabled={!!pdfFor} aria-label={`Download ${e.name}'s marked paper (PDF)`} className="ml-auto rounded-lg bg-[#E2F3F2] px-2 py-1 text-[11px] font-black text-[#0A4F52] disabled:opacity-50">{pdfFor === e.id ? "Making…" : "⬇ Marked paper"}</button>}
                 </div>
               );
             })}

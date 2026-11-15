@@ -18,6 +18,7 @@ const AtpBuilder = dynamic(() => import("@/components/lab/AtpPaper"), { ssr: fal
 // A practical test's bench: loaded only when an exam has one.
 const BenchQuestion = dynamic(() => import("@/components/live/board/BenchQuestion"), { ssr: false, loading: () => <p className="mt-3 text-sm font-bold text-ink/60">Setting out your bench…</p> });
 import GraphPlot from "@/components/live/board/GraphPlot";
+import { MarkedPage } from "@/components/live/board/PageAnnotate";
 import CbtScreen from "@/components/live/board/CbtScreen";
 import { JAMB_ENGLISH, JAMB_SIZES, JAMB_SUBJECTS, cbtBatches, cbtTitle, isCbt, sectionScores, type JambSize } from "@/lib/cbt";
 import { shownAnswer, type Checked } from "@/lib/exams";
@@ -40,7 +41,7 @@ type Meta = { booklet?: string[]; id: string; title: string; minutes: number; re
 type Entry = { tries?: ExamTry[]; extraMs?: number; extraQs?: ExamQ[]; pageMarks?: Record<string, number>; toMark?: number[]; id: string; name: string; answered: number; flags: number; flagLog: { at: string; reason: string }[]; submitted: boolean; score: number | null; total: number | null; live: number | null;
   answers?: Record<string, unknown>; startedAt?: string | null; submittedAt?: string | null };
 type Analysis = { score: number; total: number; right: number; wrong: number; blank: number; average: number | null; best: number | null; takers: number; position: number | null; flags: number };
-type Review = { q: string; kind: ExamQ["kind"]; options: string[]; answer: number | string; given: unknown; right: boolean; marks: number; mark?: number | null; sec?: string; why?: string };
+type Review = { q: string; kind: ExamQ["kind"]; options: string[]; answer: number | string; given: unknown; right: boolean; marks: number; mark?: number | null; sec?: string; why?: string; noted?: boolean; note?: string; method?: number };
 
 // Extra time in minutes, to one decimal place (25% of 10 minutes is 2.5).
 const extraMins = (ms = 0) => String(Math.round(ms / 6000) / 10);
@@ -679,7 +680,7 @@ function Teacher({ open, onOpen, onClose, data, reload, sessionId, tell, announc
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {running && exam?.questions?.some((q) => q.kind === "spell") && <ReadAloud qs={exam.questions} personal={exam.personal ?? 0} onRead={(n) => tell(exam.id, n)} />}
-            {exam?.questions && needsMarking(exam.questions) && <MarkingDesk examId={exam.id} questions={exam.questions} entries={entries} api={api} reload={reload} running={running} />}
+            {exam?.questions && needsMarking(exam.questions) && <MarkingDesk examId={exam.id} questions={exam.questions} entries={entries} api={api} reload={reload} running={running} title={exam.title} />}
             <div className="mb-3 grid gap-2 sm:grid-cols-4">
               {[["Taking it", entries.length], ["Handed in", marked.length], ["Left the page", entries.filter((e) => e.flags > 0).length], ["Average", avg == null ? "—" : `${avg}%`]].map(([l, v]) => (
                 <div key={String(l)} className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200"><p className="text-[11px] font-black uppercase tracking-wider text-ink/50">{l}</p><p className="text-2xl font-black">{v}</p></div>
@@ -993,6 +994,7 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [checked, setChecked] = useState<Record<string, Checked>>({}); // topic practice: answers checked, with their solutions
   const [checking, setChecking] = useState<number | null>(null);
+  const [myPage, setMyPage] = useState<number | null>(null); // looking at one of their own marked pages
   const [at, setAt] = useState(0);
   const [hidden, setHidden] = useState(false);
   const [warned, setWarned] = useState(0);
@@ -1252,6 +1254,7 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
         {over && analysis && analysis.score < analysis.total && exam.spelling && <FixMistakes sessionId={sessionId} page="spelling" label="✏️ Practise my spellings" />}
         <button type="button" onClick={() => { if (over && seenKey) markSeen(seenKey); else setHidden(true); }} className="mt-4 min-h-[44px] rounded-xl bg-[#C2451C] px-5 text-sm font-black text-white">{over ? "Done — back to the class" : "Back to the class"}</button>
       </div>
+      {myPage != null && exam && <MarkedPage examId={exam.id} n={myPage} api={api} onClose={() => setMyPage(null)} />}
       {review && (
         <ol className="grid gap-2" aria-label="Your answers">
           <li className="text-xs font-black uppercase tracking-wider text-ink/55">Question by question</li>
@@ -1264,6 +1267,10 @@ function Learner({ data, reload, sessionId, follow, say }: { data: any; reload: 
                 : r.kind === "written" ? <>You wrote: {String(r.given ?? "").trim() || "no answer"} · <b>{r.mark == null ? "not marked yet" : `${r.mark} / ${r.marks}`}</b>{!!String(r.answer ?? "").trim() && r.mark !== r.marks && <span className="block text-emerald-800">A full answer includes: {String(r.answer)}</span>}</> : r.kind === "page" ? (r.given == null ? "Not marked yet" : `Your teacher's mark: ${r.given} / ${r.marks}`) : <>You: {r.given == null || r.given === "" ? "no answer" : r.kind === "choice" ? r.options[Number(r.given)] : String(r.given)}</>}
                 {!r.right && r.kind !== "page" && r.kind !== "written" && r.kind !== "graph" && r.kind !== "bench" && <> · <span className="font-black text-emerald-800">Answer: {r.kind === "choice" ? r.options[Number(r.answer)] : shownAnswer(r.answer)}</span></>}
                 {r.why && <span className="mt-1 block whitespace-pre-wrap text-ink/70">💡 {r.why}</span>}
+                {r.note && <span className="mt-1 block font-bold text-ink">💬 Your teacher: {r.note}</span>}
+                {(r.kind === "page" || r.noted) && exam && (
+                  <button type="button" onClick={() => setMyPage(i)} className="mt-1.5 block min-h-[36px] rounded-lg bg-white px-3 text-xs font-black text-[#C2451C] ring-1 ring-orange-200">👀 See my marked {r.kind === "page" ? "page" : "working"}{r.noted ? " — your teacher wrote on it" : ""}</button>
+                )}
               </p>
             </li>
           ))}
