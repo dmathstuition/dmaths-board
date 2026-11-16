@@ -1383,3 +1383,41 @@ html[data-easy-read="1"] body p, html[data-easy-read="1"] body li { line-height:
   .lr-bubble, .lr-flame, .lr-drop, .lr-settle, .lr-steam, .lr-glow, .lr-spin, .lr-shake, .lr-flow, .lr-pop, .lr-float, .lr-swing, .lr-sway, .lr-bump, .lr-pour, .lr-ring, .lr-card:hover .lr-bob { animation: none !important; }
   .lr-fill, .lr-move { transition: none !important; }
 }
+
+/* ── The learners' app (class and join pages): bright, and like an app on a phone ── */
+.learner-app { background: radial-gradient(900px 500px at 0% 0%, #EDE9FE 0%, transparent 60%), radial-gradient(800px 500px at 100% 20%, #FCE7F3 0%, transparent 55%), radial-gradient(900px 600px at 50% 100%, #FEF3C7 0%, transparent 60%), #FAF7FF; }
+.lrn-bar { background: linear-gradient(120deg, #4C1D95 0%, #7C3AED 50%, #C026D3 100%); position: relative; }
+.lrn-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.lrn-tab { display: inline-flex; min-height: 40px; align-items: center; gap: .35rem; border-radius: 9999px; background: #fff; padding: 0 .9rem; font-size: .875rem; font-weight: 900; color: #4C1D95; transition: transform .15s ease, background-color .15s ease; }
+.lrn-tab:active { transform: scale(.96); }
+.lrn-tab-on { background: #FDE047; color: #422006; }
+.lrn-tab:focus-visible { outline: 3px solid #FDE047; outline-offset: 2px; }
+@media (max-width: 639px) {
+  /* The tabs sit along the bottom of the screen, as in an app. */
+  .lrn-tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; flex-wrap: nowrap; gap: .25rem; align-items: stretch; background: rgba(255, 255, 255, .96); backdrop-filter: blur(10px); border-top: 1px solid #E9D5FF; border-radius: 1.25rem 1.25rem 0 0; box-shadow: 0 -8px 30px -12px rgba(76, 29, 149, .35); padding: .4rem .5rem calc(.4rem + env(safe-area-inset-bottom)); }
+  .lrn-tab { flex: 1 1 0; min-width: 0; min-height: 56px; flex-direction: column; justify-content: center; gap: .1rem; border-radius: 1rem; background: transparent; padding: .25rem; font-size: .6875rem; line-height: 1.15; text-align: center; color: #6B21A8; }
+  .lrn-tab-icon { font-size: 1.35rem; line-height: 1; }
+  .lrn-tab-on { background: #F3E8FF; color: #4C1D95; }
+  /* Things that float at the bottom (how are you doing, a poll, my exam) clear the tabs. */
+  .learner-app .fixed.bottom-4 { bottom: calc(5.25rem + env(safe-area-inset-bottom)); }
+  /* The board's tools: one line to swipe along, so the board itself is on screen. */
+  .wb-toolbar { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; border-radius: 1.25rem; }
+  .wb-toolbar::-webkit-scrollbar { display: none; }
+  .wb-toolbar > *, .wb-toolbar > * > * { flex-shrink: 0; }
+  .wb-toolbar .flex-wrap { flex-wrap: nowrap; }
+  .wb-toolbar > .ml-auto { margin-left: 0; }
+  .wb-stage { align-items: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) { .lrn-tab { transition: none; } }
+/* Joining: the PIN and name card. */
+.lrn-join { background: linear-gradient(150deg, #4C1D95 0%, #7C3AED 45%, #C026D3 80%, #F59E0B 130%); }
+.lrn-float { position: absolute; font-weight: 900; color: rgba(255, 255, 255, .16); user-select: none; animation: lrnFloat 7s ease-in-out infinite; }
+@keyframes lrnFloat { 0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); } 50% { transform: translateY(-14px) rotate(var(--r, 0deg)); } }
+@media (prefers-reduced-motion: reduce) { .lrn-float { animation: none; } }
+.lrn-field { width: 100%; border-radius: 1rem; border: 2px solid #E9D5FF; background: #FAF5FF; padding: .8rem 1rem; font-size: 1rem; font-weight: 700; color: #2E1065; outline: none; transition: border-color .15s, box-shadow .15s; }
+.lrn-field::placeholder { color: #A78BFA; font-weight: 600; }
+.lrn-field:focus { border-color: #7C3AED; box-shadow: 0 0 0 4px rgba(124, 58, 237, .18); background: #fff; }
+.lrn-go { display: flex; width: 100%; min-height: 56px; align-items: center; justify-content: center; gap: .5rem; border-radius: 1rem; background: #FDE047; font-size: 1.05rem; font-weight: 900; color: #422006; box-shadow: 0 6px 0 #CA8A04; transition: transform .1s, box-shadow .1s; }
+.lrn-go:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 2px 0 #CA8A04; }
+.lrn-go:disabled { opacity: .55; box-shadow: 0 6px 0 #D4D4D8; background: #E4E4E7; color: #52525B; cursor: not-allowed; }
+.lrn-go:focus-visible { outline: 3px solid #7C3AED; outline-offset: 3px; }

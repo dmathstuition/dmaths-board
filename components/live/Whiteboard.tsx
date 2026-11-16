@@ -1647,7 +1647,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
     </div>
   );
   const stage = (
-    <div ref={stageRef} className={`flex min-h-0 min-w-0 items-center justify-center ${full ? "flex-1" : "h-[calc(100dvh-150px)] min-h-[420px]"}`}>
+    <div ref={stageRef} className={`flex min-h-0 min-w-0 items-center justify-center ${full ? "flex-1" : `h-[calc(100dvh-150px)] min-h-[420px] ${host ? "" : "wb-stage"}`}`}>
       <div data-board className="relative overflow-hidden rounded-2xl shadow-[0_18px_40px_-28px_rgba(22,87,201,.45)] ring-1 ring-line"
         style={{ width: box.w, height: box.h, background: paperStyle(paper, box.w).background }}>
         {/* Paper and slide zoom with the drawing. */}
@@ -1783,7 +1783,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
 
   return (
     <div ref={setRoot} tabIndex={-1} className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-1 rounded-2xl bg-white p-1.5 ring-1 ring-line" role="toolbar" aria-label="Whiteboard tools">
+      <div className={`flex flex-wrap items-center gap-1 rounded-2xl bg-white p-1.5 ring-1 ring-line ${host ? "" : "wb-toolbar"}`} role="toolbar" aria-label="Whiteboard tools">
         {drawTools}
         <span className="ml-auto flex flex-wrap items-center gap-1">{hostTools}</span>
       </div>

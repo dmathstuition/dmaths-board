@@ -185,17 +185,18 @@ export function BoardJoinForm() {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <label className="block text-sm font-bold text-dmb-ink">Class PIN
-        <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} required inputMode="numeric" autoComplete="off" placeholder="6 digits"
-          className="dmb-field mt-1 text-center font-dmbDisplay font-bold !text-3xl tracking-[.3em]" />
+      <label className="block text-sm font-black text-[#4C1D95]">Class PIN
+        <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} required inputMode="numeric" autoComplete="off" placeholder="● ● ● ● ● ●"
+          className="lrn-field mt-1 text-center font-display !text-3xl !font-black tracking-[.3em] placeholder:!text-lg placeholder:tracking-[.2em]" />
+        <span className="mt-1.5 flex justify-center gap-1.5" aria-hidden>{Array.from({ length: 6 }, (_, i) => <span key={i} className={`h-1.5 w-7 rounded-full transition-colors ${i < pin.length ? "bg-[#7C3AED]" : "bg-violet-100"}`} />)}</span>
       </label>
-      <label className="block text-sm font-bold text-dmb-ink">Your name
-        <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={40} autoComplete="given-name" placeholder="e.g. Chidera O." className="dmb-field mt-1" />
-        <span className="mt-1 block text-xs font-semibold text-dmb-muted">Your teacher sees this name. No account needed.</span>
+      <label className="block text-sm font-black text-[#4C1D95]">Your name
+        <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={40} autoComplete="given-name" placeholder="e.g. Chidera O." className="lrn-field mt-1" />
+        <span className="mt-1 block text-xs font-semibold text-[#6B21A8]/80">Your teacher sees this name. No account needed.</span>
       </label>
       {err && <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{err}</p>}
-      <button type="submit" disabled={busy || pin.length !== 6 || !name.trim()} className="dmb-btn w-full !min-h-[52px] text-base">{busy ? "Joining…" : "Join class"}</button>
-      <p className="text-center text-xs text-dmb-muted">Board not updating? <Link href="/check" className="font-bold text-dmb-teal underline">Check my connection</Link></p>
+      <button type="submit" disabled={busy || pin.length !== 6 || !name.trim()} className="lrn-go">{busy ? "Joining…" : "Join class"}</button>
+      <p className="text-center text-xs text-[#6B21A8]/80">Board not updating? <Link href="/check" className="font-black text-[#6D28D9] underline">Check my connection</Link></p>
     </form>
   );
 }

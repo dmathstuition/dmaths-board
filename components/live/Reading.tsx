@@ -3,18 +3,19 @@ import { useEffect, useState } from "react";
 import { canSpeak, setReading, speak, stopSpeaking, useReading } from "@/lib/reading";
 
 // The learner's "Aa" button: text size, easy-read font, read aloud (lib/reading).
-export function ReadingButton({ dark = false }: { dark?: boolean }) {
+// tab: a tab in the learner's bottom bar on a phone (the settings open upwards).
+export function ReadingButton({ dark = false, tab = false }: { dark?: boolean; tab?: boolean }) {
   const r = useReading();
   const [open, setOpen] = useState(false);
   const chip = (on: boolean) => `min-h-[40px] rounded-lg px-3 text-sm font-black ring-1 ${on ? "bg-[#0E6E72] text-white ring-[#0E6E72]" : "bg-white text-ink ring-slate-200"}`;
   return (
-    <span className="relative inline-block">
+    <span className={`relative inline-block ${tab ? "max-sm:flex max-sm:flex-1" : ""}`}>
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Reading settings: text size, easy-read font, read aloud"
-        className={`inline-flex min-h-[40px] items-center gap-1 rounded-xl px-3 text-sm font-black ${dark ? "bg-white/10 text-white ring-1 ring-white/25" : "bg-white text-ink ring-1 ring-line"}`}>
-        <span aria-hidden className="font-serif text-base">Aa</span><span className="sr-only sm:not-sr-only">Reading</span>
+        className={tab ? "lrn-tab" : `inline-flex min-h-[40px] items-center gap-1 rounded-xl px-3 text-sm font-black ${dark ? "bg-white/10 text-white ring-1 ring-white/25" : "bg-white text-ink ring-1 ring-line"}`}>
+        <span aria-hidden className={tab ? "lrn-tab-icon font-serif" : "font-serif text-base"}>Aa</span><span className={tab ? "max-sm:block sm:inline" : "sr-only sm:not-sr-only"}>Reading</span>
       </button>
       {open && (
-        <div role="dialog" aria-label="Reading settings" className="absolute right-0 top-full z-[120] mt-2 w-[min(18rem,90vw)] rounded-2xl bg-white p-3 text-left text-ink shadow-2xl ring-1 ring-black/10">
+        <div role="dialog" aria-label="Reading settings" className={`absolute right-0 z-[120] w-[min(18rem,90vw)] ${tab ? "max-sm:bottom-full max-sm:mb-2 sm:top-full sm:mt-2" : "top-full mt-2"} rounded-2xl bg-white p-3 text-left text-ink shadow-2xl ring-1 ring-black/10`}>
           <p className="text-xs font-black uppercase tracking-wider text-ink/50">Text size</p>
           <div className="mt-1 flex gap-1.5" role="radiogroup" aria-label="Text size">
             {([1, 2, 3] as const).map((s) => (

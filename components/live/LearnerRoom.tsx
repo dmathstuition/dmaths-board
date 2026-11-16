@@ -58,7 +58,7 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
       </div>
     );
   }
-  if (!room) return <div className="card h-[60vh] animate-pulse" />;
+  if (!room) return <div className="h-[60vh] animate-pulse rounded-3xl bg-white/70" />;
 
   const s = room.session;
   const ended = s.status === "ended";
@@ -69,31 +69,36 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
   return (
     <div className="space-y-3">
       {/* On a phone the quiz needs the whole screen, so the class card steps aside. */}
-      <div className={`flex flex-wrap items-center gap-3 p-4 rounded-2xl bg-[#0E6E72] bg-[linear-gradient(rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(135deg,#0E6E72,#0A4F52)] bg-[length:28px_28px,28px_28px,100%_100%] text-white shadow-card ${showQuiz ? "max-sm:hidden [@media(max-height:520px)]:hidden" : ""}`}>
-        <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[.18em] text-[#C6F35C]">
-            {ended ? <span className="rounded-full bg-white/15 px-2 py-0.5 text-white/80">Ended</span> : <span className="flex items-center gap-1.5 rounded-full bg-red-500 px-2 py-0.5 text-white"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />Live</span>}
-            {s.subject ?? "Interactive class"}
+      {/* The app bar: who and what, in the learners' colours. */}
+      <div className={`lrn-bar flex flex-wrap items-center gap-3 rounded-3xl p-3 text-white shadow-lift sm:p-4 ${showQuiz ? "max-sm:hidden [@media(max-height:520px)]:hidden" : ""}`}>
+        <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#FDE047] font-display text-xl font-black text-[#4C1D95] shadow-inner">{(room.me.name || "?").trim().charAt(0).toUpperCase()}</span>
+        <div className="min-w-0 flex-1 basis-40">
+          <p className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[.16em] text-[#FDE047]">
+            {ended ? <span className="rounded-full bg-white/15 px-2 py-0.5 text-white/80">Ended</span> : <span className="flex items-center gap-1.5 rounded-full bg-[#F43F5E] px-2 py-0.5 text-white"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />Live</span>}
+            <span className="truncate">{s.subject ?? "Interactive class"}</span>
           </p>
-          <h1 className="mt-1 truncate font-display text-xl font-black text-white sm:text-2xl">{s.title}</h1>
-          <p className="text-sm text-white/70">with {s.hostName} · {here} here</p>
+          <h1 className="truncate font-display text-lg font-black leading-tight text-white sm:text-2xl">{s.title}</h1>
+          <p className="truncate text-xs text-white/75 sm:text-sm">with {s.hostName} · {here} here</p>
         </div>
         {!ended && (
-          <button type="button" onClick={toggleHand} aria-pressed={handUp}
-            className={`min-h-[40px] rounded-full px-4 text-sm font-black transition ${handUp ? "bg-amber-400 text-ink ring-2 ring-amber-500" : "bg-white text-ink/70 ring-1 ring-line hover:ring-amber-400"}`}>
-            {handUp ? "✋ Hand up — tap to lower" : "✋ Raise hand"}
-          </button>
-        )}
-        {!ended && (
-          <button type="button" onClick={() => setMine((m) => !m)} aria-expanded={mine}
-            className="min-h-[40px] rounded-full bg-white px-4 text-sm font-black text-[#0E6E72] ring-1 ring-[#A9D6D3] hover:ring-[#0E6E72]">📊 {mine ? "Hide my results" : "My results"}</button>
-        )}
-        <ReadingButton />
-        {!ended && (
-          <span className={`rounded-full px-3 py-1.5 text-sm font-bold ${room.me.canWrite ? "bg-[#C6F35C] text-ink" : "bg-white/10 text-white/80"}`} role="status">
+          <span className={`rounded-full px-3 py-1.5 text-xs font-black sm:text-sm ${room.me.canWrite ? "bg-[#A3E635] text-[#1A2E05]" : "bg-white/15 text-white"}`} role="status">
             {room.me.canWrite ? "✏️ You can write" : "👀 Watching"}
           </span>
         )}
+        {/* On a phone these are the tabs along the bottom of the screen. */}
+        <nav aria-label="Class" className="lrn-tabs">
+          {!ended && (
+            <button type="button" onClick={toggleHand} aria-pressed={handUp} className={`lrn-tab ${handUp ? "lrn-tab-on !bg-amber-300 !text-[#422006]" : ""}`}>
+              <span aria-hidden className="lrn-tab-icon">✋</span> <span>{handUp ? "Hand up — tap to lower" : "Raise hand"}</span>
+            </button>
+          )}
+          {!ended && (
+            <button type="button" onClick={() => setMine((m) => !m)} aria-expanded={mine} className={`lrn-tab ${mine ? "lrn-tab-on" : ""}`}>
+              <span aria-hidden className="lrn-tab-icon">📊</span> <span>{mine ? "Hide my results" : "My results"}</span>
+            </button>
+          )}
+          <ReadingButton tab />
+        </nav>
       </div>
 
       {handNote && !ended && <p role="status" className={`rounded-2xl px-4 py-2.5 text-sm font-bold ${handNote.startsWith("Couldn") ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-900"}`}>{handNote}</p>}
