@@ -12,6 +12,9 @@ import { useServerClock } from "@/lib/serverClock";
 import { sendPicture } from "@/components/live/board/slides";
 import { BOARD_H, BOARD_W, drawStrokes, roundPt, type Stroke } from "@/lib/whiteboard";
 import { useKeptRef, useKeptState, type KeepStore } from "@/lib/keptState";
+import { AnnotatedPage, type MarkTool } from "@/components/live/board/PageAnnotate";
+import { TEACHER_PENS, countCrosses, countTicks, undoInk } from "@/lib/examAnnotate";
+import { WORK_HARD, WORK_LEVELS, cleanWorkItems, type WorkHard, type WorkItem } from "@/lib/classWorkAi";
 
 // Learner answer boards (like mini whiteboards in class). The tutor asks a
 // question; every learner answers on their own small board; the tutor sees
@@ -24,6 +27,8 @@ import { useKeptRef, useKeptState, type KeepStore } from "@/lib/keptState";
 // Messages: "ab-round" (tutor → all: the round, re-sent every 4s so late
 // joiners and missed messages catch up) and "ab-answer" (learner → tutor: the
 // whole answer — drawing and typed text — sent as it changes and again every 8s).
+// Marking: "ab-ink" (tutor → one learner: ticks, crosses and pen on their
+// board, `to` = their id) and "ab-ink-req" (learner → tutor: send my marking again).
 
 type Person = { id: string; name: string; online?: boolean };
 const PEN_COLOURS = ["#0B1220", "#0E6E72", "#DC2626", "#16A34A"];
@@ -54,6 +59,16 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
   const [limit, setLimit] = useKeptState<number>(keep, k("limit"), 0); // minutes; 0 = no time limit
   const [calcOn, setCalcOn] = useKeptState<boolean>(keep, k("calc"), true); // learners' phone calculator
   const [draft, setDraft] = useState(""); // feedback being written for the open answer
+  // The tutor's marking on each learner's board (by learner id); the learner's own, on theirs.
+  const [inks, setInks] = useKeptState<Record<string, Stroke[]>>(keep, k("inks"), {});
+  const inksRef = useRef(inks); inksRef.current = inks;
+  const [markTool, setMarkTool] = useState<MarkTool>("tick");
+  const [markColour, setMarkColour] = useState(TEACHER_PENS[0]);
+  const [marked, setMarked] = useKeptState<Stroke[]>(keep, k("marked"), []);
+  const askedInk = useRef(0);
+  // A.I. class work: questions with answers — the answers are the tutor's answer key, never sent to learners.
+  const [aiItems, setAiItems] = useKeptState<WorkItem[]>(keep, k("aiItems"), []);
+  const keyFor = (q: string) => aiItems.find((x) => x.q === q.trim());
   // Learner side
   const [mine, setMine] = useKeptState<Stroke[]>(keep, k("mine"), []);
   const mineRef = useRef(mine); mineRef.current = mine;
@@ -87,8 +102,10 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
       if (roundRef.current?.id !== r.id) {
         setMine([]); mineRef.current = []; setTyped(""); typedRef.current = ""; setPhotos([]); photosRef.current = []; version.current = 0; setHidden(false);
         setDone(false); doneRef.current = false; backSeen.current = 0; setSentBack(false); setSure(null); sureRef.current = null;
-        setWay(r.mode === "type" ? "type" : "draw");
+        setWay(r.mode === "type" ? "type" : "draw"); setMarked([]); askedInk.current = 0;
       }
+      // Marked while this phone was away? Ask for it (now and then, only while there's none).
+      if (!markedRef.current.length && Date.now() - askedInk.current > 20_000) { askedInk.current = Date.now(); setTimeout(() => send("ab-ink-req", { round: r.id, by: myId }), 0); }
       // Sent back to try again: unlock it, once for each send-back.
       const back = r.back[myId] ?? 0;
       if (back > backSeen.current) {
@@ -97,6 +114,15 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
         setTimeout(() => sendMine(true), 0);
       }
       setRound(r);
+    },
+    "ab-ink": (p) => {
+      if (!p?.host || host || p.to !== myId || p.round !== roundRef.current?.id) return;
+      const ink = cleanAnswerStrokes(p.ink); setMarked(ink); markedRef.current = ink;
+    },
+    "ab-ink-req": (p) => {
+      if (!host || p?.round !== roundRef.current?.id || typeof p.by !== "string") return;
+      const ink = inksRef.current[p.by];
+      if (ink?.length) send("ab-ink", { host: true, round: p.round, to: p.by, ink });
     },
     "ab-answer": (p) => {
       const r = roundRef.current;
@@ -113,6 +139,16 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     },
   });
 
+  const markedRef = useRef(marked); markedRef.current = marked;
+  // Tutor: mark on one learner's board — it shows on their phone straight away.
+  function markOn(a: Answer, ink: Stroke[]) {
+    const r = roundRef.current;
+    if (!r) return;
+    const next = { ...inksRef.current, [a.by]: ink.slice(-150) };
+    if (!ink.length) delete next[a.by];
+    setInks(next); inksRef.current = next;
+    send("ab-ink", { host: true, round: r.id, to: a.by, ink: ink.slice(-150) });
+  }
   const scale = useClassScale(); // big classes: repeat less (lib/classScale)
   const scaleRef = useRef(scale); scaleRef.current = scale;
   // Tutor: keep the round in everyone's view (late joiners, lost messages).
@@ -151,6 +187,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     if (setFor === "each") for (const [who, t] of Object.entries(per)) if (t.q.trim() || t.img) each[who] = { q: t.q.trim().slice(0, 300), img: t.img };
     setRound({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, q: question.trim().slice(0, 200), open: true, mode, show: null, max: worth, marks: {}, img: qImg, per: each,
       closed: false, endsAt: limit ? now + limit * 60_000 : null, notes: {}, back: {}, calc: calcOn });
+    setInks({}); inksRef.current = {};
   }
   // Upload a picture (the tutor's question, or a learner's photo of their work).
   async function upload(file: File | undefined, answer: boolean): Promise<string | null> {
@@ -182,7 +219,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     if (!sessionId) return;
     fetch("/api/live-sessions/results", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(mark == null ? { id: sessionId, action: "unmark", roundId: r.id, studentId: a.by }
-        : { id: sessionId, action: "mark", roundId: r.id, question: taskFor(r, a.by).q, studentId: a.by, name: a.name, mark, max: r.max, feedback: r.notes[a.by] ?? "", answer: keptAnswer(a) }) })
+        : { id: sessionId, action: "mark", roundId: r.id, question: taskFor(r, a.by).q, studentId: a.by, name: a.name, mark, max: r.max, feedback: r.notes[a.by] ?? "", answer: keptAnswer(a, inksRef.current[a.by]) }) })
       .then((res) => setMarkNote(res.status === 501 ? "Marks show on learners’ boards, but to keep them for the class results run supabase/migration-class-marks.sql." : res.ok ? null : "A mark wasn’t saved for the results — check the internet."))
       .catch(() => setMarkNote("A mark wasn’t saved for the results — check the internet."));
   }
@@ -195,7 +232,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     if (t) notes[a.by] = t; else delete notes[a.by];
     setRound({ ...r, notes });
     if (sessionId) fetch("/api/live-sessions/results", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: sessionId, action: "note", roundId: r.id, studentId: a.by, name: a.name, question: taskFor(r, a.by).q, max: r.max, feedback: t, answer: keptAnswer(a) }) }).catch(() => {});
+      body: JSON.stringify({ id: sessionId, action: "note", roundId: r.id, studentId: a.by, name: a.name, question: taskFor(r, a.by).q, max: r.max, feedback: t, answer: keptAnswer(a, inksRef.current[a.by]) }) }).catch(() => {});
   }
   // Send a learner's work back to try again (with any feedback written).
   function sendBack(a: Answer) {
@@ -272,6 +309,9 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                   ))}
                 </div>
               </fieldset>
+              <AiWork items={aiItems} setItems={setAiItems} learners={online.length}
+                onAsk={(it) => { setSetFor("all"); setQuestion(it.q); }}
+                onShare={() => { setSetFor("each"); setPer((cur) => { const out = shareOut(aiItems.map((x) => x.q), online.map((p) => p.id)); for (const id of Object.keys(out)) out[id].img = cur[id]?.img ?? null; return { ...cur, ...out }; }); }} />
               <label className="text-xs font-black text-ink/60">{setFor === "each" ? "Question for anyone without their own (optional)" : "Question (optional)"}
                 <input value={question} maxLength={200} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") start(); }}
                   placeholder="e.g. Draw a quarter of a circle" className="mt-1 w-full rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0E6E72]" />
@@ -379,7 +419,18 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                 </div>
               </div>
               {round.per[focused.by]?.q && <p className="mb-2 text-sm font-bold text-ink/60">Their task: {round.per[focused.by].q}</p>}
-              <AnswerView a={{ ...focused, bg: taskFor(round, focused.by).img }} big />
+              {keyFor(taskFor(round, focused.by).q) && (
+                <details className="mb-2 rounded-xl bg-violet-50 px-3 py-2 text-sm ring-1 ring-violet-200" aria-label="Answer key">
+                  <summary className="cursor-pointer font-black text-violet-900">🔑 Answer: {keyFor(taskFor(round, focused.by).q)!.a}</summary>
+                  {keyFor(taskFor(round, focused.by).q)!.w && <p className="mt-1 font-semibold text-violet-900/80">{keyFor(taskFor(round, focused.by).q)!.w}</p>}
+                  <p className="mt-1 text-[11px] font-bold text-violet-900/50">Only you see this.</p>
+                </details>
+              )}
+              {focused.strokes.some((s) => !s.erase) || taskFor(round, focused.by).img || !focused.text.trim() ? (
+                <BoardMarking a={focused} bg={taskFor(round, focused.by).img} ink={inks[focused.by] ?? []} tool={markTool} setTool={setMarkTool}
+                  colour={markColour} setColour={setMarkColour} max={round.max} name={labelFor(focused)} mark={round.marks[focused.by]}
+                  onInk={(ink) => markOn(focused, ink)} onMark={(m) => giveMark(focused, m)} />
+              ) : <AnswerView a={{ ...focused, bg: taskFor(round, focused.by).img }} big />}
               <div className="mt-3 grid gap-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
                 <label className="text-xs font-black text-ink/60" htmlFor="ab-feedback">Feedback for {labelFor(focused)} <span className="font-bold text-ink/45">— only they see it, and it’s kept with their mark</span></label>
                 <div className="flex flex-wrap gap-1.5">
@@ -438,6 +489,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
           </div>
         </div>
         {sentBack && !done && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm font-black text-amber-900 ring-1 ring-amber-200">↩ Your tutor sent this back — have another go, then hand it in again.</p>}
+        {marked.length > 0 && <MarkedLine ink={marked} />}
         {note && <p role="status" className="rounded-xl bg-[#E2F3F2] p-3 text-sm font-bold text-ink ring-1 ring-[#A9D6D3]"><span className="block text-[11px] font-black uppercase tracking-wider text-[#0E6E72]">💬 From your tutor</span>{note}</p>}
         {round.marks[myId] != null && <YourMark mark={round.marks[myId]} max={round.max} />}
         {(round.closed || timeUp) && !done && <p role="status" className="rounded-xl bg-slate-100 p-3 text-sm font-black text-ink/75">{timeUp && !round.closed ? "Time’s up — " : ""}Your tutor has closed answers. They can see what you did.</p>}
@@ -458,7 +510,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
           </div>
         )}
         {(round.mode === "draw" || (round.mode === "both" && way === "draw")) && (
-          <Pad strokes={mine} by={myId} bg={task.img} locked={!edit} onChange={(next) => { setMine(next); mineRef.current = next; version.current++; sendMine(); }} onDone={() => sendMine(true)} />
+          <Pad strokes={mine} by={myId} bg={task.img} locked={!edit} marks={marked} onChange={(next) => { setMine(next); mineRef.current = next; version.current++; sendMine(); }} onDone={() => sendMine(true)} />
         )}
         {(round.mode === "type" || (round.mode === "both" && way === "type")) && (
           <div className="grid gap-1.5">
@@ -548,7 +600,7 @@ function YourMark({ mark, max }: { mark: number; max: number }) {
 }
 
 // What's kept with a mark for the learner's results: their typed answer and photos.
-const keptAnswer = (a: Answer) => ({ text: a.text, imgs: a.imgs ?? [] });
+const keptAnswer = (a: Answer, ink?: Stroke[]) => ({ text: a.text, imgs: a.imgs ?? [], strokes: a.strokes.slice(-300), ink: (ink ?? []).slice(-150) });
 
 // One answer as the tutor (or the class) sees it: the drawing, the typed text, or both.
 function AnswerView({ a, big = false }: { a: { strokes: Stroke[]; text: string; imgs?: string[]; bg?: string | null }; big?: boolean }) {
@@ -655,8 +707,9 @@ function BigPicture({ url, onClose }: { url: string; onClose: () => void }) {
 }
 
 // The learner's own small board.
-function Pad({ strokes, by, bg, locked = false, onChange, onDone }: { strokes: Stroke[]; by: string; bg?: string | null; locked?: boolean; onChange: (s: Stroke[]) => void; onDone: () => void }) {
-  const ref = useRef<HTMLCanvasElement>(null);
+function Pad({ strokes, by, bg, locked = false, marks = [], onChange, onDone }: { strokes: Stroke[]; by: string; bg?: string | null; locked?: boolean; marks?: Stroke[]; onChange: (s: Stroke[]) => void; onDone: () => void }) {
+  const ref = useRef<HTMLCanvasElement>(null), over = useRef<HTMLCanvasElement>(null);
+  useEffect(() => { const c = over.current; if (c) drawStrokes(c.getContext("2d")!, marks, c.width, c.height); }, [marks]);
   const cur = useRef<Stroke | null>(null);
   const [colour, setColour] = useState(PEN_COLOURS[1]);
   const [rubber, setRubber] = useState(false);
@@ -674,6 +727,7 @@ function Pad({ strokes, by, bg, locked = false, onChange, onDone }: { strokes: S
         onPointerMove={(e) => { const s = cur.current; if (!s || !e.buttons) return; const [x, y] = pt(e); const L = s.pts.length; if (Math.hypot(x - s.pts[L - 2], y - s.pts[L - 1]) < 0.002) return; s.pts.push(x, y); paint(); }}
         onPointerUp={() => { const s = cur.current; cur.current = null; if (s) onChange([...strokes, s].slice(-300)); onDone(); }}
         onPointerCancel={() => { cur.current = null; paint(); }} />
+      {marks.length > 0 && <canvas ref={over} width={BOARD_W * 0.6} height={BOARD_H * 0.6} role="img" aria-label="Your tutor's marking" className="pointer-events-none absolute inset-0 h-full w-full" />}
       </div>
       {locked ? <p className="text-xs font-bold text-ink/55">🔒 Your answer is locked</p> : (
       <div className="flex flex-wrap items-center gap-1.5">
@@ -704,3 +758,120 @@ function SureLine({ answers, marks, max, labelFor }: { answers: Answer[]; marks:
     </p>
   );
 }
+
+// The tutor marking one learner's board: ticks and crosses where they tap, a
+// pen, undo — shown on the learner's phone as they go — and a mark from the ticks.
+function BoardMarking({ a, bg, ink, tool, setTool, colour, setColour, max, name, mark, onInk, onMark }: {
+  a: Answer; bg: string | null; ink: Stroke[]; tool: MarkTool; setTool: (t: MarkTool) => void; colour: string; setColour: (c: string) => void;
+  max: number; name: string; mark: number | undefined; onInk: (ink: Stroke[]) => void; onMark: (m: number) => void;
+}) {
+  const ticks = countTicks(ink), crosses = countCrosses(ink);
+  const b = (on: boolean) => `flex h-10 min-w-[40px] items-center justify-center rounded-lg px-2.5 text-sm font-black ${on ? "bg-ink text-white" : "bg-white text-ink ring-1 ring-slate-200"}`;
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-center gap-1 rounded-xl bg-slate-50 p-1.5 ring-1 ring-slate-200" role="group" aria-label="Mark their board">
+        <button type="button" aria-pressed={tool === "tick"} onClick={() => setTool("tick")} className={b(tool === "tick")} title="Tap their board to put a tick"><span className="text-[#16A34A]">✓</span>&nbsp;Tick</button>
+        <button type="button" aria-pressed={tool === "cross"} onClick={() => setTool("cross")} className={b(tool === "cross")} title="Tap their board to put a cross"><span className="text-[#DC2626]">✗</span>&nbsp;Cross</button>
+        <button type="button" aria-pressed={tool === "pen"} onClick={() => setTool("pen")} className={b(tool === "pen")} title="Write on their board">🖊 Pen</button>
+        {tool === "pen" && TEACHER_PENS.map((c) => <button key={c} type="button" aria-label={`Pen colour ${c}`} aria-pressed={colour === c} onClick={() => setColour(c)} className={`h-7 w-7 rounded-full ring-2 ${colour === c ? "ring-ink" : "ring-transparent"}`} style={{ background: c }} />)}
+        <button type="button" disabled={!ink.length} onClick={() => onInk(undoInk(ink))} className="h-10 rounded-lg px-2 text-xs font-black text-ink/70 disabled:opacity-40">↩ Undo</button>
+        <button type="button" disabled={!ink.length} onClick={() => onInk([])} className="h-10 rounded-lg px-2 text-xs font-black text-red-700 disabled:opacity-40">Clear marking</button>
+      </div>
+      <div className="overflow-hidden rounded-xl ring-1 ring-slate-200">
+        <AnnotatedPage frame={[BOARD_W * 0.6, BOARD_H * 0.6]} src={bg} ink={a.strokes} teacher={ink} tool={tool} colour={colour} onTeacher={onInk} label={`${name}'s board`} />
+      </div>
+      {!!a.imgs?.length && <AnswerView a={{ strokes: [], text: "", imgs: a.imgs }} big />}
+      {a.text.trim() && <p className="whitespace-pre-wrap break-words rounded-xl bg-white px-3 py-2 text-xl font-bold text-ink ring-1 ring-slate-200">{a.text}</p>}
+      {(ticks > 0 || crosses > 0) && (
+        <p className="flex flex-wrap items-center gap-2 text-xs font-black text-ink/70" aria-label="Tick count">
+          <span className="text-[#16A34A]">✓ {ticks}</span>{crosses > 0 && <span className="text-[#DC2626]">✗ {crosses}</span>}
+          <span className="text-ink/45">· {name} sees your marking now</span>
+          {ticks <= max && mark !== ticks && <button type="button" onClick={() => onMark(ticks)} className="h-8 rounded-lg bg-emerald-600 px-2.5 text-xs font-black text-white">Give {ticks} / {max} (one per tick)</button>}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// On the learner's board: the tutor has marked it.
+function MarkedLine({ ink }: { ink: Stroke[] }) {
+  const ticks = countTicks(ink), crosses = countCrosses(ink);
+  return (
+    <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm font-black text-emerald-900 ring-1 ring-emerald-200">
+      🖍 Your tutor marked your board{ticks || crosses ? " — " : ""}{ticks > 0 && <span className="text-[#16A34A]">✓ {ticks}</span>}{ticks > 0 && crosses > 0 && " · "}{crosses > 0 && <span className="text-[#DC2626]">✗ {crosses}</span>}
+    </p>
+  );
+}
+
+// The tutor's A.I. helper: questions on a topic, at their level, with answers.
+// Ask the class one, or share them all out — a different one for each learner.
+function AiWork({ items, setItems, learners, onAsk, onShare }: {
+  items: WorkItem[]; setItems: (v: WorkItem[]) => void; learners: number; onAsk: (it: WorkItem) => void; onShare: () => void;
+}) {
+  const [topic, setTopic] = useState(""), [level, setLevel] = useState<string>(WORK_LEVELS[2]);
+  const [count, setCount] = useState(8), [hard, setHard] = useState<WorkHard>("mixed");
+  const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
+  async function make() {
+    if (!topic.trim() || busy) return;
+    setBusy(true); setErr(null);
+    const r = await fetch("/api/quiz-sets", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "ai-work", topic, level, count, hard }) }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : {};
+    setBusy(false);
+    const got = cleanWorkItems(j.items);
+    if (!r?.ok || !got.length) { setErr(j.error ?? "Couldn't make questions — check the internet and try again."); return; }
+    setItems(got);
+  }
+  const chip = (on: boolean) => `min-h-[36px] rounded-lg px-2.5 text-xs font-black ring-1 ${on ? "bg-violet-600 text-white ring-violet-600" : "bg-white text-ink/70 ring-slate-200"}`;
+  return (
+    <details className="rounded-xl bg-violet-50 p-3 ring-1 ring-violet-200" open={items.length > 0}>
+      <summary className="cursor-pointer text-sm font-black text-violet-900">✨ A.I. questions on a topic <span className="font-bold text-violet-900/60">— with answers for you</span></summary>
+      <div className="mt-2 grid gap-2">
+        <label className="text-xs font-black text-ink/60">Topic
+          <input value={topic} maxLength={120} onChange={(e) => setTopic(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void make(); } }}
+            placeholder="e.g. Simultaneous equations, Percentages, Area of a circle"
+            className="mt-1 w-full rounded-lg bg-white px-3 py-2 text-sm font-semibold ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500" />
+        </label>
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Level">
+          {WORK_LEVELS.map((l) => <button key={l} type="button" aria-pressed={level === l} onClick={() => setLevel(l)} className={chip(level === l)}>{l}</button>)}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span role="group" aria-label="How hard" className="flex flex-wrap gap-1.5">
+            {WORK_HARD.map((h) => <button key={h} type="button" aria-pressed={hard === h} onClick={() => setHard(h)} className={chip(hard === h)}>{h[0].toUpperCase() + h.slice(1)}</button>)}
+          </span>
+          <label className="ml-auto flex items-center gap-1.5 text-xs font-black text-ink/60">How many
+            <input type="number" min={1} max={20} value={count} onChange={(e) => setCount(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
+              className="w-16 rounded-lg bg-white px-2 py-1.5 text-sm font-black ring-1 ring-slate-200" />
+          </label>
+        </div>
+        <button type="button" onClick={make} disabled={!topic.trim() || busy} className="justify-self-start rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-black text-white disabled:opacity-40">
+          {busy ? "Writing questions…" : items.length ? "✨ Make new questions" : "✨ Make questions"}
+        </button>
+        {err && <p role="alert" className="text-xs font-bold text-red-700">{err}</p>}
+        {items.length > 0 && (
+          <>
+            <ol className="grid gap-1.5" aria-label="A.I. questions">
+              {items.map((it, i) => (
+                <li key={it.q} className="grid gap-1 rounded-lg bg-white p-2 ring-1 ring-violet-100 sm:grid-cols-[1fr_auto] sm:items-center">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-ink">{i + 1}. {it.q}</p>
+                    <p className="text-xs font-semibold text-violet-900/70">🔑 {it.a}</p>
+                  </div>
+                  <span className="flex gap-1">
+                    <button type="button" onClick={() => onAsk(it)} className="min-h-[36px] rounded-lg bg-[#0E6E72] px-2.5 text-xs font-black text-white" aria-label={`Ask the class: ${it.q}`}>Ask the class</button>
+                    <button type="button" onClick={() => setItems(items.filter((x) => x !== it))} aria-label={`Remove: ${it.q}`} className="min-h-[36px] rounded-lg px-2 text-xs font-black text-ink/45 hover:text-red-600">✕</button>
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <button type="button" onClick={onShare} disabled={!learners} className="justify-self-start rounded-lg bg-white px-3 py-2 text-xs font-black text-violet-900 ring-1 ring-violet-300 disabled:opacity-40">
+              🔀 Share them out — a different one for each learner{learners ? ` (${learners})` : ""}
+            </button>
+            <p className="text-[11px] font-bold text-ink/50">Learners get the questions only. The answers show for you when you open their work to mark.</p>
+          </>
+        )}
+      </div>
+    </details>
+  );
+}
+

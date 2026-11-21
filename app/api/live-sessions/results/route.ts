@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { sessionViewer } from "@/lib/sessionAccess";
 import { rateLimit } from "@/lib/ratelimit";
 import { askedCount } from "@/lib/classResults";
-import { cleanAnswerText, cleanImgs, cleanNote } from "@/lib/answerBoards";
+import { cleanAnswerStrokes, cleanAnswerText, cleanImgs, cleanNote } from "@/lib/answerBoards";
 import { classExams } from "@/lib/classExams";
 
 // Class results for the teacher (supabase/migration-class-marks.sql):
@@ -20,7 +20,12 @@ const MISSING = /live_class_marks/i;
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
 const clip = (v: unknown, n: number) => String(v ?? "").slice(0, n);
 const NEW_COLS = /feedback|answer|null value in column "mark"/i; // before migration-class-feedback.sql
-const keptAnswer = (v: any) => (v && typeof v === "object" ? { text: cleanAnswerText(v.text), imgs: cleanImgs(v.imgs) } : null);
+// What they handed in, kept with the mark: typed text, photos, their board, and the tutor's marking on it.
+const keptAnswer = (v: any) => (v && typeof v === "object" ? {
+  text: cleanAnswerText(v.text), imgs: cleanImgs(v.imgs),
+  ...(Array.isArray(v.strokes) && v.strokes.length ? { strokes: cleanAnswerStrokes(v.strokes).slice(-300) } : {}),
+  ...(Array.isArray(v.ink) && v.ink.length ? { ink: cleanAnswerStrokes(v.ink).slice(-150) } : {}),
+} : null);
 
 async function host(id: string) {
   const v = await sessionViewer(id).catch(() => null);

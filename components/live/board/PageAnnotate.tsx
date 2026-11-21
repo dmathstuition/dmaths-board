@@ -13,13 +13,15 @@ export type MarkTool = "pen" | "tick" | "cross" | "move";
 type Api = (body: unknown) => Promise<{ ok: boolean; j: any }>;
 const BLANK: [number, number] = [1200, 800];
 
-export function AnnotatedPage({ src, ink, teacher, zoom = 1, tool, colour = TEACHER_PENS[0], onTeacher, label }: {
+export function AnnotatedPage({ src, ink, teacher, zoom = 1, tool, colour = TEACHER_PENS[0], onTeacher, label, frame }: {
   src?: string | null; ink: Stroke[]; teacher: Stroke[]; zoom?: number; label: string;
+  frame?: [number, number]; // a fixed shape (an answer board, 16:10) with any picture fitted inside it
   tool?: MarkTool; colour?: string; onTeacher?: (ink: Stroke[]) => void; // none: just looking
 }) {
   const theirs = useRef<HTMLCanvasElement>(null), mine = useRef<HTMLCanvasElement>(null);
   const live = useRef<Stroke | null>(null);
-  const [size, setSize] = useState<[number, number]>(src ? [1240, 1754] : BLANK);
+  const [natural, setSize] = useState<[number, number]>(src ? [1240, 1754] : BLANK);
+  const size = frame ?? natural;
   useEffect(() => { const c = theirs.current; if (c) drawStrokes(c.getContext("2d")!, ink, c.width, c.height); });
   const paint = () => { const c = mine.current; if (c) drawStrokes(c.getContext("2d")!, live.current ? [...teacher, live.current] : teacher, c.width, c.height); };
   useEffect(paint);
@@ -27,7 +29,8 @@ export function AnnotatedPage({ src, ink, teacher, zoom = 1, tool, colour = TEAC
   const marking = !!onTeacher && !!tool && tool !== "move", ratio = size[1] / size[0];
   return (
     <div className="relative bg-white" style={{ width: `${zoom * 100}%` }}>
-      {src ? <img src={src} alt={label} className="block w-full select-none" draggable={false}
+      {frame ? <div className="relative w-full" style={{ aspectRatio: `${frame[0]} / ${frame[1]}` }}>{src && <img src={src} alt={label} className="absolute inset-0 h-full w-full select-none object-contain" draggable={false} />}</div>
+        : src ? <img src={src} alt={label} className="block w-full select-none" draggable={false}
         onLoad={(e) => { const i = e.currentTarget; if (i.naturalWidth) { const w = Math.min(1600, i.naturalWidth); setSize([w, Math.round(w * (i.naturalHeight / i.naturalWidth))]); } }} />
         : <div aria-hidden className="w-full" style={{ aspectRatio: `${BLANK[0]} / ${BLANK[1]}`, backgroundImage: "linear-gradient(#E6EEF0 1px, transparent 1px), linear-gradient(90deg, #E6EEF0 1px, transparent 1px)", backgroundSize: "24px 24px" }} />}
       <canvas ref={theirs} width={size[0]} height={size[1]} role="img" aria-label="Their writing" className="pointer-events-none absolute inset-0 h-full w-full" />

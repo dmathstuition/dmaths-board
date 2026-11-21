@@ -108,6 +108,19 @@ export function cleanBoard(v: unknown): Board {
   const bg = pages.map((_, i) => (isSlideUrl(b?.bg?.[i]) ? b.bg[i] : null));
   return { v: 2, pages, paper, bg };
 }
+// The saved board, with anything that reached this screen before it loaded
+// (a learner's writing, or something drawn straight away) added on top — so
+// reopening a class never trades the saved board, slides and all, for those.
+export function mergeLoaded(saved: Board, early: Stroke[][]): Board {
+  const pages = saved.pages.map((p) => [...p]), paper = [...saved.paper], bg = [...saved.bg];
+  early.slice(0, MAX_PAGES).forEach((list, n) => {
+    if (!list.length) return;
+    while (pages.length <= n) { pages.push([]); paper.push("plain"); bg.push(null); }
+    const have = new Set(pages[n].map((s) => s.id));
+    for (const s of list) if (!have.has(s.id)) { pages[n].push(s); have.add(s.id); }
+  });
+  return { v: 2, pages, paper, bg };
+}
 export const itemCount = (b: Board) => b.pages.reduce((n, p) => n + p.length, 0);
 
 // Text size in board units for a size step (2 → small, 24 → huge).

@@ -174,6 +174,43 @@ describe("students joining with a PIN", () => {
     expect((await join(req("/api/board/join", { code: "123456", name: "Ada", parent: "mum@example.com" }, fresh()))).status).toBe(200);
     expect(mockAdmin._qb.insert.mock.calls[1][0]).not.toHaveProperty("parent_contact");
   });
+  it("a removed learner coming back asks to be let in; once let back, the same pass joins again", async () => {
+    // First join: a seat and a pass on this phone.
+    mockAdmin._qb.maybeSingle.mockResolvedValueOnce({ data: live, error: null });
+    mockAdmin._qb._setDirectResolve({ data: null, error: null });
+    mockAdmin._qb.single.mockResolvedValueOnce({ data: { id: "22222222-2222-4222-8222-222222222222" }, error: null });
+    const phone = fresh();
+    expect((await join(req("/api/board/join", { code: "123456", name: "Ada" }, phone))).status).toBe(200);
+    const hash = mockAdmin._qb.insert.mock.calls[0][0].token_hash;
+    // Removed: joining again asks the teacher instead of just saying no.
+    mockAdmin._qb.maybeSingle.mockResolvedValueOnce({ data: live, error: null })
+      .mockResolvedValueOnce({ data: { id: "22222222-2222-4222-8222-222222222222", token_hash: hash, removed: true }, error: null });
+    const res = await join(req("/api/board/join", { code: "123456", name: "Ada" }, phone));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toMatch(/asked them to let you back in/);
+    expect(mockAdmin._qb.update).toHaveBeenCalledWith(expect.objectContaining({ hand_raised_at: expect.any(String) }));
+    // Let back in: the same seat, no new one.
+    mockAdmin._qb.insert.mockClear();
+    mockAdmin._qb.maybeSingle.mockResolvedValueOnce({ data: live, error: null })
+      .mockResolvedValueOnce({ data: { id: "22222222-2222-4222-8222-222222222222", token_hash: hash, removed: false }, error: null });
+    expect((await join(req("/api/board/join", { code: "123456", name: "Ada" }, phone))).status).toBe(200);
+    expect(mockAdmin._qb.insert).not.toHaveBeenCalled();
+  });
+  it("a removed learner can ask to come back from the class screen — with their own pass only", async () => {
+    expect((await join(req("/api/board/join", { back: live.id }, fresh()))).status).toBe(403); // no pass on this phone
+    mockAdmin._qb.maybeSingle.mockResolvedValueOnce({ data: live, error: null });
+    mockAdmin._qb._setDirectResolve({ data: null, error: null });
+    mockAdmin._qb.single.mockResolvedValueOnce({ data: { id: "22222222-2222-4222-8222-222222222222" }, error: null });
+    const phone = fresh();
+    await join(req("/api/board/join", { code: "123456", name: "Ada" }, phone));
+    const hash = mockAdmin._qb.insert.mock.calls[0][0].token_hash;
+    mockAdmin._qb.update.mockClear();
+    mockAdmin._qb.maybeSingle.mockResolvedValueOnce({ data: { id: "22222222-2222-4222-8222-222222222222", token_hash: hash, removed: true }, error: null });
+    const res = await join(req("/api/board/join", { back: live.id }, phone));
+    expect(await res.json()).toEqual({ ok: true, asked: true });
+    expect(mockAdmin._qb.update).toHaveBeenCalledWith({ hand_raised_at: expect.any(String) });
+    expect((await join(req("/api/board/join", { back: "33333333-3333-4333-8333-333333333333" }, phone))).status).toBe(403); // another class
+  });
   it("won't join academy classes, ended classes or nameless students", async () => {
     mockAdmin._qb.maybeSingle.mockResolvedValueOnce({ data: { ...live, kind: "academy" }, error: null });
     expect((await join(req("/api/board/join", { code: "123456", name: "Ada" }, fresh()))).status).toBe(404);

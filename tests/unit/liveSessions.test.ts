@@ -106,3 +106,14 @@ describe("live quiz timing (no early zero)", () => {
     expect(revealDue(quizAt(new Date(t0).toISOString(), "reveal"), 5, 5, t0)).toBe(false);
   });
 });
+
+describe("removed learners", () => {
+  it("are listed for the host with who is asking to come back first", async () => {
+    const { removedList, participantList } = await import("@/lib/liveSession");
+    const row = (id: string, removed: boolean, asked: string | null = null) => ({ student_id: id, can_write: false, removed, joined_at: "", last_seen: new Date().toISOString(), hand_raised_at: asked });
+    const rows = [row("a", false), row("b", true), row("c", true, "2026-11-21T10:00:00Z")];
+    const names = new Map([["a", "Ada"], ["b", "Bola"], ["c", "Chi"]]);
+    expect(removedList(rows, names)).toEqual([{ id: "c", name: "Chi", askedAt: "2026-11-21T10:00:00Z" }, { id: "b", name: "Bola", askedAt: null }]);
+    expect(participantList(rows, names, false).map((p) => p.id)).toEqual(["a"]);
+  });
+});

@@ -11,6 +11,7 @@ import { cleanContact } from "@/lib/classReport";
 // account. They get a secret pass for this one class (an httpOnly cookie that
 // scripts can't read; only its hash is stored), good for 12 hours.
 //   POST { code, name, parent? } → { id }   (parent: optional email / WhatsApp for class reports)
+//   POST { back: sessionId }        → a removed learner asks to come back (from their class screen)
 export const dynamic = "force-dynamic";
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
 const MAX_GUESTS = 300;
@@ -24,6 +25,7 @@ export async function POST(req: Request) {
   if ((await used(badKey)) >= BAD_PINS) return bad("Too many wrong PINs — wait a minute and check the number with your teacher.", 429);
   if (!(await limit(clientKey(req, "board-join"), 600, 60_000))) return bad("Too many people joining at once — wait a moment and try again.", 429);
   const body = await req.json().catch(() => null);
+  if (body?.back) return askBack(String(body.back));
   const code = cleanCode(body?.code);
   const name = cleanGuestName(body?.name);
   if (!code) return bad("Enter the 6-digit class PIN from your teacher.");
@@ -44,7 +46,11 @@ export async function POST(req: Request) {
   if (pass?.sessionId === s.id) {
     const { data: g } = await admin.from("live_session_guests").select("id, token_hash, removed").eq("id", pass.guestId).eq("session_id", s.id).maybeSingle();
     if (g && sameSecret(pass.token, g.token_hash)) {
-      if (g.removed) return bad("Your teacher removed you from this class.", 403);
+      if (g.removed) {
+        // Ask to come back: the teacher sees it and can let them in with one tap.
+        await admin.from("live_session_guests").update({ hand_raised_at: new Date().toISOString() }).eq("id", g.id);
+        return bad("Your teacher removed you from this class. We've asked them to let you back in — tap Join class again in a moment.", 403);
+      }
       await admin.from("live_session_guests").update({ name, last_seen: new Date().toISOString() }).eq("id", g.id);
       if (parent) await admin.from("live_session_guests").update({ parent_contact: parent.value }).eq("id", g.id); // fine if the column isn't there yet
       return NextResponse.json({ id: s.id });
@@ -61,3 +67,17 @@ export async function POST(req: Request) {
   cookies().set(GUEST_COOKIE, guestCookieValue({ sessionId: s.id, guestId: g.id, token }), GUEST_COOKIE_OPTIONS);
   return NextResponse.json({ id: s.id });
 }
+
+// A removed learner, from their class screen: ask the teacher to let them back
+// in (the teacher sees "wants back in" beside their name). Their own pass only.
+async function askBack(sessionId: string) {
+  const pass = readGuestPass();
+  if (!pass || pass.sessionId !== sessionId) return bad("Join with the PIN from your teacher.", 403);
+  const admin = supabaseAdmin();
+  const { data: g } = await admin.from("live_session_guests").select("id, token_hash, removed").eq("id", pass.guestId).eq("session_id", sessionId).maybeSingle();
+  if (!g || !sameSecret(pass.token, g.token_hash)) return bad("Join with the PIN from your teacher.", 403);
+  if (!g.removed) return NextResponse.json({ ok: true, back: true });
+  await admin.from("live_session_guests").update({ hand_raised_at: new Date().toISOString() }).eq("id", g.id);
+  return NextResponse.json({ ok: true, asked: true });
+}
+

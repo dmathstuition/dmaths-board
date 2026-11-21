@@ -7,7 +7,7 @@ import { notifyUser } from "@/lib/notify";
 import { boardTeacherCanUse, BOARD_MIGRATION_MSG, BOARD_MISSING } from "@/lib/boardAccess";
 import { cleanBoard, cleanStrokes, itemCount } from "@/lib/whiteboard";
 import {
-  SEEN_EVERY_MS, boardJoinPath, canWrite, isBoardSession, seatTable, cleanCode, formatCode, isOpen, joinPath, makeCode, participantList, shortName, writerIds,
+  SEEN_EVERY_MS, boardJoinPath, canWrite, isBoardSession, seatTable, cleanCode, formatCode, isOpen, joinPath, makeCode, participantList, removedList, shortName, writerIds,
   type ParticipantRow, type SessionRow,
 } from "@/lib/liveSession";
 
@@ -75,6 +75,7 @@ async function view(v: SessionViewer, withBoard: boolean) {
     // names stay private.
     here: people.filter((p) => p.online).length,
     people: v.host ? people : [],
+    removed: v.host ? removedList(seats, names) : [],
     ...(withBoard ? { board: (boardRow as any)?.data?.board ?? [] } : {}),
   };
 }
@@ -198,7 +199,11 @@ export async function POST(req: Request) {
       if (!s || !isOpen(s)) return bad("No live class with that PIN. Check the number with your tutor.", 404);
       if (isBoardSession(s)) return bad("That PIN is for a D-Maths Board class — join it at dmaths.academy/join.", 409);
       const { data: seat } = await admin.from("live_session_participants").select("removed").eq("session_id", s.id).eq("student_id", me.id).maybeSingle();
-      if (seat?.removed) return bad("The host removed you from this class.", 403);
+      if (seat?.removed) {
+        // Ask to come back: the host sees it beside their name and can let them in.
+        await admin.from("live_session_participants").update({ hand_raised_at: new Date().toISOString() }).eq("session_id", s.id).eq("student_id", me.id);
+        return bad("The host removed you from this class. We've asked them to let you back in — try again in a moment.", 403);
+      }
       const now = new Date().toISOString();
       if (seat) await admin.from("live_session_participants").update({ last_seen: now }).eq("session_id", s.id).eq("student_id", me.id);
       else {
@@ -274,8 +279,15 @@ export async function POST(req: Request) {
     }
     if (action === "write" || action === "remove") {
       const studentId = String(body?.studentId ?? "");
-      const patch = action === "write" ? { can_write: !!body?.value } : { removed: true, can_write: false };
+      const patch = action === "write" ? { can_write: !!body?.value } : { removed: true, can_write: false, hand_raised_at: null };
       const { error } = await admin.from(seats.table).update(patch).eq("session_id", id).eq(seats.key, studentId);
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ ok: true });
+    }
+    // Undo a removal: they can join again (from the same phone, with their work).
+    if (action === "letBack") {
+      const studentId = String(body?.studentId ?? "");
+      const { error } = await admin.from(seats.table).update({ removed: false, hand_raised_at: null }).eq("session_id", id).eq(seats.key, studentId);
       if (error) throw new Error(error.message);
       return NextResponse.json({ ok: true });
     }

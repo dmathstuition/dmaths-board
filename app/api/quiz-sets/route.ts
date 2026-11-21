@@ -4,11 +4,13 @@ import { requireBoardOrStaff } from "@/lib/boardAccess";
 import { limit } from "@/lib/ratelimit";
 import { aiChat, aiErrorResponse, extractJson } from "@/lib/ai";
 import { cleanQuestions, MAX_QUESTIONS } from "@/lib/liveQuiz";
+import { WORK_SYSTEM, cleanWorkItems, workPrompt } from "@/lib/classWorkAi";
 
 // The quiz library: Kahoot-style quizzes prepared before class and launched
 // during an interactive class. Tutors manage their own; admins see all.
 //   GET            → list (no questions) · GET ?id= → one with questions
 //   POST           → create { title, subject, questions } · { action: "ai", topic, subject, level, count } drafts questions
+//   POST { action: "ai-work", topic, level, count, hard } → class work for the answer boards, with answers and working
 //   PATCH { id, … } → update · DELETE ?id= → delete
 export const dynamic = "force-dynamic";
 
@@ -48,6 +50,20 @@ export async function POST(req: Request) {
   const staff = await requireBoardOrStaff();
   if (!staff) return bad("Staff only.", 403);
   const body = await req.json().catch(() => null);
+
+  if (body?.action === "ai-work") {
+    if (!(await limit(`quiz-ai:${staff.id}`, 8, 60_000))) return bad("Give the A.I a minute.", 429);
+    if (staff.role === "board_teacher" && !(await limit(`quiz-ai-day:${staff.id}`, 40, 86_400_000))) return bad("That's today's A.I limit — try again tomorrow.", 429);
+    const topic = clean(body?.topic, 120);
+    if (!topic) return bad("Say what the questions are about.");
+    try {
+      const reply = await aiChat({ system: WORK_SYSTEM, maxTokens: 3000,
+        user: workPrompt({ topic, level: clean(body?.level, 40), count: body?.count, hard: clean(body?.hard, 10), subject: clean(body?.subject, 40) }) });
+      const items = cleanWorkItems(extractJson(reply));
+      if (!items.length) return bad("The A.I reply wasn't usable — try again or put the topic another way.", 502);
+      return NextResponse.json({ items });
+    } catch (e) { return aiErrorResponse(e); }
+  }
 
   if (body?.action === "ai") {
     if (!(await limit(`quiz-ai:${staff.id}`, 8, 60_000))) return bad("Give the A.I a minute.", 429);

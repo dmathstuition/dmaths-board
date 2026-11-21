@@ -73,6 +73,14 @@ export function participantList(rows: ParticipantRow[], names: Map<string, strin
     Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
 }
 
+// Learners the host removed — kept so a mistake can be undone ("Let back in").
+// `askedAt`: they tried to join again (asking to come back); those come first.
+export type RemovedPerson = { id: string; name: string; askedAt: string | null };
+export function removedList(rows: ParticipantRow[], names: Map<string, string>): RemovedPerson[] {
+  return rows.filter((r) => r.removed).map((r) => ({ id: r.student_id, name: names.get(r.student_id) ?? "Learner", askedAt: r.hand_raised_at ?? null }))
+    .sort((a, b) => (a.askedAt ? 0 : 1) - (b.askedAt ? 0 : 1) || (b.askedAt ?? "").localeCompare(a.askedAt ?? "") || a.name.localeCompare(b.name));
+}
+
 // Ids whose strokes every client should accept right now.
 export function writerIds(session: Pick<SessionRow, "host_id" | "all_can_write">, rows: ParticipantRow[]): string[] | "all" {
   if (session.all_can_write) return "all";

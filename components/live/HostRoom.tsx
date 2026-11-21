@@ -18,6 +18,7 @@ export type RoomState = {
   me: { id: string; name: string; host: boolean; canWrite: boolean; handUp?: boolean };
   writers: string[] | "all";
   people: RoomPerson[]; // the host's class list (empty for learners)
+  removed?: { id: string; name: string; askedAt: string | null }[]; // removed learners (host only) — can be let back in
   here?: number;         // how many are in the class right now
 };
 
@@ -235,6 +236,25 @@ function Host({ id, base }: { id: string; base: HostBase }) {
               ))}
               {!room.people.length && <li className="rounded-xl bg-ink/[.03] p-4 text-center text-sm text-ink/55">No one yet. Send the link or read out the PIN — learners join from <b>Interactive class</b> in their portal.</li>}
             </ul>
+            {!!room.removed?.length && (
+              <details className="mt-3 rounded-2xl bg-red-50/60 p-3 ring-1 ring-red-100" open={room.removed.some((p) => p.askedAt)} aria-label="Removed learners">
+                <summary className="cursor-pointer text-xs font-black uppercase tracking-wider text-red-800/70">
+                  Removed ({room.removed.length}){room.removed.some((p) => p.askedAt) ? " · asking to come back" : ""}
+                </summary>
+                <ul className="mt-2 space-y-1.5">
+                  {room.removed.map((p) => (
+                    <li key={p.id} className="flex items-center gap-2 rounded-xl bg-white px-2 py-1.5 ring-1 ring-red-100">
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink/70">{p.name}
+                        {p.askedAt && <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[11px] font-black text-amber-900">🙋 wants back in</span>}
+                      </span>
+                      <button type="button" disabled={busy} onClick={() => act({ action: "letBack", studentId: p.id })} aria-label={`Let ${p.name} back in`}
+                        className="min-h-[36px] rounded-lg bg-emerald-600 px-2.5 text-xs font-black text-white">Let back in</button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-[11px] text-ink/50">Let back in: they join again with the PIN, on the same phone, and keep their work.</p>
+              </details>
+            )}
           </aside>
         </div>
       )}

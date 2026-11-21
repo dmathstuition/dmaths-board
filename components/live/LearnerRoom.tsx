@@ -53,6 +53,7 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
     return (
       <div className="card mx-auto max-w-lg p-8 text-center">
         <p className="font-display text-xl font-black text-ink">{err}</p>
+        {guest && /not in this class/i.test(err) && <AskBack id={id} />}
         <Link href={guest ? "/join" : "/portal/live"} className="btn-gold mt-5 inline-flex">Enter a PIN</Link>
         <p className="mt-4 text-sm text-ink/55">Having trouble? <Link href="/check" className="font-bold underline">Check my connection</Link></p>
       </div>
@@ -118,3 +119,22 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
     </div>
   );
 }
+
+// Removed by mistake? Ask the teacher to let you back in — this screen comes
+// back by itself once they do.
+function AskBack({ id }: { id: string }) {
+  const [state, setState] = useState<"idle" | "busy" | "asked" | "err">("idle");
+  async function ask() {
+    setState("busy");
+    const r = await fetch("/api/board/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ back: id }) }).catch(() => null);
+    setState(r?.ok ? "asked" : "err");
+  }
+  if (state === "asked") return <p role="status" className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">🙋 Asked — your teacher can let you back in. This page opens the class when they do.</p>;
+  return (
+    <div className="mt-4">
+      <button type="button" onClick={ask} disabled={state === "busy"} className="lrn-go">{state === "busy" ? "Asking…" : "🙋 Ask to come back"}</button>
+      {state === "err" && <p role="alert" className="mt-2 text-sm font-bold text-red-700">Couldn&apos;t ask — enter the PIN again instead.</p>}
+    </div>
+  );
+}
+

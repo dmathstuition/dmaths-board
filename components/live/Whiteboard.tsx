@@ -10,7 +10,7 @@ import BoardWidgets from "@/components/live/board/BoardWidgets";
 import { BoardIcon, type BoardIconName } from "@/components/live/board/BoardIcons";
 import { localPoint } from "@/components/live/board/rotation";
 import {
-  BOARD_H, BOARD_W, COLORS, NOTE_COLORS, NOTE_H, NOTE_W, PAPERS, SIZES, cleanBoard, cleanStroke, drawStrokes, fontFor,
+  BOARD_H, BOARD_W, COLORS, NOTE_COLORS, NOTE_H, NOTE_W, PAPERS, SIZES, cleanBoard, mergeLoaded, cleanStroke, drawStrokes, fontFor,
   FILLABLE, STAMPS, hitTest, itemCount, type Board, scaleItem, type ImageSource, isPaper, isSlideUrl, itemBounds, moveItem, paperIsDark, roundPt, type ItemKind, type Paper, type StampId, type Stroke, BOARD_MAX_PAGES } from "@/lib/whiteboard";
 import { TEMPLATES, isTemplate, templateItems } from "@/lib/boardTemplates";
 import { checkCards, isAnswerCard } from "@/lib/boardActivities";
@@ -281,6 +281,9 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const selRef = useRef<Stroke | null>(null);
   const dragRef = useRef<{ orig: Stroke; sx: number; sy: number; moved: boolean } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Nothing is saved until the saved board has loaded — else a reopened class
+  // could save over its own board (and lose the slides) before it arrives.
+  const loadedRef = useRef(false), saveWanted = useRef(false);
   const drawOk = !readOnly && canDraw;
   const pageRef = useRef(page); pageRef.current = page;
   const paper = papers[page] ?? "plain";
@@ -396,6 +399,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   // ── Saving (host) ──
   const persist = useCallback(async (toLessonLog = false) => {
     if (!host || readOnly) return;
+    if (!loadedRef.current) { saveWanted.current = true; return; }
     setStatus("Saving…");
     const board = { pages: pages.current, paper: papersRef.current, bg: bgsRef.current };
     const r = lessonId
@@ -641,6 +645,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
     const pull = async () => {
       const r = await fetch(`/api/live-sessions/inbox?id=${sessionId}${inboxSince.current ? `&since=${encodeURIComponent(inboxSince.current)}` : ""}`).catch(() => null);
       if (stop || !r) return;
+      if (!loadedRef.current) return; // collect it once the saved board is here (it isn't marked as read)
       if (r.status === 501) { stop = true; return; } // table not set up yet — nothing to collect
       const j = r.ok ? await r.json().catch(() => null) : null;
       const items = (j?.items ?? []) as { item_id: string; kind: string; sender: string; page: number; item: unknown; at: string }[];
@@ -684,19 +689,37 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
 
   // Load the saved board, then ask the host for anything newer.
   useEffect(() => {
-    let cancelled = false;
+    let cancelled = false, retry: ReturnType<typeof setTimeout> | null = null;
     const url = lessonId ? `/api/board-lessons?id=${lessonId}` : `/api/live-sessions?id=${sessionId}&board=1`;
-    fetch(url).then((r) => r.json()).then((j) => {
+    const done = () => {
+      loadedRef.current = true;
+      if (saveWanted.current) { saveWanted.current = false; scheduleSave(); }
+    };
+    const load = (tries: number) => fetch(url).then(async (r) => {
+      // A server or network hiccup: try again, and keep the board from saving meanwhile.
+      if (r.status >= 500) throw new Error(String(r.status));
+      const j = await r.json().catch(() => null);
+      if (cancelled) return;
       const saved = lessonId ? j?.lesson?.board : j?.board;
-      if (cancelled || saved == null) return;
-      if (pages.current.every((pg) => !pg.length)) {
-        const b = cleanBoard(saved);
-        pages.current = b.pages; setPapers(b.paper); setBgs(b.bg); setPageCount(b.pages.length); redraw();
+      if (saved != null) {
+        // Anything that got here first (a learner's writing) goes on top of the saved board, not instead of it.
+        const b = mergeLoaded(cleanBoard(saved), pages.current);
+        pages.current = b.pages; papersRef.current = b.paper; bgsRef.current = b.bg;
+        setPapers(b.paper); setBgs(b.bg); setPageCount(b.pages.length);
+        setPage((p) => { const to = Math.min(p, b.pages.length - 1); pageRef.current = to; return to; });
+        redraw();
         if (lessonId && j.lesson.widgets) setWidgets(cleanWidgets(j.lesson.widgets));
+        if (host && !readOnly) pushAll(pageRef.current);
       }
-    }).catch(() => {});
+      done();
+    }).catch(() => {
+      if (cancelled) return;
+      if (tries >= 20) { done(); return; }
+      retry = setTimeout(() => load(tries + 1), Math.min(8000, 1500 * (tries + 1)));
+    });
+    void load(0);
     const t = !host && !readOnly ? setTimeout(() => send("board-sync-req"), 900) : null;
-    return () => { cancelled = true; if (t) clearTimeout(t); };
+    return () => { cancelled = true; if (t) clearTimeout(t); if (retry) clearTimeout(retry); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, lessonId]);
 
