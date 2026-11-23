@@ -3,6 +3,7 @@ import { setClassSize } from "@/lib/classScale";
 import type { HostBase } from "@/lib/liveSession";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import TeacherTour, { tourSeen } from "@/components/live/TeacherTour";
 import { LiveChannelProvider, useLive } from "@/components/live/LiveChannel";
 import { useHostVoice } from "@/components/live/ClassVoice";
 import Whiteboard from "@/components/live/Whiteboard";
@@ -58,10 +59,19 @@ function Host({ id, base }: { id: string; base: HostBase }) {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [focus, setFocus] = useState(false);
+  const [tour, setTour] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const send = useLive({ joined: () => load(), hand: () => load() });
   const onQuizActive = useCallback((active: boolean) => { if (active) setTab("quiz"); }, []);
   const voice = useHostVoice({ classId: id, me: { id: room?.me.id ?? "", name: room?.me.name ?? "Teacher" }, people: room?.people ?? [] });
+
+  // First time here on this device: the quick tour, once the board has had a moment to lay itself out.
+  const live = !!room && room.me.host && room.session.status !== "ended";
+  useEffect(() => {
+    if (!live || tourSeen()) return;
+    const t = setTimeout(() => setTour(true), 1200);
+    return () => clearTimeout(t);
+  }, [live]);
 
   // Buttons change the screen the moment they're tapped; the server catches
   // up in the background (and the screen is put right if it says no).
@@ -113,6 +123,7 @@ function Host({ id, base }: { id: string; base: HostBase }) {
 
   return (
     <div className="space-y-4">
+      <TeacherTour open={tour && !ended} onClose={() => setTour(false)} />
       {/* Header: title, PIN, invite */}
       <div className="flex flex-wrap items-center gap-4 p-4 sm:p-5 rounded-2xl bg-[#0E6E72] bg-[linear-gradient(rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(135deg,#0E6E72,#0A4F52)] bg-[length:28px_28px,28px_28px,100%_100%] text-white shadow-card">
         <div className="min-w-0 flex-1">
@@ -125,14 +136,15 @@ function Host({ id, base }: { id: string; base: HostBase }) {
         </div>
         {!ended && (
           <>
-            <div className="rounded-2xl bg-white/10 px-4 py-2 text-center ring-1 ring-white/20 backdrop-blur">
+            <div data-tour="pin" className="rounded-2xl bg-white/10 px-4 py-2 text-center ring-1 ring-white/20 backdrop-blur">
               <p className="text-[11px] font-black uppercase tracking-wider text-[#C6F35C]">Class PIN</p>
               <p className="font-display text-3xl font-black tracking-wider text-white">{formatCode(s.code)}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={copy} className="btn-gold !min-h-[44px]">{copied ? "Copied ✓" : "Copy join link"}</button>
               <a href={`https://wa.me/?text=${encodeURIComponent(invite)}`} target="_blank" rel="noopener noreferrer" className="btn-ghost !min-h-[44px]">WhatsApp</a>
-              <button type="button" onClick={endClass} disabled={busy} className="min-h-[44px] rounded-xl bg-red-50 px-4 text-sm font-bold text-red-700 ring-1 ring-red-200 hover:bg-red-100">End class</button>
+              <button type="button" onClick={() => setTour(true)} className="min-h-[44px] rounded-xl bg-white/10 px-3 text-sm font-bold text-white ring-1 ring-white/25 hover:bg-white/20" aria-label="Take the quick tour">❓ Tour</button>
+              <button type="button" data-tour="end" onClick={endClass} disabled={busy} className="min-h-[44px] rounded-xl bg-red-50 px-4 text-sm font-bold text-red-700 ring-1 ring-red-200 hover:bg-red-100">End class</button>
             </div>
           </>
         )}
@@ -196,7 +208,7 @@ function Host({ id, base }: { id: string; base: HostBase }) {
           </div>
 
           {/* People + who may write */}
-          <aside className="card h-fit p-4" aria-label="Learners" hidden={focus}>
+          <aside data-tour="learners" className="card h-fit p-4" aria-label="Learners" hidden={focus}>
             <div className="flex items-center justify-between">
               <h2 className="font-display text-lg font-black text-ink">Learners</h2>
               <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">{here} here</span>

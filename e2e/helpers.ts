@@ -96,6 +96,8 @@ export function classServer(crowd = 0) {
   });
   async function attach(ctx: BrowserContext, who: Who) {
     const host = who === "teacher";
+    // The first-time tour has been seen (e2e/teacher-tour.spec.ts tests it on its own).
+    if (host) await ctx.addInitScript(() => { try { if (!sessionStorage.getItem("tour-test")) localStorage.setItem("dmb-tour-done-v1", "1"); } catch { /* */ } });
     await ctx.route("**/api/live-sessions?**", (r) => r.fulfill({ json: { ...room(host), ...(r.request().url().includes("board=1") ? { board: savedBoard } : {}) } }));
     await ctx.route("**/api/live-sessions", (r) => {
       if (r.request().method() === "PUT") { savedBoard = JSON.parse(r.request().postData() ?? "{}").board; stats.saves++; }

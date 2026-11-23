@@ -1421,3 +1421,9 @@ html[data-easy-read="1"] body p, html[data-easy-read="1"] body li { line-height:
 .lrn-go:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 2px 0 #CA8A04; }
 .lrn-go:disabled { opacity: .55; box-shadow: 0 6px 0 #D4D4D8; background: #E4E4E7; color: #52525B; cursor: not-allowed; }
 .lrn-go:focus-visible { outline: 3px solid #7C3AED; outline-offset: 3px; }
+/* Teacher tour: the spotlight on the button being shown. */
+.tour-spot { box-shadow: 0 0 0 9999px rgba(15, 23, 42, .65), 0 0 0 3px #A78BFA; animation: tourPulse 1.6s ease-in-out infinite; }
+@keyframes tourPulse { 50% { box-shadow: 0 0 0 9999px rgba(15, 23, 42, .65), 0 0 0 7px rgba(167, 139, 250, .55); } }
+.tour-card { animation: tourIn .25s ease-out; }
+@keyframes tourIn { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .tour-spot, .tour-card { animation: none; } .tour-spot { transition: none; } }
