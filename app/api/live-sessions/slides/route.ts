@@ -5,6 +5,8 @@ import { rateLimit } from "@/lib/ratelimit";
 import { boardTeacherCanUse, requireBoardOrStaff } from "@/lib/boardAccess";
 import { BOARD_MAX_PAGES, isSlideUrl } from "@/lib/whiteboard";
 import { removeSlidePictures } from "@/lib/slideStore";
+import { readHomework } from "@/lib/homeworkLink";
+import { MAX_UPLOADS, canWork, cleanItems, isFor } from "@/lib/assignments";
 
 // Slides and pictures for an interactive class. The host's browser turns a
 // PDF (a PowerPoint saved as PDF) or pictures into one image per slide, asks
@@ -13,6 +15,7 @@ import { removeSlidePictures } from "@/lib/slideStore";
 // inside the hosting limits on request size and run time.
 //   POST   { sessionId | lessonId, count, type } → { uploads: [{ path, token, url }] }
 //   POST   { sessionId, answer: true, count: 1 } → a learner's photo of their work for an answer board
+//   POST   { homework: link, assignmentId, count } → a learner's photos / PDF pages of their homework (after class too)
 //   DELETE { sessionId | lessonId, urls }         → remove those slide pictures from storage
 //          ("Remove slides"), keeping any a saved lesson or another board still uses
 // (lessonId: a lesson being prepared in the lesson library — its owner or an admin)
@@ -30,7 +33,24 @@ export async function POST(req: Request) {
   const lessonId = String(body?.lessonId ?? "");
   let who = "";
   let prefix = "";
-  if (body?.answer === true && sessionId) {
+  let folderFor = "";
+  if (body?.homework) {
+    // A learner's homework, through their personal link: their own work, while they can still change it.
+    const h = readHomework(body.homework);
+    const admin = supabaseAdmin();
+    const g = h ? (await admin.from("live_session_guests").select("id, removed").eq("id", h.g).eq("session_id", h.s).maybeSingle()).data : null;
+    if (!h || !g || g.removed) return bad("This homework link doesn't work any more.", 403);
+    const aid = String(body?.assignmentId ?? "");
+    const { data: a } = /^[0-9a-f-]{36}$/i.test(aid) ? await admin.from("board_assignments").select("id, status, due_at, late_ok, for_ids, items").eq("id", aid).eq("session_id", h.s).maybeSingle() : { data: null };
+    if (!a || !isFor({ forIds: Array.isArray(a.for_ids) ? a.for_ids : null }, h.g) || !cleanItems(a.items).some((it) => it.kind === "upload")) return bad("That assignment has nothing to upload.", 404);
+    const { data: e } = await admin.from("board_assignment_entries").select("submitted_at, returned_at").eq("assignment_id", a.id).eq("student_id", h.g).maybeSingle();
+    const can = canWork({ status: a.status, dueAt: a.due_at, lateOk: a.late_ok !== false }, e ? { submittedAt: e.submitted_at, returnedAt: e.returned_at } : null);
+    if (!can.ok) return bad(can.why!, 409);
+    if (count > MAX_UPLOADS) return bad(`Up to ${MAX_UPLOADS} pages at a time.`);
+    if (!rateLimit(`hw-photo:${h.g}`, 20, 60_000)) return bad("Too many uploads — wait a minute.", 429);
+    who = h.g; folderFor = h.s;
+    prefix = `hw-${h.g.replace(/[^a-z0-9]/gi, "").slice(0, 12)}-`;
+  } else if (body?.answer === true && sessionId) {
     // A learner in this class sending a photo of their work: one at a time.
     const v = await sessionViewer(sessionId).catch(() => null);
     if (!v || v.host) return bad("Join the class to send a photo.", 403);
@@ -57,7 +77,7 @@ export async function POST(req: Request) {
 
   const store = supabaseAdmin().storage.from("materials");
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const folder = (lessonId ? `lesson-${lessonId}` : sessionId).replace(/[^a-z0-9-]/gi, "").slice(0, 48);
+  const folder = (folderFor || (lessonId ? `lesson-${lessonId}` : sessionId)).replace(/[^a-z0-9-]/gi, "").slice(0, 48);
   const uploads = await Promise.all(Array.from({ length: count }, async (_, i) => {
     const path = `slides/${folder}/${prefix}${stamp}-${String(i + 1).padStart(2, "0")}.${TYPES[type]}`;
     const { data, error } = await store.createSignedUploadUrl(path);

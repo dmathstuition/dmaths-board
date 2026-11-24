@@ -23,7 +23,7 @@ type Api = (body: unknown) => Promise<{ ok: boolean; j: any }>;
 // top, measured across the picture (0–1), so it lines up at any size. No
 // picture: squared paper for working.
 const WORKING_SIZE: [number, number] = [1200, 800];
-function PageCanvas({ src, ink, live, zoom = 1, onStroke, label }: {
+export function PageCanvas({ src, ink, live, zoom = 1, onStroke, label }: {
   src?: string; ink: Stroke[]; live?: React.MutableRefObject<Stroke | null>; zoom?: number;
   onStroke?: { by: string; color: string; rubber: boolean; done: (s: Stroke) => void } | null; label: string;
 }) {

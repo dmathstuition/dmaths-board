@@ -2,6 +2,7 @@
 import { ReadingButton } from "@/components/live/Reading";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import ClassHomework from "@/components/homework/ClassHomework";
 import { LiveChannelProvider, useLive } from "@/components/live/LiveChannel";
 import { useLearnerVoice } from "@/components/live/ClassVoice";
 import Whiteboard from "@/components/live/Whiteboard";
@@ -103,6 +104,7 @@ function Learner({ id, guest }: { id: string; guest: boolean }) {
       </div>
 
       {handNote && !ended && <p role="status" className={`rounded-2xl px-4 py-2.5 text-sm font-bold ${handNote.startsWith("Couldn") ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-900"}`}>{handNote}</p>}
+      {guest && <ClassHomework sessionId={id} />}
       {(ended || (mine && !showQuiz)) && <MyResults sessionId={id} ended={ended} />}
       {ended && <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">This class has ended. Here&apos;s the board your {guest ? "teacher" : "tutor"} saved.</p>}
 

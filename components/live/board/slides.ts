@@ -162,7 +162,7 @@ async function sourcesFor(files: File[], room: number, fit: Fit = BOARD_FIT): Pr
 
 // ── Uploading ──
 type Ticket = { path: string; token: string; url: string };
-type Target = { sessionId?: string; lessonId?: string; answer?: boolean }; // answer: a learner's photo of their work
+export type Target = { sessionId?: string; lessonId?: string; answer?: boolean; homework?: string; assignmentId?: string }; // answer: a learner's photo of their work; homework: a learner's link (their homework)
 
 async function tickets(target: Target, count: number): Promise<Ticket[]> {
   return withRetries(async () => {

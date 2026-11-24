@@ -4,6 +4,7 @@ import type { HostBase } from "@/lib/liveSession";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import TeacherTour, { tourSeen } from "@/components/live/TeacherTour";
+import Assignments from "@/components/live/Assignments";
 import { LiveChannelProvider, useLive } from "@/components/live/LiveChannel";
 import { useHostVoice } from "@/components/live/ClassVoice";
 import Whiteboard from "@/components/live/Whiteboard";
@@ -55,7 +56,7 @@ export default function HostRoom({ id, base }: { id: string; base: HostBase }) {
 function Host({ id, base }: { id: string; base: HostBase }) {
   const { room, err, load, setRoom } = useRoom(id);
   const [actErr, setActErr] = useState<string | null>(null);
-  const [tab, setTab] = useState<"board" | "quiz" | "results">("board");
+  const [tab, setTab] = useState<"board" | "quiz" | "results" | "homework">("board");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [focus, setFocus] = useState(false);
@@ -153,6 +154,7 @@ function Host({ id, base }: { id: string; base: HostBase }) {
       {ended ? (
         <div className="space-y-3">
           <ClassResults sessionId={id} people={room.people} ended />
+          {room.me.host && <Assignments sessionId={id} />}
           {room.me.host && <ClassReport sessionId={id} people={room.people} title={s.title} teacher={s.hostName} board={s.kind === "board"}
             date={new Date(s.createdAt ?? Date.now()).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} />}
           {room.me.host && (
@@ -170,10 +172,10 @@ function Host({ id, base }: { id: string; base: HostBase }) {
           <div className="min-w-0 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <div role="tablist" aria-label="Stage" className="flex gap-1 rounded-2xl bg-white p-1 ring-1 ring-line">
-                {(["board", "quiz", "results"] as const).map((t) => (
+                {(["board", "quiz", "results", "homework"] as const).map((t) => (
                   <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
-                    className={`min-h-[40px] rounded-xl px-4 text-sm font-black transition ${tab === t ? (t === "quiz" ? "bg-violet-600 text-white" : t === "results" ? "bg-emerald-600 text-white" : "bg-[#0E6E72] text-white") : "text-ink/60 hover:text-ink"}`}>
-                    {t === "board" ? "✏️ Board" : t === "quiz" ? "⚡ Live quiz" : "📊 Results"}
+                    className={`min-h-[40px] rounded-xl px-4 text-sm font-black transition ${tab === t ? (t === "quiz" ? "bg-violet-600 text-white" : t === "results" ? "bg-emerald-600 text-white" : t === "homework" ? "bg-fuchsia-600 text-white" : "bg-[#0E6E72] text-white") : "text-ink/60 hover:text-ink"}`}>
+                    {t === "board" ? "✏️ Board" : t === "quiz" ? "⚡ Live quiz" : t === "results" ? "📊 Results" : "📚 Homework"}
                   </button>
                 ))}
               </div>
@@ -204,6 +206,7 @@ function Host({ id, base }: { id: string; base: HostBase }) {
             date={new Date(s.createdAt ?? Date.now()).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} />
                 </div>
               )}
+              {tab === "homework" && <Assignments sessionId={id} />}
             </div>
           </div>
 
