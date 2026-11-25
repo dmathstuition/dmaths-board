@@ -23,7 +23,7 @@ import {
 type Api = (body: Record<string, unknown>) => Promise<{ ok: boolean; j: any }>;
 type Summary = { id: string; title: string; dueAt: string | null; status: "open" | "closed"; count: number; createdAt: string;
   counts: { for: number; started: number; handedIn: number; late: number; returned: number } };
-type Row = { id: string; name: string; state: Status; submittedAt: string | null; returnedAt: string | null; late: boolean; score: number | null; total: number; toMark: number; tries: number; link: string };
+type Row = { id: string; name: string; state: Status; submittedAt: string | null; returnedAt: string | null; late: boolean; score: number | null; total: number; toMark: number; tries: number; link: string; parentEmail?: boolean };
 
 const clock = (iso: string) => new Date(iso).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 const localInput = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
@@ -127,7 +127,7 @@ function Builder({ sessionId, learners, api, onCancel, onMade }: {
   const [items, setItems] = useState<Draft[]>([]);
   const [files, setFiles] = useState<string[]>([]);
   const [due, setDue] = useState(() => localInput(duePreset("tomorrow")));
-  const [lateOk, setLateOk] = useState(true), [review, setReview] = useState(true);
+  const [lateOk, setLateOk] = useState(true), [review, setReview] = useState(true), [remind, setRemind] = useState(true);
   const [forAll, setForAll] = useState(true), [chosen, setChosen] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null), [err, setErr] = useState<string | null>(null);
   const pdfIn = useRef<HTMLInputElement>(null), notesIn = useRef<HTMLInputElement>(null);
@@ -170,7 +170,7 @@ function Builder({ sessionId, learners, api, onCancel, onMade }: {
     if (!forAll && !chosen.length) { setErr("Choose who it's for."); return; }
     setBusy("Sending…");
     const out = items.map(({ key, ...x }) => (void key, x.kind === "choice" ? { ...x, options: x.options.filter((o) => o.trim()), answer: Math.min(Number(x.answer), x.options.filter((o) => o.trim()).length - 1) } : x));
-    const { ok, j } = await api({ action: "create", title: title.trim() || "Assignment", instructions, items: out, files, dueAt: due ? new Date(due).toISOString() : null, lateOk, review, forIds: forAll ? null : chosen });
+    const { ok, j } = await api({ action: "create", title: title.trim() || "Assignment", instructions, items: out, files, dueAt: due ? new Date(due).toISOString() : null, lateOk, review, remind, forIds: forAll ? null : chosen });
     setBusy(null);
     if (!ok) { setErr(j.error ?? "Couldn't send it — check the internet."); return; }
     onMade(j.id);
@@ -232,6 +232,7 @@ function Builder({ sessionId, learners, api, onCancel, onMade }: {
         <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-bold text-ink/75">
           <label className="flex items-center gap-2"><input type="checkbox" checked={lateOk} onChange={(e) => setLateOk(e.target.checked)} className="h-5 w-5 accent-violet-600" /> Accept late work (marked late)</label>
           <label className="flex items-center gap-2"><input type="checkbox" checked={review} onChange={(e) => setReview(e.target.checked)} className="h-5 w-5 accent-violet-600" /> Show answers &amp; solutions once marked</label>
+          <label className={`flex items-center gap-2 ${due ? "" : "opacity-50"}`}><input type="checkbox" checked={remind && !!due} disabled={!due} onChange={(e) => setRemind(e.target.checked)} className="h-5 w-5 accent-violet-600" /> 📧 Email parents a reminder the evening before it&apos;s due</label>
         </div>
         <div>
           <p className="text-xs font-black text-ink/60">For</p>
@@ -397,6 +398,7 @@ function Tracker({ sessionId, id, api, onBack, onMark, onChanged }: { sessionId:
         </div>
       )}
       {note && <p role="status" className="text-sm font-bold text-emerald-700">{note}</p>}
+      {a.dueAt && <Reminder a={a} rows={d.learners} onToggle={(on) => settings({ remind: on })} />}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="How far everyone has got">
         {[["Not handed in", waiting.length, "bg-slate-50"], ["To mark", toMark.length, "bg-amber-50"], ["Late", d.learners.filter((l) => l.late).length, "bg-orange-50"], ["Marked", d.learners.filter((l) => l.state === "returned").length, "bg-emerald-50"]].map(([l, n, c]) => (
           <div key={l as string} className={`rounded-2xl ${c} p-3 text-center ring-1 ring-black/5`}><p className="font-display text-2xl font-black text-ink">{n as number}</p><p className="text-[11px] font-black uppercase tracking-wider text-ink/50">{l as string}</p></div>
@@ -609,3 +611,21 @@ function TheirAnswer({ it, v, n, notes, saved, tool, setTool, colour, setColour,
     </div>
   );
 }
+
+// The evening-before email to parents: on or off, who gets it, and when it went.
+function Reminder({ a, rows, onToggle }: { a: Assignment; rows: Row[]; onToggle: (on: boolean) => void }) {
+  const withEmail = rows.filter((r) => r.parentEmail).length, on = a.remind !== false;
+  const sentAt = a.remindedAt ? new Date(a.remindedAt).toLocaleString("en-GB", { weekday: "short", hour: "numeric", minute: "2-digit" }) : null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl bg-sky-50 px-3 py-2 text-sm ring-1 ring-sky-200" aria-label="Reminder emails">
+      <span className="min-w-0 flex-1 font-bold text-sky-900">
+        📧 {sentAt ? `Reminder emails went ${sentAt}.` : !on ? "No reminder email for this one."
+          : withEmail ? `${withEmail} parent${withEmail === 1 ? "" : "s"} with an email will get a reminder the evening before it's due (only if it isn't handed in).`
+          : "No parents have an email saved — use “Remind on WhatsApp” instead."}
+        {on && !sentAt && withEmail < rows.length && withEmail > 0 && <span className="block text-xs font-semibold text-sky-800/70">The others have no email (or a WhatsApp number) — remind them on WhatsApp.</span>}
+      </span>
+      {!sentAt && <button type="button" onClick={() => onToggle(!on)} className="min-h-[36px] rounded-lg bg-white px-3 text-xs font-black text-sky-900 ring-1 ring-sky-300">{on ? "Turn off" : "Turn on"}</button>}
+    </div>
+  );
+}
+

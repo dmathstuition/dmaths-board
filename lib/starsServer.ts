@@ -44,20 +44,25 @@ export async function termRows(hostId: string, days: number): Promise<TermRows> 
   const sessions = await rowsOf<{ id: string; created_at: string; title: string | null }>(admin.from("live_sessions").select("id, created_at, title").eq("host_id", hostId).gte("created_at", since).order("created_at", { ascending: true }).limit(120));
   const ids = sessions.map((s) => s.id);
   if (!ids.length) return { sessions: [], guests: [], marks: [], quiz: [], exams: [], games: [], titles: {}, asked: [] };
-  const [guests, marks, quizzes, exams, games] = await Promise.all([
+  const [guests, marks, quizzes, exams, games, hwSets] = await Promise.all([
     rowsOf<any>(admin.from("live_session_guests").select("id, session_id, name").in("session_id", ids).eq("removed", false).limit(10000)),
     rowsOf<any>(admin.from("live_class_marks").select("session_id, student_id, name, mark, max_mark").in("session_id", ids).limit(20000)),
     rowsOf<any>(admin.from("live_quizzes").select("id, session_id, questions, status, current").in("session_id", ids).limit(2000)),
     rowsOf<any>(admin.from("board_exams").select("id, session_id").in("session_id", ids).limit(2000)),
     rowsOf<any>(admin.from("board_game_scores").select("session_id, student_id, name, correct, game_id").in("session_id", ids).limit(20000)),
+    rowsOf<any>(admin.from("board_assignments").select("id, session_id").in("session_id", ids).limit(2000)),
   ]);
   const quizSession = new Map(quizzes.map((q: any) => [q.id, q.session_id]));
   const examSession = new Map(exams.map((e: any) => [e.id, e.session_id]));
-  const [answers, entries] = await Promise.all([
+  const hwSession = new Map(hwSets.map((a: any) => [a.id, a.session_id]));
+  const [answers, entries, hwDone] = await Promise.all([
     quizzes.length ? rowsOf<any>(admin.from("live_quiz_answers").select("quiz_id, student_id, correct").in("quiz_id", [...quizSession.keys()]).limit(50000)) : [],
     exams.length ? rowsOf<any>(admin.from("board_exam_entries").select("exam_id, student_id, name, score, total").in("exam_id", [...examSession.keys()]).limit(20000)) : [],
+    // Marked homework (returned to the learner).
+    hwSets.length ? rowsOf<any>(admin.from("board_assignment_entries").select("assignment_id, student_id, name, score, total, returned_at").in("assignment_id", [...hwSession.keys()]).not("returned_at", "is", null).limit(20000)) : [],
   ]);
   return {
+    homework: hwDone.map((h: any) => ({ session_id: hwSession.get(h.assignment_id), student_id: h.student_id, name: h.name, score: h.score, total: h.total })),
     sessions: sessions.map((s) => ({ id: s.id, at: s.created_at })),
     titles: Object.fromEntries(sessions.map((s) => [s.id, String(s.title ?? "").slice(0, 80)])),
     asked: quizzes.map((q: any) => ({ session_id: q.session_id, asked: askedCount(q) })),

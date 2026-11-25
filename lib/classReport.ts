@@ -1,7 +1,7 @@
 // Class reports to parents: what the class covered and how the learner did,
 // sent by email or WhatsApp with a link to a report page.
 import { waNumber } from "@/lib/whatsapp";
-import type { ResultRow } from "@/lib/classResults";
+import { HW_STATE_LABEL, type HomeworkResult, type ResultRow } from "@/lib/classResults";
 
 export type Contact = { kind: "email" | "whatsapp"; value: string };
 export const MAX_COVERED = 600;
@@ -40,6 +40,7 @@ export function praise(percent: number | null): string {
 export function reportMessage(o: {
   learner: string; title: string; teacher: string; date: string; covered: string; homework: string;
   row: Pick<ResultRow, "work" | "workMax" | "quizCorrect" | "quizAsked" | "total" | "totalMax" | "percent"> & Partial<Pick<ResultRow, "exam" | "examMax">>; url: string;
+  hw?: HomeworkResult[]; // the assignments set in this class, and where each one is
 }): string {
   const lines = [
     `Class report for ${o.learner}`,
@@ -51,7 +52,11 @@ export function reportMessage(o: {
   if (o.row.quizAsked) lines.push(`Live quiz: ${o.row.quizCorrect} / ${o.row.quizAsked} correct`);
   if (o.row.examMax) lines.push(`Exam: ${o.row.exam ?? 0} / ${o.row.examMax}`);
   lines.push(`Total: ${scoreLine(o.row)} — ${praise(o.row.percent)}`);
-  if (o.homework) lines.push(`Homework: ${o.homework}`);
+  if (o.hw?.length) {
+    lines.push("", "Homework:");
+    for (const h of o.hw) lines.push(`• ${h.title} — ${h.state === "marked" ? `${h.score ?? 0} / ${h.total}` : HW_STATE_LABEL[h.state].toLowerCase()}`);
+  }
+  if (o.homework) lines.push(`${o.hw?.length ? "Also set" : "Homework"}: ${o.homework}`);
   lines.push("", `Full report: ${o.url}`);
   return lines.join("\n");
 }

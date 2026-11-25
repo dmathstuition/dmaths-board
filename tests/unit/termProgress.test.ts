@@ -40,7 +40,7 @@ describe("term progress", () => {
     // stars: c1 1+1+1, c2 1+3+2 (game), c4 1+2+4 (exam 90% → 4)
     expect(p.classes.map((c) => c.stars)).toEqual([3, 6, 0, 7]);
     expect(p.stars).toBe(16);
-    expect(p.averages).toEqual({ work: 67, quiz: 50, exam: 90, overall: 68 });
+    expect(p.averages).toEqual({ work: 67, quiz: 50, exam: 90, hw: null, overall: 68 });
     expect(p.trend.direction).toBe("up");
     expect(p.best?.id).toBe("s4");
     expect(p.latest?.id).toBe("s4");

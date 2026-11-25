@@ -1,4 +1,8 @@
 import type { LearnerDetail } from "@/lib/learnerResults";
+import { HW_STATE_LABEL, type HwState } from "@/lib/classResults";
+
+const HW_LOOK: Record<HwState, string> = { marked: "", "handed-in": "bg-sky-100 text-sky-800", late: "bg-orange-100 text-orange-900", missing: "bg-red-100 text-red-800", "to-do": "bg-slate-100 text-ink/60" };
+const dueOn = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Lagos" });
 
 // A learner's results, question by question: class work (mark, the tutor's
 // feedback, what they handed in) and each live-quiz question. No hooks, so the
@@ -24,6 +28,28 @@ export default function ResultsBreakdown({ d }: { d: LearnerDetail }) {
           <div className="h-full rounded-full bg-[#0E6E72]" style={{ width: `${r.percent}%` }} />
           {d.classAverage != null && <div className="absolute top-0 h-full w-0.5 bg-amber-500" style={{ left: `${d.classAverage}%` }} />}
         </div>
+      )}
+
+      {(d.homework ?? []).length > 0 && (
+        <section aria-label="Homework">
+          <h3 className="text-xs font-black uppercase tracking-wider text-[#0E6E72]">Homework</h3>
+          <ul className="mt-2 grid gap-2">
+            {d.homework.map((h, i) => {
+              const pct = h.state === "marked" && h.total ? Math.round(((h.score ?? 0) / h.total) * 100) : null;
+              return (
+                <li key={i} className="flex items-center gap-2 rounded-xl bg-white p-3 ring-1 ring-slate-200">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold">📚 {h.title}</span>
+                    {h.dueAt && <span className="block text-xs font-semibold text-ink/50">Due {dueOn(h.dueAt)}</span>}
+                  </span>
+                  <span className={`rounded-lg px-2 py-1 text-sm font-black ${pct == null ? HW_LOOK[h.state] : pct >= 70 ? "bg-emerald-100 text-emerald-800" : pct >= 40 ? "bg-amber-100 text-amber-900" : "bg-red-100 text-red-800"}`}>
+                    {pct == null ? HW_STATE_LABEL[h.state] : `${h.score} / ${h.total} (${pct}%)`}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
 
       {d.work.length > 0 && (

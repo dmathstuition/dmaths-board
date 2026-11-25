@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { classResults, resultsCsv, type ExamEntryRow, type ExamInfo, type MarkRow, type QuizAnswerRow, type QuizInfo } from "@/lib/classResults";
+import { classResults, resultsCsv, type ExamEntryRow, type HwInfo, type HwEntryRow, type ExamInfo, type MarkRow, type QuizAnswerRow, type QuizInfo } from "@/lib/classResults";
 import ExamResults from "@/components/live/ExamResults";
 
 type Person = { id: string; name: string };
@@ -9,7 +9,7 @@ type Person = { id: string; name: string };
 // live-quiz score and exam marks, with a total. Below, each exam in full. Download as a spreadsheet, and
 // delete once the class is over.
 export default function ClassResults({ sessionId, people, ended }: { sessionId: string; people: Person[]; ended: boolean }) {
-  const [data, setData] = useState<{ ready: boolean; marks: MarkRow[]; quizzes: QuizInfo[]; answers: QuizAnswerRow[]; exams?: ExamInfo[]; examEntries?: ExamEntryRow[] } | null>(null);
+  const [data, setData] = useState<{ ready: boolean; marks: MarkRow[]; quizzes: QuizInfo[]; answers: QuizAnswerRow[]; exams?: ExamInfo[]; examEntries?: ExamEntryRow[]; homework?: HwInfo[]; hwEntries?: HwEntryRow[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleted, setDeleted] = useState(false);
@@ -27,8 +27,8 @@ export default function ClassResults({ sessionId, people, ended }: { sessionId: 
     return () => clearInterval(t);
   }, [load, ended]);
 
-  const rows = useMemo(() => (data ? classResults(people, data.marks, data.quizzes, data.answers, data.exams ?? [], data.examEntries ?? []) : []), [data, people]);
-  const hasAny = !!data && (data.marks.length > 0 || data.quizzes.length > 0 || (data.exams?.length ?? 0) > 0);
+  const rows = useMemo(() => (data ? classResults(people, data.marks, data.quizzes, data.answers, data.exams ?? [], data.examEntries ?? [], data.homework ?? [], data.hwEntries ?? []) : []), [data, people]);
+  const hasAny = !!data && (data.marks.length > 0 || data.quizzes.length > 0 || (data.exams?.length ?? 0) > 0 || (data.homework?.length ?? 0) > 0);
 
   function download() {
     const blob = new Blob(["﻿" + resultsCsv(rows)], { type: "text/csv;charset=utf-8" });
@@ -47,7 +47,7 @@ export default function ClassResults({ sessionId, people, ended }: { sessionId: 
     setDeleted(true); load();
   }
 
-  const workMax = rows[0]?.workMax ?? 0, quizAsked = rows[0]?.quizAsked ?? 0, exams = data?.exams ?? [];
+  const workMax = rows[0]?.workMax ?? 0, quizAsked = rows[0]?.quizAsked ?? 0, exams = data?.exams ?? [], homework = data?.homework ?? [];
   return (
     <section className="card p-5 sm:p-6" aria-label="Class results">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -55,7 +55,7 @@ export default function ClassResults({ sessionId, people, ended }: { sessionId: 
           <p className="text-xs font-black uppercase tracking-[.18em] text-emerald-700">Class results</p>
           <h2 className="mt-1 font-display text-2xl font-black text-ink">{ended ? "How everyone did" : "Scores so far"}</h2>
           <p className="mt-1 text-sm text-ink/60">
-            Class work (marks you gave on answer boards{workMax ? ` — ${workMax} in all` : ""}) plus the live quiz (1 mark per question{quizAsked ? ` — ${quizAsked} asked` : ""}){exams.length ? ` plus ${exams.length === 1 ? "the exam" : `${exams.length} exams`} (${exams.map((x) => x.title).join(", ")})` : ""}.
+            Class work (marks you gave on answer boards{workMax ? ` — ${workMax} in all` : ""}) plus the live quiz (1 mark per question{quizAsked ? ` — ${quizAsked} asked` : ""}){exams.length ? ` plus ${exams.length === 1 ? "the exam" : `${exams.length} exams`} (${exams.map((x) => x.title).join(", ")})` : ""}{homework.length ? " plus homework, once it's marked (or overdue and not handed in)" : ""}.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -85,6 +85,7 @@ export default function ClassResults({ sessionId, people, ended }: { sessionId: 
                 <th className="pb-2 pr-3">Quiz</th>
                 <th className="pb-2 pr-3">Quiz points</th>
                 {exams.length > 0 && <th className="pb-2 pr-3">{exams.length === 1 ? "Exam" : "Exams"}</th>}
+                {homework.length > 0 && <th className="pb-2 pr-3">Homework</th>}
                 <th className="pb-2">Total</th>
               </tr>
             </thead>
@@ -97,6 +98,7 @@ export default function ClassResults({ sessionId, people, ended }: { sessionId: 
                   <td className="py-2.5 pr-3 tabular-nums">{r.quizAsked ? `${r.quizCorrect} / ${r.quizAsked}` : "—"}</td>
                   <td className="py-2.5 pr-3 tabular-nums text-ink/60">{r.quizAsked ? r.quizPoints.toLocaleString("en-NG") : "—"}</td>
                   {exams.length > 0 && <td className="py-2.5 pr-3 tabular-nums">{r.examMax ? `${r.exam} / ${r.examMax}` : "—"}</td>}
+                  {homework.length > 0 && <td className="py-2.5 pr-3 tabular-nums" title="Marked homework, and any overdue that wasn't handed in">{r.hwMax ? `${r.hw} / ${r.hwMax}` : "—"}</td>}
                   <td className="py-2.5 tabular-nums">
                     <span className="font-black text-ink">{r.total} / {r.totalMax}</span>
                     {r.percent != null && <span className={`ml-2 rounded-full px-2 py-0.5 text-xs font-black ${r.percent >= 70 ? "bg-emerald-100 text-emerald-800" : r.percent >= 40 ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>{r.percent}%</span>}

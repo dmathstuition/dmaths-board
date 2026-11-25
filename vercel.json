@@ -1,4 +1,15 @@
 {
-  "regions": ["cdg1"],
-  "crons": [{ "path": "/api/cron/board-reminders", "schedule": "0 7 * * *" }]
+  "regions": [
+    "cdg1"
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/board-reminders",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/homework-reminders",
+      "schedule": "0 17 * * *"
+    }
+  ]
 }

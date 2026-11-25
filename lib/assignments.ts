@@ -20,6 +20,7 @@ export type AItem = { kind: AKind; q: string; marks: number; options: string[]; 
 export type Assignment = {
   id: string; sessionId: string; title: string; instructions: string; items: AItem[]; files: string[];
   forIds: string[] | null; dueAt: string | null; lateOk: boolean; review: boolean; status: "open" | "closed"; createdAt: string;
+  remind?: boolean; remindedAt?: string | null; // the evening-before email to parents
 };
 export type Entry = {
   studentId: string; name: string; answers: Record<string, unknown>; marks: Record<string, number>; notes: Record<string, PageNote>;
@@ -216,3 +217,29 @@ export function reminderText(title: string, dueAt: string | null, list: { name: 
   const due = dueAt ? ` ${dueWords(dueAt).replace(/^Due/, "is due").replace(/^Overdue/, "is overdue")}${dueClock ? ` (${dueClock})` : ""}` : "";
   return [`📚 Reminder: "${title}"${due}.`, "", ...list.map((x) => `• ${x.name}: ${x.link}`), "", "Open your link, finish it and tap Hand in."].join("\n");
 }
+
+// ── Reminders (the evening before it's due) ──
+// The daily job (lib/homeworkReminders.ts) picks homework due within the next
+// REMIND_WINDOW_H hours, once per assignment, and emails each parent whose
+// child hasn't handed it in yet.
+export const REMIND_WINDOW_H = 30;
+export const dueSoon = (dueAt: string | null, now = Date.now()) => {
+  if (!dueAt) return false;
+  const ms = new Date(dueAt).getTime() - now;
+  return ms > 0 && ms <= REMIND_WINDOW_H * 3_600_000;
+};
+export function reminderTargets<G extends { id: string; removed?: boolean; email: string | null }>(
+  a: Pick<Assignment, "forIds">, guests: G[], entries: { student_id: string; submitted_at: string | null; returned_at: string | null }[],
+): G[] {
+  const done = new Set(entries.filter((e) => e.submitted_at || e.returned_at).map((e) => e.student_id));
+  return guests.filter((g) => !g.removed && !!g.email && isFor(a, g.id) && !done.has(g.id));
+}
+export function reminderEmail(o: { learner: string; title: string; dueAt: string; teacher: string; klass: string; link: string }): { title: string; body: string } {
+  const when = new Date(o.dueAt).toLocaleString("en-GB", { weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit", timeZone: "Africa/Lagos" });
+  return {
+    title: `Homework reminder: ${o.learner} — "${o.title}" is due ${when}`,
+    body: `${o.learner}'s homework "${o.title}" from ${o.klass}${o.teacher ? ` with ${o.teacher}` : ""} is due ${when}, and it hasn't been handed in yet. `
+      + `They can open it, finish it and tap "Hand in" from their own link — no account needed.`,
+  };
+}
+

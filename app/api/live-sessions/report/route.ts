@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     const url = linkFor(id, studentId, covered, homework);
     const ok = await sendEmail("notice", to.value, {
       firstName: "", title: `Class report: ${r.learner} — ${r.title}`,
-      body: reportMessage({ learner: r.learner, title: r.title, teacher: r.teacher, date: r.date, covered, homework, row: r.row, url }),
+      body: reportMessage({ learner: r.learner, title: r.title, teacher: r.teacher, date: r.date, covered, homework, row: r.row, url, hw: r.homework }),
       loginUrl: url, linkUrl: url, linkText: "See the full report",
     }).catch(() => false);
     if (!ok) return bad("The email didn't go — try again in a moment.", 502);

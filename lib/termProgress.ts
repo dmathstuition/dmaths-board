@@ -8,10 +8,11 @@ import { examStars, roundStars, leaderboard, nameKey, type Badge, type StarRows 
 export type TermRows = StarRows & {
   titles: Record<string, string>;            // session id → class title
   asked: { session_id: string; asked: number }[]; // live-quiz questions asked in each class
+  homework?: { session_id: string; student_id: string; name: string; score: number | null; total: number | null }[]; // marked homework
 };
 export type ClassPoint = {
   id: string; at: string; title: string; attended: boolean;
-  work: [number, number] | null; quiz: [number, number] | null; exam: [number, number] | null;
+  work: [number, number] | null; quiz: [number, number] | null; exam: [number, number] | null; hw: [number, number] | null;
   percent: number | null; stars: number;
 };
 export type Trend = { slope: number; direction: "up" | "down" | "steady" | "unknown" };
@@ -20,7 +21,7 @@ export type TermProgress = {
   classes: ClassPoint[];          // the classes held since they first came, oldest first
   attended: number; held: number; attendance: number | null;
   stars: number; badges: Badge[];
-  averages: { work: number | null; quiz: number | null; exam: number | null; overall: number | null };
+  averages: { work: number | null; quiz: number | null; exam: number | null; hw: number | null; overall: number | null };
   trend: Trend; best: ClassPoint | null; latest: ClassPoint | null;
 };
 
@@ -56,7 +57,7 @@ export function termProgress(rows: TermRows, who: string, days: number): TermPro
   const shownName = [...nameOf].find(([id]) => ids.has(id))?.[1].trim() ?? who;
 
   const mine = <T extends { student_id: string }>(xs: T[]) => xs.filter((x) => ids.has(x.student_id));
-  const marks = mine(rows.marks), quiz = mine(rows.quiz), exams = mine(rows.exams), games = mine(rows.games);
+  const marks = mine(rows.marks), quiz = mine(rows.quiz), exams = mine(rows.exams), games = mine(rows.games), homework = mine(rows.homework ?? []);
   const came = new Set([
     ...rows.guests.filter((g) => ids.has(g.id)).map((g) => g.session_id),
     ...marks.map((m) => m.session_id), ...quiz.map((q) => q.session_id), ...exams.map((e) => e.session_id), ...games.map((g) => g.session_id),
@@ -74,10 +75,12 @@ export function termProgress(rows: TermRows, who: string, days: number): TermPro
     const quizPart: [number, number] | null = attended && asked > 0 ? [Math.min(right, asked), asked] : null;
     const es = exams.filter((e) => e.session_id === s.id && e.total);
     const exam: [number, number] | null = es.length ? [es.reduce((a, e) => a + (e.score ?? 0), 0), es.reduce((a, e) => a + (e.total ?? 0), 0)] : null;
+    const hs = homework.filter((h) => h.session_id === s.id && h.total);
+    const hw: [number, number] | null = hs.length ? [hs.reduce((a, h) => a + (h.score ?? 0), 0), hs.reduce((a, h) => a + (h.total ?? 0), 0)] : null;
     const stars = !attended ? 0 : 1 + right + ms.reduce((a, m) => a + Math.max(0, m.mark ?? 0), 0)
       + es.reduce((a, e) => a + examStars(e.score, e.total), 0)
       + games.filter((g) => g.session_id === s.id).reduce((a, g) => a + roundStars(g), 0);
-    return { id: s.id, at: s.at, title: rows.titles[s.id] || "Class", attended, work, quiz: quizPart, exam, percent: attended ? sumPct([work, quizPart, exam]) : null, stars };
+    return { id: s.id, at: s.at, title: rows.titles[s.id] || "Class", attended, work, quiz: quizPart, exam, hw, percent: attended ? sumPct([work, quizPart, exam, hw]) : null, stars };
   });
 
   const total = (pick: (c: ClassPoint) => [number, number] | null) => sumPct(classes.map(pick));
@@ -88,7 +91,7 @@ export function termProgress(rows: TermRows, who: string, days: number): TermPro
     name: shownName, days, classes, attended, held: classes.length,
     attendance: classes.length ? Math.round((attended / classes.length) * 100) : null,
     stars: classes.reduce((a, c) => a + c.stars, 0), badges: me?.badges ?? [],
-    averages: { work: total((c) => c.work), quiz: total((c) => c.quiz), exam: total((c) => c.exam), overall: total((c) => (c.percent == null ? null : [c.percent, 100])) },
+    averages: { work: total((c) => c.work), quiz: total((c) => c.quiz), exam: total((c) => c.exam), hw: total((c) => c.hw), overall: total((c) => (c.percent == null ? null : [c.percent, 100])) },
     trend: trendOf(classes.filter((c) => c.attended).map((c) => c.percent)),
     best: scored.reduce<ClassPoint | null>((b, c) => (!b || (c.percent ?? 0) > (b.percent ?? 0) ? c : b), null),
     latest: scored[scored.length - 1] ?? null,

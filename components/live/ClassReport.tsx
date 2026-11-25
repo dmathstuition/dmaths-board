@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { classResults, type ExamEntryRow, type ExamInfo, type MarkRow, type QuizAnswerRow, type QuizInfo } from "@/lib/classResults";
+import { classResults, homeworkFor, type ExamEntryRow, type HwInfo, type HwEntryRow, type ExamInfo, type MarkRow, type QuizAnswerRow, type QuizInfo } from "@/lib/classResults";
 import { cleanContact, reportMessage, scoreLine, MAX_COVERED, MAX_HOMEWORK } from "@/lib/classReport";
 import { waNumber } from "@/lib/whatsapp";
 
@@ -15,7 +15,7 @@ export default function ClassReport({ sessionId, people, title, teacher, date, b
   const store = `class-report:${sessionId}`;
   const [covered, setCovered] = useState("");
   const [homework, setHomework] = useState("");
-  const [data, setData] = useState<{ marks: MarkRow[]; quizzes: QuizInfo[]; answers: QuizAnswerRow[]; exams?: ExamInfo[]; examEntries?: ExamEntryRow[] } | null>(null);
+  const [data, setData] = useState<{ marks: MarkRow[]; quizzes: QuizInfo[]; answers: QuizAnswerRow[]; exams?: ExamInfo[]; examEntries?: ExamEntryRow[]; homework?: HwInfo[]; hwEntries?: HwEntryRow[] } | null>(null);
   const [contacts, setContacts] = useState<Record<string, string>>({});
   const [contactsReady, setContactsReady] = useState(true);
   const [links, setLinks] = useState<Record<string, string> | null>(null);
@@ -43,7 +43,7 @@ export default function ClassReport({ sessionId, people, title, teacher, date, b
   }, [sessionId]);
   useEffect(() => { load(); }, [load]);
 
-  const rows = useMemo(() => (data ? classResults(people, data.marks, data.quizzes, data.answers, data.exams ?? [], data.examEntries ?? []) : []).sort((a, b) => a.name.localeCompare(b.name)), [data, people]);
+  const rows = useMemo(() => (data ? classResults(people, data.marks, data.quizzes, data.answers, data.exams ?? [], data.examEntries ?? [], data.homework ?? [], data.hwEntries ?? []) : []).sort((a, b) => a.name.localeCompare(b.name)), [data, people]);
   const textKey = `${covered}\u0000${homework}`;
   const stale = !!links && preparedFor !== textKey;
 
@@ -76,7 +76,7 @@ export default function ClassReport({ sessionId, people, title, teacher, date, b
   }
   const message = (id: string) => {
     const row = rows.find((x) => x.id === id)!;
-    return reportMessage({ learner: row.name, title, teacher, date, covered: covered.trim(), homework: homework.trim(), row, url: links?.[id] ?? "" });
+    return reportMessage({ learner: row.name, title, teacher, date, covered: covered.trim(), homework: homework.trim(), row, url: links?.[id] ?? "", hw: homeworkFor(id, data?.homework ?? [], data?.hwEntries ?? []) });
   };
   async function copy(id: string) {
     try { await navigator.clipboard.writeText(message(id)); setCopied(id); setTimeout(() => setCopied(null), 2000); } catch { prompt("Copy this report:", message(id)); }

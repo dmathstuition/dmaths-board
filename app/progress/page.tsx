@@ -48,10 +48,11 @@ export default async function ProgressPage({ searchParams }: { searchParams: { t
           {p.classes.some((c) => c.percent != null) ? <ProgressChart classes={p.classes} slope={p.trend.slope} /> : <p className="text-sm text-dmb-muted">No marked work, quizzes or exams yet.</p>}
         </section>
 
-        <div className="grid grid-cols-3 gap-2 text-center">
+        <div className={`grid ${p.averages.hw != null ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"} gap-2 text-center`}>
           <Small label="Class work" v={p.averages.work} />
           <Small label="Live quizzes" v={p.averages.quiz} />
           <Small label="Exams" v={p.averages.exam} />
+          {p.averages.hw != null && <Small label="Homework" v={p.averages.hw} />}
         </div>
 
         {p.badges.length > 0 && (
@@ -65,7 +66,7 @@ export default async function ProgressPage({ searchParams }: { searchParams: { t
           <summary className="cursor-pointer text-xs font-bold uppercase tracking-[.14em] text-dmb-muted">Class by class</summary>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="text-xs text-dmb-muted"><tr><th className="py-1 pr-2 font-semibold">Class</th><th className="px-1 font-semibold">Work</th><th className="px-1 font-semibold">Quiz</th><th className="px-1 font-semibold">Exam</th><th className="pl-1 text-right font-semibold">Score</th></tr></thead>
+              <thead className="text-xs text-dmb-muted"><tr><th className="py-1 pr-2 font-semibold">Class</th><th className="px-1 font-semibold">Work</th><th className="px-1 font-semibold">Quiz</th><th className="px-1 font-semibold">Exam</th><th className="px-1 font-semibold">Homework</th><th className="pl-1 text-right font-semibold">Score</th></tr></thead>
               <tbody>{recent.map((c) => <Row key={c.id} c={c} />)}</tbody>
             </table>
           </div>
@@ -104,9 +105,10 @@ function Row({ c }: { c: ClassPoint }) {
           <td className="px-1 tabular-nums">{frac(c.work)}</td>
           <td className="px-1 tabular-nums">{frac(c.quiz)}</td>
           <td className="px-1 tabular-nums">{frac(c.exam)}</td>
+          <td className="px-1 tabular-nums">{frac(c.hw)}</td>
           <td className="pl-1 text-right font-bold tabular-nums">{c.percent == null ? "✓" : `${c.percent}%`}</td>
         </>
-      ) : <td colSpan={4} className="px-1 text-right text-xs font-semibold text-dmb-muted">Missed</td>}
+      ) : <td colSpan={5} className="px-1 text-right text-xs font-semibold text-dmb-muted">Missed</td>}
     </tr>
   );
 }

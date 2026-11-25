@@ -41,6 +41,11 @@ create table if not exists public.board_assignment_entries (
   primary key (assignment_id, student_id)
 );
 
+-- The evening reminder email to parents (lib/homeworkReminders.ts): on or off,
+-- and when it went (once per assignment).
+alter table public.board_assignments add column if not exists remind boolean not null default true;
+alter table public.board_assignments add column if not exists reminded_at timestamptz;
+
 alter table public.board_assignments enable row level security;
 alter table public.board_assignment_entries enable row level security;
 -- No policies: only the server (service role) reads and writes them.

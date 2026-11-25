@@ -6,6 +6,7 @@ import { hashSecret, randomToken } from "@/lib/boardAccess";
 import { cleanGuestName } from "@/lib/boardPlan";
 import { homeworkPath, readHomework } from "@/lib/homeworkLink";
 import { cleanPageNote } from "@/lib/examAnnotate";
+import { cleanContact } from "@/lib/classReport";
 import {
   MAX_FEEDBACK, MAX_INSTRUCTIONS, MAX_TITLE, canWork, cleanAnswer, cleanFiles, cleanItems, cleanMarks, isFor, isLate, isNoteKey,
   itemMark, learnerItems, scoreOf, statusOf, type Assignment, type Entry,
@@ -56,7 +57,7 @@ async function whoIs(t: string | null, sessionId: string | null): Promise<Who | 
 const toAssignment = (r: any): Assignment => ({
   id: r.id, sessionId: r.session_id, title: r.title, instructions: r.instructions ?? "", items: cleanItems(r.items), files: cleanFiles(r.files),
   forIds: Array.isArray(r.for_ids) ? r.for_ids.map(String) : null, dueAt: r.due_at ?? null, lateOk: r.late_ok !== false, review: r.review !== false,
-  status: r.status === "closed" ? "closed" : "open", createdAt: r.created_at,
+  status: r.status === "closed" ? "closed" : "open", createdAt: r.created_at, remind: r.remind !== false, remindedAt: r.reminded_at ?? null,
 });
 const toEntry = (r: any): Entry => ({
   studentId: r.student_id, name: r.name ?? "", answers: r.answers ?? {}, marks: r.marks ?? {}, notes: r.notes ?? {}, feedback: r.feedback ?? "",
@@ -75,9 +76,11 @@ async function entryOf(id: string, studentId: string): Promise<Entry | null> {
   return data ? toEntry(data) : null;
 }
 // The class's learners (not removed), oldest first.
-async function learnersOf(sessionId: string): Promise<{ id: string; name: string }[]> {
-  const { data } = await supabaseAdmin().from("live_session_guests").select("id, name, removed, joined_at").eq("session_id", sessionId).order("joined_at", { ascending: true }).limit(500);
-  return (data ?? []).filter((g: any) => !g.removed).map((g: any) => ({ id: g.id, name: g.name }));
+async function learnersOf(sessionId: string): Promise<{ id: string; name: string; parentEmail: boolean }[]> {
+  const admin = supabaseAdmin();
+  let { data, error }: { data: any[] | null; error: any } = await admin.from("live_session_guests").select("id, name, removed, joined_at, parent_contact").eq("session_id", sessionId).order("joined_at", { ascending: true }).limit(500);
+  if (error) ({ data } = await admin.from("live_session_guests").select("id, name, removed, joined_at").eq("session_id", sessionId).order("joined_at", { ascending: true }).limit(500)); // before parent contacts were kept
+  return (data ?? []).filter((g: any) => !g.removed).map((g: any) => ({ id: g.id, name: g.name, parentEmail: cleanContact(g.parent_contact)?.kind === "email" }));
 }
 
 export async function GET(req: Request) {
@@ -141,14 +144,14 @@ export async function GET(req: Request) {
       const { data: es, error } = await admin.from("board_assignment_entries").select("*").eq("assignment_id", a.id).limit(500);
       if (error) return dbFail(error.message);
       const byId = new Map((es ?? []).map((r: any) => [r.student_id, toEntry(r)]));
-      const people = [...learners.filter((l) => isFor(a, l.id)), ...[...byId.values()].filter((e) => !learners.some((l) => l.id === e.studentId)).map((e) => ({ id: e.studentId, name: e.name }))];
+      const people = [...learners.filter((l) => isFor(a, l.id)), ...[...byId.values()].filter((e) => !learners.some((l) => l.id === e.studentId)).map((e) => ({ id: e.studentId, name: e.name, parentEmail: false }))];
       return NextResponse.json({
         assignment: a, klass,
         learners: people.map((p) => {
           const e = byId.get(p.id) ?? null, sc = e ? scoreOf(a.items, e.answers, e.marks) : null;
           return { id: p.id, name: e?.name || p.name, state: statusOf(a, e), submittedAt: e?.submittedAt ?? null, returnedAt: e?.returnedAt ?? null,
             late: !!e?.submittedAt && isLate(a, e.submittedAt), score: sc?.score ?? null, total: sc?.total ?? a.items.reduce((s, it) => s + it.marks, 0), toMark: sc?.toMark.length ?? 0,
-            tries: e?.tries ?? 0, link: `${origin}${homeworkPath({ s: who.sessionId, g: p.id })}` };
+            tries: e?.tries ?? 0, parentEmail: p.parentEmail, link: `${origin}${homeworkPath({ s: who.sessionId, g: p.id })}` };
         }),
       });
     }
@@ -229,12 +232,16 @@ export async function POST(req: Request) {
       const due = body?.dueAt ? new Date(String(body.dueAt)) : null;
       if (due && Number.isNaN(due.getTime())) return bad("That due date can't be read.");
       const forIds = Array.isArray(body?.forIds) && body.forIds.length ? [...new Set(body.forIds.map(String))].slice(0, 500) : null;
-      const { data, error } = await admin.from("board_assignments").insert({
+      const row = {
         session_id: who.sessionId, host_id: who.id, title, instructions: String(body?.instructions ?? "").replace(/\r/g, "").slice(0, MAX_INSTRUCTIONS).trim(),
         items, files: cleanFiles(body?.files), for_ids: forIds, due_at: due?.toISOString() ?? null, late_ok: body?.lateOk !== false, review: body?.review !== false,
-      }).select("id").single();
+      };
+      let { data, error } = await admin.from("board_assignments").insert({ ...row, remind: body?.remind !== false }).select("id").single();
+      // Set up before reminders were added: save it without the reminder setting.
+      if (error && /remind/i.test(error.message)) ({ data, error } = await admin.from("board_assignments").insert(row).select("id").single());
+      if (!data && !error) return bad("Couldn't save it — try again.", 500);
       if (error) return dbFail(error.message);
-      return NextResponse.json({ ok: true, id: data.id });
+      return NextResponse.json({ ok: true, id: data!.id });
     }
     if (action === "add-learner") {
       // Someone who missed the class: a place in it (no PIN needed), and their link.
@@ -251,6 +258,7 @@ export async function POST(req: Request) {
       if (body?.status === "open" || body?.status === "closed") patch.status = body.status;
       if (typeof body?.lateOk === "boolean") patch.late_ok = body.lateOk;
       if (typeof body?.review === "boolean") patch.review = body.review;
+      if (typeof body?.remind === "boolean") patch.remind = body.remind;
       if (typeof body?.title === "string" && body.title.trim()) patch.title = body.title.replace(/\s+/g, " ").trim().slice(0, MAX_TITLE);
       if (body && "dueAt" in body) {
         const d = body.dueAt ? new Date(String(body.dueAt)) : null;

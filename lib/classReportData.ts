@@ -2,10 +2,11 @@
 // the class title and date, the teacher, the learner's name and their
 // results (class-work marks + live quiz), out of what the whole class was set.
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { askedCount, classResults, type ResultRow } from "@/lib/classResults";
+import { askedCount, classResults, homeworkFor, type HomeworkResult, type ResultRow } from "@/lib/classResults";
 import { classExams } from "@/lib/classExams";
+import { classHomework } from "@/lib/classHomework";
 
-export type LearnerReport = { title: string; date: string; teacher: string; learner: string; board: boolean; row: ResultRow };
+export type LearnerReport = { title: string; date: string; teacher: string; learner: string; board: boolean; row: ResultRow; homework: HomeworkResult[] };
 
 export const reportDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Lagos" });
@@ -33,13 +34,18 @@ export async function learnerReport(sessionId: string, studentId: string): Promi
     const { data } = await admin.from("live_quiz_answers").select("quiz_id, student_id, correct, points").in("quiz_id", quizzes.map((q) => q.id)).eq("student_id", studentId).limit(5000);
     answers = data ?? [];
   }
-  const { exams, entries } = await classExams(sessionId).catch(() => ({ exams: [], entries: [] }));
-  const rows = classResults([{ id: studentId, name: learner || "Learner" }], (marksRes.data ?? []) as any, quizzes, answers, exams, entries.filter((e) => e.student_id === studentId));
+  const [{ exams, entries }, hw] = await Promise.all([
+    classExams(sessionId).catch(() => ({ exams: [], entries: [] })),
+    classHomework(sessionId).catch(() => ({ homework: [], entries: [] })),
+  ]);
+  const myHw = hw.entries.filter((e) => e.student_id === studentId);
+  const rows = classResults([{ id: studentId, name: learner || "Learner" }], (marksRes.data ?? []) as any, quizzes, answers, exams, entries.filter((e) => e.student_id === studentId), hw.homework, myHw);
   const row = rows.find((r) => r.id === studentId);
   if (!row) return null;
   const h: any = hostRes.data;
   return {
     title: s.title || "Interactive class", date: reportDate(s.created_at), board,
     teacher: h ? `${h.first_name ?? ""} ${h.last_name ?? ""}`.trim() : "", learner: learner || "Learner", row,
+    homework: homeworkFor(studentId, hw.homework, myHw),
   };
 }

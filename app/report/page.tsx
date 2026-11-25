@@ -39,6 +39,7 @@ export default async function ClassReportPage({ searchParams }: { searchParams: 
           {row.workMax > 0 && <Score label="Class work" value={`${row.work} / ${row.workMax}`} />}
           {row.quizAsked > 0 && <Score label="Live quiz" value={`${row.quizCorrect} / ${row.quizAsked} correct`} />}
           {row.examMax > 0 && <Score label="Exam" value={`${row.exam} / ${row.examMax}`} />}
+          {row.hwMax > 0 && <Score label="Homework" value={`${row.hw} / ${row.hwMax}`} />}
         </div>
         <div className="rounded-2xl border border-dmb-rule p-4">
           <p className="text-xs font-bold uppercase tracking-[.14em] text-dmb-muted">Total</p>
@@ -50,7 +51,7 @@ export default async function ClassReportPage({ searchParams }: { searchParams: 
           )}
           <p className="mt-2 font-semibold">{praise(row.percent)}</p>
         </div>
-        {(r.work.length > 0 || r.quizzes.length > 0) && (
+        {(r.work.length > 0 || r.quizzes.length > 0 || r.exams.length > 0 || r.homework.length > 0) && (
           <details className="rounded-2xl border border-dmb-rule p-4" open>
             <summary className="cursor-pointer text-xs font-bold uppercase tracking-[.14em] text-dmb-muted">Question by question</summary>
             <div className="mt-3"><ResultsBreakdown d={r} /></div>

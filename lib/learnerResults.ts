@@ -7,6 +7,7 @@ import { askedCount, classResults, type MarkRow } from "@/lib/classResults";
 import { learnerReport, type LearnerReport } from "@/lib/classReportData";
 import { cleanAnswerText, cleanImgs } from "@/lib/answerBoards";
 import { classExams } from "@/lib/classExams";
+import { classHomework } from "@/lib/classHomework";
 import { cleanExamQuestions, cleanPageMarks, reviewItems, type ExamQ, type ReviewItem } from "@/lib/exams";
 
 export type WorkItem = { question: string; mark: number | null; max: number; feedback: string; answer: { text: string; imgs: string[] } | null };
@@ -41,9 +42,12 @@ export async function learnerDetail(sessionId: string, studentId: string): Promi
     answers = data ?? [];
   }
   // The class average (everyone who took part), to compare with.
-  const ce = await classExams(sessionId).catch(() => ({ exams: [], entries: [] }));
-  const ids = new Set([...(allMarks.data ?? []).map((m: any) => m.student_id), ...answers.map((a) => a.student_id), ...ce.entries.map((e) => e.student_id)]);
-  const rows = classResults([...ids].map((id) => ({ id, name: "" })), (allMarks.data ?? []) as MarkRow[], quizzes.map((q: any) => ({ id: q.id, title: q.title, asked: q.asked })), answers, ce.exams, ce.entries);
+  const [ce, hw] = await Promise.all([
+    classExams(sessionId).catch(() => ({ exams: [], entries: [] })),
+    classHomework(sessionId).catch(() => ({ homework: [], entries: [] })),
+  ]);
+  const ids = new Set([...(allMarks.data ?? []).map((m: any) => m.student_id), ...answers.map((a) => a.student_id), ...ce.entries.map((e) => e.student_id), ...hw.entries.map((e) => e.student_id)]);
+  const rows = classResults([...ids].map((id) => ({ id, name: "" })), (allMarks.data ?? []) as MarkRow[], quizzes.map((q: any) => ({ id: q.id, title: q.title, asked: q.asked })), answers, ce.exams, ce.entries, hw.homework, hw.entries);
   const pcts = rows.map((r) => r.percent).filter((p): p is number => p != null);
   const classAverage = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null;
 

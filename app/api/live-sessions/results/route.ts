@@ -5,6 +5,7 @@ import { rateLimit } from "@/lib/ratelimit";
 import { askedCount } from "@/lib/classResults";
 import { cleanAnswerStrokes, cleanAnswerText, cleanImgs, cleanNote } from "@/lib/answerBoards";
 import { classExams } from "@/lib/classExams";
+import { classHomework } from "@/lib/classHomework";
 
 // Class results for the teacher (supabase/migration-class-marks.sql):
 //   GET    ?id=          → class-work marks + the class's live quizzes and answers + its exams and marks
@@ -47,8 +48,12 @@ export async function GET(req: Request) {
     const { data } = await admin.from("live_quiz_answers").select("quiz_id, student_id, correct, points").in("quiz_id", quizzes.map((q) => q.id)).limit(20000);
     answers = data ?? [];
   }
-  const { exams, entries } = await classExams(id).catch(() => ({ exams: [], entries: [] }));
-  return NextResponse.json({ ready, marks: marksRes.data ?? [], quizzes, answers, exams: exams.map(({ id: examId, title, total }) => ({ id: examId, title, total })), examEntries: entries }, { headers: { "Cache-Control": "no-store" } });
+  const [{ exams, entries }, hw] = await Promise.all([
+    classExams(id).catch(() => ({ exams: [], entries: [] })),
+    classHomework(id).catch(() => ({ homework: [], entries: [] })),
+  ]);
+  return NextResponse.json({ ready, marks: marksRes.data ?? [], quizzes, answers, exams: exams.map(({ id: examId, title, total }) => ({ id: examId, title, total })), examEntries: entries,
+    homework: hw.homework.map(({ id: hid, title, total, dueAt, forIds }) => ({ id: hid, title, total, dueAt, forIds })), hwEntries: hw.entries }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(req: Request) {
