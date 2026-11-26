@@ -5,12 +5,16 @@ import { limit } from "@/lib/ratelimit";
 import { aiChat, aiErrorResponse, extractJson } from "@/lib/ai";
 import { cleanQuestions, MAX_QUESTIONS } from "@/lib/liveQuiz";
 import { WORK_SYSTEM, cleanWorkItems, workPrompt } from "@/lib/classWorkAi";
+import { SPOT_SYSTEM, cleanSpot, spotPrompt } from "@/lib/spotMistake";
+import { TIERS_SYSTEM, cleanTiers, tiersPrompt } from "@/lib/adaptive";
 
 // The quiz library: Kahoot-style quizzes prepared before class and launched
 // during an interactive class. Tutors manage their own; admins see all.
 //   GET            → list (no questions) · GET ?id= → one with questions
 //   POST           → create { title, subject, questions } · { action: "ai", topic, subject, level, count } drafts questions
 //   POST { action: "ai-work", topic, level, count, hard } → class work for the answer boards, with answers and working
+//   POST { action: "ai-spot", topic, level, kind } → one worked solution with a deliberate mistake (Spot the mistake)
+//   POST { action: "ai-tiers", question, level } → the same question at three levels (Adaptive follow-up)
 //   PATCH { id, … } → update · DELETE ?id= → delete
 export const dynamic = "force-dynamic";
 
@@ -50,6 +54,22 @@ export async function POST(req: Request) {
   const staff = await requireBoardOrStaff();
   if (!staff) return bad("Staff only.", 403);
   const body = await req.json().catch(() => null);
+
+  if (body?.action === "ai-spot" || body?.action === "ai-tiers") {
+    if (!(await limit(`quiz-ai:${staff.id}`, 8, 60_000))) return bad("Give the A.I a minute.", 429);
+    if (staff.role === "board_teacher" && !(await limit(`quiz-ai-day:${staff.id}`, 40, 86_400_000))) return bad("That's today's A.I limit — try again tomorrow.", 429);
+    const spot = body.action === "ai-spot";
+    const topic = clean(spot ? body?.topic : body?.question, spot ? 120 : 300);
+    if (!topic) return bad(spot ? "Say what the mistake should be about." : "There's no question to base it on.");
+    try {
+      const reply = await aiChat(spot
+        ? { system: SPOT_SYSTEM, maxTokens: 1200, user: spotPrompt({ topic, level: clean(body?.level, 40), kind: clean(body?.kind, 30), subject: clean(body?.subject, 40) }) }
+        : { system: TIERS_SYSTEM, maxTokens: 1500, user: tiersPrompt({ question: topic, level: clean(body?.level, 40), subject: clean(body?.subject, 40) }) });
+      const got = spot ? cleanSpot(extractJson(reply)) : cleanTiers(extractJson(reply));
+      if (!got) return bad("The A.I reply wasn't usable — try again or put it another way.", 502);
+      return NextResponse.json(spot ? { spot: got } : { tiers: got });
+    } catch (e) { return aiErrorResponse(e); }
+  }
 
   if (body?.action === "ai-work") {
     if (!(await limit(`quiz-ai:${staff.id}`, 8, 60_000))) return bad("Give the A.I a minute.", 429);

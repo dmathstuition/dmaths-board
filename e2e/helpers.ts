@@ -81,24 +81,26 @@ export function signingKeys() {
 
 // One class's server: the room, the saved board and the backup inbox.
 // `crowd`: pretend this many extra learners are in the class (big-class tests).
-export function classServer(crowd = 0) {
+// `extra`: more real learners (their own browsers) besides Emmanuel; attach(ctx, "learner", them) for each.
+export function classServer(crowd = 0, extra: { id: string; name: string }[] = []) {
   let savedBoard: unknown = null;
   const inbox: { item_id: string; kind: string; sender: string; page: number; item: any; at: string }[] = [];
   const stats = { backupPosts: 0, saves: 0 };
   let handAt: string | null = null;
-  const room = (host: boolean) => ({
+  const room = (host: boolean, as?: { id: string; name: string }) => ({
     session: { id: SID, code: "482913", title: "Division", status: "live", allCanWrite: false, classId: null, subject: null, hostName: "Mr B", link: "/join?pin=482913", kind: "board", createdAt: new Date().toISOString() },
-    me: host ? { id: "h", name: "Mr B", host: true, canWrite: true } : { id: GID, name: "Emmanuel", canWrite: true, handUp: !!handAt },
-    writers: [GID],
+    me: host ? { id: "h", name: "Mr B", host: true, canWrite: true } : { id: as?.id ?? GID, name: as?.name ?? "Emmanuel", canWrite: true, handUp: !as && !!handAt },
+    writers: [GID, ...extra.map((x) => x.id)],
     people: host ? [{ id: GID, name: "Emmanuel", canWrite: true, online: true, joinedAt: "", handAt },
+      ...extra.map((x) => ({ id: x.id, name: x.name, canWrite: true, online: true, joinedAt: "", handAt: null })),
       ...Array.from({ length: crowd }, (_, i) => ({ id: `crowd-${i}`, name: `Learner ${i + 1}`, canWrite: false, online: true, joinedAt: "", handAt: null }))] : [],
-    here: 1 + crowd,
+    here: 1 + crowd + extra.length,
   });
-  async function attach(ctx: BrowserContext, who: Who) {
+  async function attach(ctx: BrowserContext, who: Who, as?: { id: string; name: string }) {
     const host = who === "teacher";
     // The first-time tour has been seen (e2e/teacher-tour.spec.ts tests it on its own).
     if (host) await ctx.addInitScript(() => { try { if (!sessionStorage.getItem("tour-test")) localStorage.setItem("dmb-tour-done-v1", "1"); } catch { /* */ } });
-    await ctx.route("**/api/live-sessions?**", (r) => r.fulfill({ json: { ...room(host), ...(r.request().url().includes("board=1") ? { board: savedBoard } : {}) } }));
+    await ctx.route("**/api/live-sessions?**", (r) => r.fulfill({ json: { ...room(host, as), ...(r.request().url().includes("board=1") ? { board: savedBoard } : {}) } }));
     await ctx.route("**/api/live-sessions", (r) => {
       if (r.request().method() === "PUT") { savedBoard = JSON.parse(r.request().postData() ?? "{}").board; stats.saves++; }
       if (r.request().method() === "POST") {

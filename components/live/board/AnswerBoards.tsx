@@ -13,6 +13,9 @@ import { sendPicture } from "@/components/live/board/slides";
 import { BOARD_H, BOARD_W, drawStrokes, roundPt, type Stroke } from "@/lib/whiteboard";
 import { useKeptRef, useKeptState, type KeepStore } from "@/lib/keptState";
 import { AnnotatedPage, type MarkTool } from "@/components/live/board/PageAnnotate";
+import { FollowUp } from "@/components/live/board/RoundTools";
+import { PeerMark } from "@/components/live/board/PeerMark";
+import { TIERS, type Tier, type Tiers } from "@/lib/adaptive";
 import { TEACHER_PENS, countCrosses, countTicks, undoInk } from "@/lib/examAnnotate";
 import { WORK_HARD, WORK_LEVELS, cleanWorkItems, type WorkHard, type WorkItem } from "@/lib/classWorkAi";
 
@@ -69,6 +72,9 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
   // A.I. class work: questions with answers — the answers are the tutor's answer key, never sent to learners.
   const [aiItems, setAiItems] = useKeptState<WorkItem[]>(keep, k("aiItems"), []);
   const keyFor = (q: string) => aiItems.find((x) => x.q === q.trim());
+  // Follow-up by level: who got which, and the level the tutor picks for the A.I.
+  const [tierOf, setTierOf] = useKeptState<Record<string, Tier>>(keep, k("tierOf"), {});
+  const [fuLevel, setFuLevel] = useKeptState<string>(keep, k("fuLevel"), "SS 1–3 (WAEC/NECO)");
   // Learner side
   const [mine, setMine] = useKeptState<Stroke[]>(keep, k("mine"), []);
   const mineRef = useRef(mine); mineRef.current = mine;
@@ -187,7 +193,20 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     if (setFor === "each") for (const [who, t] of Object.entries(per)) if (t.q.trim() || t.img) each[who] = { q: t.q.trim().slice(0, 300), img: t.img };
     setRound({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, q: question.trim().slice(0, 200), open: true, mode, show: null, max: worth, marks: {}, img: qImg, per: each,
       closed: false, endsAt: limit ? now + limit * 60_000 : null, notes: {}, back: {}, calc: calcOn });
-    setInks({}); inksRef.current = {};
+    setInks({}); inksRef.current = {}; setTierOf({});
+  }
+  // A new round where each learner has the follow-up that suits how they did (lib/adaptive.ts).
+  function startFollowUp(t: Tiers, by: Record<string, Tier>) {
+    const r = roundRef.current;
+    if (!r) return;
+    order.current = []; setAnswers(new Map()); setFocus(null); setShowBy(null); setInks({}); inksRef.current = {};
+    const each: Record<string, Task> = {};
+    for (const [id, tier] of Object.entries(by)) each[id] = { q: t[tier].q.trim().slice(0, 300), img: null };
+    setRound({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, q: t.same.q.trim().slice(0, 200), open: true, mode: r.mode, show: null, max: r.max, marks: {}, img: null, per: each,
+      closed: false, endsAt: null, notes: {}, back: {}, calc: r.calc });
+    // The answer key for each level, shown beside the question when marking.
+    setAiItems((cur) => [...cur, ...TIERS.map((x) => ({ q: t[x.k].q.trim(), a: t[x.k].a.trim(), w: t[x.k].w }))]);
+    setTierOf(by);
   }
   // Upload a picture (the tutor's question, or a learner's photo of their work).
   async function upload(file: File | undefined, answer: boolean): Promise<string | null> {
@@ -205,7 +224,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
   const setTask = (who: string, t: Partial<Task>) => setPer((cur) => ({ ...cur, [who]: { q: cur[who]?.q ?? "", img: cur[who]?.img ?? null, ...t } }));
   function end() {
     if (round) send("ab-round", { host: true, round: { ...round, open: false } });
-    setRound(null); setFocus(null); onClose();
+    setRound(null); setFocus(null); setTierOf({}); onClose();
   }
   const labelFor = (a: Answer) => (anon ? anonLabel(order.current, a.by) : a.name);
   // Mark one learner's answer (null = take the mark back). Their board shows it
@@ -215,7 +234,8 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     if (!r) return;
     const marks = { ...r.marks };
     if (mark == null) delete marks[a.by]; else marks[a.by] = mark;
-    setRound({ ...r, marks });
+    const next = { ...r, marks };
+    setRound(next); roundRef.current = next; // marks given one after another (accepting peer marks) must build on each other
     if (!sessionId) return;
     fetch("/api/live-sessions/results", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(mark == null ? { id: sessionId, action: "unmark", roundId: r.id, studentId: a.by }
@@ -393,6 +413,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                       <div className="flex items-center justify-between gap-1 bg-slate-50 px-2 py-1 text-xs font-black">
                         <span className="min-w-0 truncate">{labelFor(a)}</span>
                         {showing && <span className="rounded bg-amber-400 px-1.5 text-[10px] text-ink">On screen</span>}
+                        {tierOf[a.by] && <span className="shrink-0 text-[12px]" title={`Follow-up: ${tierOf[a.by]}`} aria-label={`Follow-up: ${tierOf[a.by]}`}>{TIERS.find((x) => x.k === tierOf[a.by])?.icon}</span>}
                         {a.done && <span className="shrink-0 rounded bg-emerald-100 px-1.5 text-[10px] text-emerald-800">Handed in</span>}
                         {a.sure != null && <span className="shrink-0 text-[12px]" title={a.sure ? "Said they're sure" : "Said they're not sure"} aria-label={a.sure ? "Sure" : "Not sure"}>{a.sure ? "😎" : "🤔"}</span>}
                         {round.notes[a.by] && <span className="shrink-0 text-[11px]" title={round.notes[a.by]} aria-label="Feedback given">💬</span>}
@@ -403,6 +424,12 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                 })}
               </div>
               {markNote && <p role="status" className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{markNote}</p>}
+              <FollowUp question={round.q} hasOwnTasks={Object.keys(round.per).length > 0 && Object.keys(tierOf).length === 0} level={fuLevel} setLevel={setFuLevel}
+                learners={online.filter((p) => p.id !== myId)} marks={round.marks} max={round.max} answered={new Set(list.filter(hasAnswered).map((a) => a.by))}
+                sent={tierOf} nameOf={(id) => (anon ? anonLabel(order.current, id) : people.find((p) => p.id === id)?.name ?? "Learner")} onSend={startFollowUp} />
+              <PeerMark host roundId={round.id} max={round.max} myId={myId} answers={list} online={online} label={(id) => (anon ? anonLabel(order.current, id) : people.find((p) => p.id === id)?.name ?? "Learner")}
+                defaultKey={keyFor(round.q)?.a ?? ""} bgFor={(id) => taskFor(round, id).img} marks={round.marks} keep={keep}
+                apply={(id, m) => { const a = answers.get(id); if (a) giveMark(a, m); }} renderAnswer={(a) => <AnswerView a={a} big />} />
               {waiting.length > 0 && <p className="mt-3 text-xs font-bold text-ink/50">Still to answer: {anon ? `${waiting.length} learner${waiting.length === 1 ? "" : "s"}` : waiting.join(", ")}</p>}
             </div>
           )}
@@ -463,15 +490,18 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
   const something = hasAnswered({ strokes: mine, text: typed, imgs: photos });
   const note = round.notes[myId];
   const handIn = (yes: boolean) => { setDone(yes); doneRef.current = yes; if (yes) setSentBack(false); version.current++; sendMine(true); };
+  const peerUI = <PeerMark host={false} roundId={round.id} max={round.max} myId={myId} answers={[]} online={[]} label={() => ""} defaultKey="" bgFor={() => null} marks={{}} keep={keep}
+    apply={() => {}} renderAnswer={(a) => <AnswerView a={a} big />} />;
   if (hidden) {
     return (
-      <button type="button" onClick={() => setHidden(false)} className="fixed bottom-4 right-4 z-[96] flex items-center gap-2 rounded-full bg-[#0E6E72] px-4 py-3 text-sm font-black text-white shadow-2xl">
+      <><button type="button" onClick={() => setHidden(false)} className="fixed bottom-4 right-4 z-[96] flex items-center gap-2 rounded-full bg-[#0E6E72] px-4 py-3 text-sm font-black text-white shadow-2xl">
         <BoardIcon name="answers" /> Your answer board
-      </button>
+      </button>{peerUI}</>
     );
   }
   return (
     <div role="dialog" aria-label="Your answer board" className="fixed inset-0 z-[96] flex items-center justify-center bg-black/50 p-3">
+      {peerUI}
       <div className="flex max-h-full w-full max-w-3xl flex-col gap-2 overflow-y-auto rounded-2xl bg-white p-3 text-ink shadow-2xl">
         <div className="flex items-start justify-between gap-2">
           <div>

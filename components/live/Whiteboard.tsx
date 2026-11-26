@@ -23,6 +23,7 @@ import Leaderboard from "@/components/live/board/Leaderboard";
 import PulsePoll from "@/components/live/board/PulsePoll";
 import BuzzRewards from "@/components/live/board/BuzzRewards";
 import TablesDrill from "@/components/live/board/TimesTables";
+import SpotMistake from "@/components/live/board/SpotMistake";
 import ClassChat from "@/components/live/board/ClassChat";
 import FocusTools from "@/components/live/board/FocusTools";
 import WatchTogether from "@/components/live/board/WatchTogether";
@@ -242,6 +243,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   const [starsOpen, setStarsOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
   const [toolsLeft, setToolsLeft] = useState(false);     // the class tools menu opens to the right of its button (button near the left edge)
+  const [spotOpen, setSpotOpen] = useState(false);     // Spot the mistake (components/live/board/SpotMistake)
   const [drillOpen, setDrillOpen] = useState(false);     // the times-table drill (components/live/board/TimesTables)
   const [buzzOpen, setBuzzOpen] = useState(false);       // the buzzer (components/live/board/BuzzRewards)
   const [rewardsOpen, setRewardsOpen] = useState(false); // rewards
@@ -1350,11 +1352,12 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
               ["🎬", "Watch a video together", "A YouTube video that follows your player", () => setVideoOpen(true), 0],
               ["🌐", "Web browser", "Open a web page full screen, and show it to learners", () => setWebOpen(true), 0],
               ["✖️", "Times-table drill", "Each learner answers on their own screen; see which facts are weak", () => setDrillOpen(true), 0],
+              ["🔍", "Spot the mistake", "A worked solution with one deliberate error — learners find the wrong line", () => setSpotOpen(true), 0],
             ] as [string, string, string, () => void, number][]).map(([icon, label, hint, go, n]) => (
               <button key={label} type="button" onClick={() => { setToolsOpen(false); go(); }} title={hint} aria-label={n ? `${label}, ${n} waiting` : label}
                 className="relative flex min-h-[70px] flex-col items-center justify-center gap-1 rounded-xl bg-white p-2 text-center text-[11px] font-bold leading-tight text-ink/80 ring-1 ring-line transition hover:bg-[#F1F8F7] hover:ring-[#A9D6D3]">
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#E2F3F2] text-lg" aria-hidden>{icon}</span>
-                <span aria-hidden>{label.replace("Watch a video together", "Video").replace("Class chat", "Chat").replace("Focus tools", "Focus").replace("Web browser", "Web").replace("Times-table drill", "Tables drill")}</span>
+                <span aria-hidden>{label.replace("Watch a video together", "Video").replace("Class chat", "Chat").replace("Focus tools", "Focus").replace("Web browser", "Web").replace("Times-table drill", "Tables drill").replace("Spot the mistake", "Spot it")}</span>
                 {n > 0 && <span aria-hidden className="absolute right-1 top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#C2451C] px-1 text-[11px] font-black text-white">{n}</span>}
               </button>
             ))}
@@ -1712,6 +1715,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
           onOpen={applyLesson} onClose={() => setLessonsOpen(false)} notify={setNotice} />}
         {!readOnly && !lessonId && sessionId && <AskTeacher host={host} myId={myId} myName={myName} open={askOpen} onClose={() => setAskOpen(false)} onCount={setAskCount} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <BuzzRewards sessionId={sessionId} host={host} myId={myId} myName={myName} people={people} buzzOpen={buzzOpen} onBuzzOpen={() => setBuzzOpen(true)} onBuzzClose={() => setBuzzOpen(false)} rewardsOpen={rewardsOpen} onRewardsClose={() => setRewardsOpen(false)} keep={keep} />}
+        {!readOnly && !lessonId && sessionId && <SpotMistake host={host} myId={myId} myName={myName} people={people} open={spotOpen} onClose={() => setSpotOpen(false)} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <TablesDrill sessionId={sessionId} host={host} myId={myId} myName={myName} people={people} open={drillOpen} onOpen={() => setDrillOpen(true)} onClose={() => setDrillOpen(false)} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <ClassChat host={host} myId={myId} myName={myName} people={people} open={chatOpen} onClose={() => setChatOpen(false)} onCount={setChatCount} keep={keep} />}
         {!readOnly && !lessonId && sessionId && <FocusTools host={host} myId={myId} myName={myName} people={people} open={focusOpen} onClose={() => setFocusOpen(false)} onCount={setAwayCount} keep={keep} />}
