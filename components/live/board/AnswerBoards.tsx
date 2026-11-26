@@ -15,6 +15,7 @@ import { useKeptRef, useKeptState, type KeepStore } from "@/lib/keptState";
 import { AnnotatedPage, type MarkTool } from "@/components/live/board/PageAnnotate";
 import { FollowUp } from "@/components/live/board/RoundTools";
 import { PeerMark } from "@/components/live/board/PeerMark";
+import { CorrectionCard, CorrectionEditor, fixBlank, type Fix } from "@/components/live/board/Correction";
 import { TIERS, type Tier, type Tiers } from "@/lib/adaptive";
 import { TEACHER_PENS, countCrosses, countTicks, undoInk } from "@/lib/examAnnotate";
 import { WORK_HARD, WORK_LEVELS, cleanWorkItems, type WorkHard, type WorkItem } from "@/lib/classWorkAi";
@@ -69,6 +70,12 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
   const [markColour, setMarkColour] = useState(TEACHER_PENS[0]);
   const [marked, setMarked] = useKeptState<Stroke[]>(keep, k("marked"), []);
   const askedInk = useRef(0);
+  // The correction space: what the tutor sent each learner (kept for the round), and the learner's own.
+  const [fixes, setFixes] = useKeptState<Record<string, Fix>>(keep, k("fixes"), {});
+  const fixesRef = useRef(fixes); fixesRef.current = fixes;
+  const [myFix, setMyFix] = useKeptState<Fix | null>(keep, k("myFix"), null);
+  const myFixRef = useRef(myFix); myFixRef.current = myFix;
+  const askedFix = useRef(0);
   // A.I. class work: questions with answers — the answers are the tutor's answer key, never sent to learners.
   const [aiItems, setAiItems] = useKeptState<WorkItem[]>(keep, k("aiItems"), []);
   const keyFor = (q: string) => aiItems.find((x) => x.q === q.trim());
@@ -108,9 +115,12 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
       if (roundRef.current?.id !== r.id) {
         setMine([]); mineRef.current = []; setTyped(""); typedRef.current = ""; setPhotos([]); photosRef.current = []; version.current = 0; setHidden(false);
         setDone(false); doneRef.current = false; backSeen.current = 0; setSentBack(false); setSure(null); sureRef.current = null;
-        setWay(r.mode === "type" ? "type" : "draw"); setMarked([]); askedInk.current = 0;
+        setWay(r.mode === "type" ? "type" : "draw"); setMarked([]); askedInk.current = 0; setMyFix(null); myFixRef.current = null; askedFix.current = 0;
       }
       // Marked while this phone was away? Ask for it (now and then, only while there's none).
+      // Marked below full marks and no correction yet? Ask for it now and then (a phone that was away).
+      const got = r.marks[myId];
+      if (got != null && got < r.max && !myFixRef.current && Date.now() - askedFix.current > 20_000) { askedFix.current = Date.now(); setTimeout(() => send("ab-fix-req", { round: r.id, by: myId }), 0); }
       if (!markedRef.current.length && Date.now() - askedInk.current > 20_000) { askedInk.current = Date.now(); setTimeout(() => send("ab-ink-req", { round: r.id, by: myId }), 0); }
       // Sent back to try again: unlock it, once for each send-back.
       const back = r.back[myId] ?? 0;
@@ -124,6 +134,16 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     "ab-ink": (p) => {
       if (!p?.host || host || p.to !== myId || p.round !== roundRef.current?.id) return;
       const ink = cleanAnswerStrokes(p.ink); setMarked(ink); markedRef.current = ink;
+    },
+    "ab-fix": (p) => {
+      if (!p?.host || host || p.to !== myId || p.round !== roundRef.current?.id) return;
+      const f = { text: String(p.text ?? "").replace(/\r/g, "").slice(0, 500), ink: cleanAnswerStrokes(p.ink) };
+      const next = fixBlank(f) ? null : f; setMyFix(next); myFixRef.current = next;
+    },
+    "ab-fix-req": (p) => {
+      if (!host || p?.round !== roundRef.current?.id || typeof p.by !== "string") return;
+      const f = fixesRef.current[p.by];
+      if (f) send("ab-fix", { host: true, round: p.round, to: p.by, text: f.text, ink: f.ink });
     },
     "ab-ink-req": (p) => {
       if (!host || p?.round !== roundRef.current?.id || typeof p.by !== "string") return;
@@ -193,13 +213,13 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     if (setFor === "each") for (const [who, t] of Object.entries(per)) if (t.q.trim() || t.img) each[who] = { q: t.q.trim().slice(0, 300), img: t.img };
     setRound({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, q: question.trim().slice(0, 200), open: true, mode, show: null, max: worth, marks: {}, img: qImg, per: each,
       closed: false, endsAt: limit ? now + limit * 60_000 : null, notes: {}, back: {}, calc: calcOn });
-    setInks({}); inksRef.current = {}; setTierOf({});
+    setInks({}); inksRef.current = {}; setTierOf({}); setFixes({}); fixesRef.current = {};
   }
   // A new round where each learner has the follow-up that suits how they did (lib/adaptive.ts).
   function startFollowUp(t: Tiers, by: Record<string, Tier>) {
     const r = roundRef.current;
     if (!r) return;
-    order.current = []; setAnswers(new Map()); setFocus(null); setShowBy(null); setInks({}); inksRef.current = {};
+    order.current = []; setAnswers(new Map()); setFocus(null); setShowBy(null); setInks({}); inksRef.current = {}; setFixes({}); fixesRef.current = {};
     const each: Record<string, Task> = {};
     for (const [id, tier] of Object.entries(by)) each[id] = { q: t[tier].q.trim().slice(0, 300), img: null };
     setRound({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, q: t.same.q.trim().slice(0, 200), open: true, mode: r.mode, show: null, max: r.max, marks: {}, img: null, per: each,
@@ -224,7 +244,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
   const setTask = (who: string, t: Partial<Task>) => setPer((cur) => ({ ...cur, [who]: { q: cur[who]?.q ?? "", img: cur[who]?.img ?? null, ...t } }));
   function end() {
     if (round) send("ab-round", { host: true, round: { ...round, open: false } });
-    setRound(null); setFocus(null); setTierOf({}); onClose();
+    setRound(null); setFocus(null); setTierOf({}); setFixes({}); fixesRef.current = {}; onClose();
   }
   const labelFor = (a: Answer) => (anon ? anonLabel(order.current, a.by) : a.name);
   // Mark one learner's answer (null = take the mark back). Their board shows it
@@ -239,7 +259,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     if (!sessionId) return;
     fetch("/api/live-sessions/results", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(mark == null ? { id: sessionId, action: "unmark", roundId: r.id, studentId: a.by }
-        : { id: sessionId, action: "mark", roundId: r.id, question: taskFor(r, a.by).q, studentId: a.by, name: a.name, mark, max: r.max, feedback: r.notes[a.by] ?? "", answer: keptAnswer(a, inksRef.current[a.by]) }) })
+        : { id: sessionId, action: "mark", roundId: r.id, question: taskFor(r, a.by).q, studentId: a.by, name: a.name, mark, max: r.max, feedback: r.notes[a.by] ?? "", answer: keptAnswer(a, inksRef.current[a.by], fixesRef.current[a.by]) }) })
       .then((res) => setMarkNote(res.status === 501 ? "Marks show on learners’ boards, but to keep them for the class results run supabase/migration-class-marks.sql." : res.ok ? null : "A mark wasn’t saved for the results — check the internet."))
       .catch(() => setMarkNote("A mark wasn’t saved for the results — check the internet."));
   }
@@ -252,8 +272,19 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
     if (t) notes[a.by] = t; else delete notes[a.by];
     setRound({ ...r, notes });
     if (sessionId) fetch("/api/live-sessions/results", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: sessionId, action: "note", roundId: r.id, studentId: a.by, name: a.name, question: taskFor(r, a.by).q, max: r.max, feedback: t, answer: keptAnswer(a, inksRef.current[a.by]) }) }).catch(() => {});
+      body: JSON.stringify({ id: sessionId, action: "note", roundId: r.id, studentId: a.by, name: a.name, question: taskFor(r, a.by).q, max: r.max, feedback: t, answer: keptAnswer(a, inksRef.current[a.by], fixesRef.current[a.by]) }) }).catch(() => {});
   }
+  // The correction space: send the right working to one learner, or to everyone who missed.
+  function giveFix(a: Answer, fix: Fix) {
+    const r = roundRef.current;
+    if (!r) return;
+    const f = { text: fix.text.trim().slice(0, 500), ink: fix.ink.slice(-150) };
+    const next = { ...fixesRef.current, [a.by]: f }; setFixes(next); fixesRef.current = next;
+    send("ab-fix", { host: true, round: r.id, to: a.by, text: f.text, ink: f.ink });
+    if (sessionId) fetch("/api/live-sessions/results", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: sessionId, action: "note", roundId: r.id, studentId: a.by, name: a.name, question: taskFor(r, a.by).q, max: r.max, feedback: r.notes[a.by] ?? "", answer: keptAnswer(a, inksRef.current[a.by], f) }) }).catch(() => {});
+  }
+  const missedNow = (r: Round) => [...answers.values()].filter((a) => r.marks[a.by] != null && r.marks[a.by] < r.max);
   // Send a learner's work back to try again (with any feedback written).
   function sendBack(a: Answer) {
     const r = roundRef.current;
@@ -413,6 +444,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                       <div className="flex items-center justify-between gap-1 bg-slate-50 px-2 py-1 text-xs font-black">
                         <span className="min-w-0 truncate">{labelFor(a)}</span>
                         {showing && <span className="rounded bg-amber-400 px-1.5 text-[10px] text-ink">On screen</span>}
+                        {fixes[a.by] && <span className="shrink-0 text-[12px]" title="Correction sent" aria-label="Correction sent">🛠</span>}
                         {tierOf[a.by] && <span className="shrink-0 text-[12px]" title={`Follow-up: ${tierOf[a.by]}`} aria-label={`Follow-up: ${tierOf[a.by]}`}>{TIERS.find((x) => x.k === tierOf[a.by])?.icon}</span>}
                         {a.done && <span className="shrink-0 rounded bg-emerald-100 px-1.5 text-[10px] text-emerald-800">Handed in</span>}
                         {a.sure != null && <span className="shrink-0 text-[12px]" title={a.sure ? "Said they're sure" : "Said they're not sure"} aria-label={a.sure ? "Sure" : "Not sure"}>{a.sure ? "😎" : "🤔"}</span>}
@@ -458,6 +490,9 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
                   colour={markColour} setColour={setMarkColour} max={round.max} name={labelFor(focused)} mark={round.marks[focused.by]}
                   onInk={(ink) => markOn(focused, ink)} onMark={(m) => giveMark(focused, m)} />
               ) : <AnswerView a={{ ...focused, bg: taskFor(round, focused.by).img }} big />}
+              <CorrectionEditor key={focused.by} name={labelFor(focused)} sent={fixes[focused.by] ?? null} missedCount={missedNow(round).length}
+                keyText={(() => { const x = keyFor(taskFor(round, focused.by).q); return x ? [x.a, x.w].filter(Boolean).join("\n") : ""; })()}
+                onSend={(f) => giveFix(focused, f)} onSendMissed={(f) => missedNow(round).forEach((a) => giveFix(a, f))} />
               <div className="mt-3 grid gap-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
                 <label className="text-xs font-black text-ink/60" htmlFor="ab-feedback">Feedback for {labelFor(focused)} <span className="font-bold text-ink/45">— only they see it, and it’s kept with their mark</span></label>
                 <div className="flex flex-wrap gap-1.5">
@@ -522,6 +557,7 @@ export default function AnswerBoards({ sessionId, host, myId, myName, people, op
         {marked.length > 0 && <MarkedLine ink={marked} />}
         {note && <p role="status" className="rounded-xl bg-[#E2F3F2] p-3 text-sm font-bold text-ink ring-1 ring-[#A9D6D3]"><span className="block text-[11px] font-black uppercase tracking-wider text-[#0E6E72]">💬 From your tutor</span>{note}</p>}
         {round.marks[myId] != null && <YourMark mark={round.marks[myId]} max={round.max} />}
+        {myFix && <CorrectionCard fix={myFix} />}
         {(round.closed || timeUp) && !done && <p role="status" className="rounded-xl bg-slate-100 p-3 text-sm font-black text-ink/75">{timeUp && !round.closed ? "Time’s up — " : ""}Your tutor has closed answers. They can see what you did.</p>}
         {round.show && (
           <div className="rounded-xl bg-amber-50 p-2 ring-1 ring-amber-200">
@@ -630,7 +666,7 @@ function YourMark({ mark, max }: { mark: number; max: number }) {
 }
 
 // What's kept with a mark for the learner's results: their typed answer and photos.
-const keptAnswer = (a: Answer, ink?: Stroke[]) => ({ text: a.text, imgs: a.imgs ?? [], strokes: a.strokes.slice(-300), ink: (ink ?? []).slice(-150) });
+const keptAnswer = (a: Answer, ink?: Stroke[], fix?: Fix) => ({ text: a.text, imgs: a.imgs ?? [], strokes: a.strokes.slice(-300), ink: (ink ?? []).slice(-150), ...(fix && !fixBlank(fix) ? { fix: { text: fix.text, ink: fix.ink.slice(-150) } } : {}) });
 
 // One answer as the tutor (or the class) sees it: the drawing, the typed text, or both.
 function AnswerView({ a, big = false }: { a: { strokes: Stroke[]; text: string; imgs?: string[]; bg?: string | null }; big?: boolean }) {

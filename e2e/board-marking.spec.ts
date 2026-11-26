@@ -64,13 +64,13 @@ test("the tutor marks a learner's board; the learner sees it at once; a mark fro
   // The tutor opens it and marks: two ticks, a cross, a word in red pen.
   await panel.getByRole("button", { name: /Open .*answer/ }).click();
   const one = teacher.getByRole("dialog", { name: "One answer" });
-  const board = one.getByRole("img", { name: "Mark on the page" });
+  const board = one.getByRole("img", { name: "Mark on the page" }).first(); // the learner's board (the correction board is below it)
   await expect(one.getByLabel("Answer key")).toContainText("🔑 Answer: 15 and 4");
   await one.getByRole("button", { name: /Tick/ }).click();
   await tap(teacher, board, [0.45, 0.32]); await tap(teacher, board, [0.45, 0.7]);
   await one.getByRole("button", { name: /Cross/ }).click();
   await tap(teacher, board, [0.55, 0.7]);
-  await one.getByRole("button", { name: /Undo/ }).click(); // the cross goes, both strokes of it
+  await one.getByRole("button", { name: /Undo/ }).first().click(); // the cross goes, both strokes of it
   await expect(one.getByLabel("Tick count")).toContainText("✓ 2");
   await expect(one.getByLabel("Tick count")).not.toContainText("✗");
   await one.getByRole("button", { name: /Cross/ }).click();

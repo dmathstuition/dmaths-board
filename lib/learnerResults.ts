@@ -10,7 +10,7 @@ import { classExams } from "@/lib/classExams";
 import { classHomework } from "@/lib/classHomework";
 import { cleanExamQuestions, cleanPageMarks, reviewItems, type ExamQ, type ReviewItem } from "@/lib/exams";
 
-export type WorkItem = { question: string; mark: number | null; max: number; feedback: string; answer: { text: string; imgs: string[] } | null };
+export type WorkItem = { question: string; mark: number | null; max: number; feedback: string; answer: { text: string; imgs: string[] } | null; correction?: string };
 export type QuizItem = { q: string; options: string[]; answer: number; choice: number | null; correct: boolean };
 export type QuizResult = { title: string; items: QuizItem[] };
 // items: question by question, when the teacher let learners see the answers;
@@ -21,6 +21,7 @@ export type LearnerDetail = LearnerReport & { work: WorkItem[]; quizzes: QuizRes
 const asItem = (m: any): WorkItem => ({
   question: String(m.question ?? ""), mark: m.mark ?? null, max: Number(m.max_mark) || 1, feedback: String(m.feedback ?? ""),
   answer: m.answer && typeof m.answer === "object" ? { text: cleanAnswerText(m.answer.text), imgs: cleanImgs(m.answer.imgs) } : null,
+  ...(typeof m.answer?.fix?.text === "string" && m.answer.fix.text.trim() ? { correction: m.answer.fix.text.replace(/\r/g, "").trim().slice(0, 500) } : {}),
 });
 
 export async function learnerDetail(sessionId: string, studentId: string): Promise<LearnerDetail | null> {

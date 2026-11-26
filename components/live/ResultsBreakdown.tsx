@@ -74,6 +74,7 @@ export default function ResultsBreakdown({ d }: { d: LearnerDetail }) {
                   </div>
                 )}
                 {w.feedback && <p className="mt-2 rounded-lg bg-[#E2F3F2] px-2 py-1.5 text-sm font-semibold"><span className="font-black text-[#0E6E72]">💬 Your tutor: </span>{w.feedback}</p>}
+                {w.correction && <p className="mt-2 whitespace-pre-wrap rounded-lg bg-amber-50 px-2 py-1.5 text-sm font-semibold ring-1 ring-amber-200"><span className="font-black text-amber-800">✏️ Correction: </span>{w.correction}</p>}
               </li>
             ))}
           </ol>

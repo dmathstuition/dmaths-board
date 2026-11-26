@@ -26,7 +26,12 @@ const keptAnswer = (v: any) => (v && typeof v === "object" ? {
   text: cleanAnswerText(v.text), imgs: cleanImgs(v.imgs),
   ...(Array.isArray(v.strokes) && v.strokes.length ? { strokes: cleanAnswerStrokes(v.strokes).slice(-300) } : {}),
   ...(Array.isArray(v.ink) && v.ink.length ? { ink: cleanAnswerStrokes(v.ink).slice(-150) } : {}),
+  // The correction the tutor wrote for them (the text, and anything drawn).
+  ...(v.fix && typeof v.fix === "object" && (String(v.fix.text ?? "").trim() || (Array.isArray(v.fix.ink) && v.fix.ink.length))
+    ? { fix: { text: cleanFixText(v.fix.text), ink: cleanAnswerStrokes(v.fix.ink).slice(-150) } } : {}),
 } : null);
+
+const cleanFixText = (t: unknown) => String(t ?? "").replace(/\r/g, "").trim().slice(0, 500);
 
 async function host(id: string) {
   const v = await sessionViewer(id).catch(() => null);
