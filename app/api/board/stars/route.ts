@@ -6,6 +6,7 @@ import { standings } from "@/lib/starsServer";
 import { findGame } from "@/lib/games/catalog";
 
 // The class leaderboard (lib/stars.ts):
+//   GET  ?sessionId=&rounds=1 → { rounds }  (the teacher: every saved round in this class)
 //   GET  ?sessionId=&scope=class|all → { list }   (the teacher: this class, or all their classes)
 //   POST { sessionId, gameId, difficulty, score, correct, attempts }  (a learner finished a game round)
 export const dynamic = "force-dynamic";
@@ -14,10 +15,17 @@ const bad = (error: string, status = 400) => NextResponse.json({ error }, { stat
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const sessionId = url.searchParams.get("sessionId") ?? "";
+  const wantRounds = url.searchParams.get("rounds") === "1";
   const scope = url.searchParams.get("scope") === "class" ? "class" : "all";
   const v = await sessionViewer(sessionId).catch(() => null);
   if (!v?.host) return bad("Only the teacher can open the leaderboard.", 403);
   if (!rateLimit(`stars:${v.id}`, 30, 60_000)) return bad("Wait a moment and try again.", 429);
+  if (wantRounds) { // every saved round in this class, newest first — for watching a learner's scores
+    const { data, error } = await supabaseAdmin().from("board_game_scores")
+      .select("student_id,name,game_id,difficulty,score,correct,attempts,created_at").eq("session_id", sessionId).order("created_at", { ascending: false }).limit(400);
+    if (error) return bad(error.message, 500);
+    return NextResponse.json({ rounds: data ?? [] }, { headers: { "Cache-Control": "no-store" } });
+  }
   const { list, classes } = await standings(v.session.host_id ?? v.id, sessionId, v.session.created_at, scope);
   return NextResponse.json({ list, classes }, { headers: { "Cache-Control": "no-store" } });
 }

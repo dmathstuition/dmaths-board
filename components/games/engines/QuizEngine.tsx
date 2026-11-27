@@ -7,12 +7,13 @@ import type { EngineProps } from "@/components/games/GamePlayer";
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "✓"];
 
 // Type-in quiz: big question, answer box, chunky keypad (keyboard works too).
-export default function QuizEngine({ game, difficulty, report, rng = Math.random }: EngineProps) {
+export default function QuizEngine({ game, difficulty, report, show, rng = Math.random }: EngineProps) {
   const [q, setQ] = useState(() => question(game.skill, difficulty, rng));
   const [val, setVal] = useState("");
   const [state, setState] = useState<"idle" | "right" | "wrong">("idle");
   const [touch, setTouch] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  useEffect(() => { show?.({ lead: q.ask, prompt: q.prompt.includes("?") || q.ask ? q.prompt : `${q.prompt} = ?` }); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On phones use only the on-screen keypad so the native keyboard doesn't cover the game.
   useEffect(() => {

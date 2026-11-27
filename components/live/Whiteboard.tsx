@@ -1780,7 +1780,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
   }
   const gamesLayer = !readOnly && (gamesUsed || !host) && !(lessonId && !host) && rootEl
     ? createPortal(
-        <GamesPanel host={host} sessionId={sessionId} open={gamesOpen} live={!lessonId} onOpen={() => setGamesOpen(true)} onClose={() => setGamesOpen(false)}
+        <GamesPanel host={host} sessionId={sessionId} myId={myId} myName={myName} people={people} open={gamesOpen} live={!lessonId} onOpen={() => setGamesOpen(true)} onClose={() => setGamesOpen(false)}
           onLaunchQuiz={host && !lessonId ? launchQuiz : undefined} keep={keep} />,
         full ? rootEl : document.body)
     : null;

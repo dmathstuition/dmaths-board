@@ -20,7 +20,7 @@ const TILES = [
   { bg: "#16A34A", shadow: "#166534", shape: "■" },
 ];
 
-export default function ChoiceEngine({ game, difficulty, report, rng = Math.random, items }: EngineProps) {
+export default function ChoiceEngine({ game, difficulty, report, show, rng = Math.random, items }: EngineProps) {
   const skill = game.skill;
   // A fixed list (recap game) is played in a shuffled loop; otherwise generated.
   const queue = useRef<ChoiceQ[]>([]);
@@ -31,6 +31,7 @@ export default function ChoiceEngine({ game, difficulty, report, rng = Math.rand
     return { ...q, options: [...q.options].sort(() => rng() - 0.5) };
   };
   const [q, setQ] = useState(draw);
+  useEffect(() => { show?.({ lead: q.lead, prompt: q.prompt, options: q.options }); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
   const [picked, setPicked] = useState<number | null>(null);
   const busy = useRef(false);
 

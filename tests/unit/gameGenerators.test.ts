@@ -138,7 +138,7 @@ describe("class games catalog", () => {
     const ids = CLASS_GAMES.map((g) => g.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const g of CLASS_GAMES) {
-      expect(["quiz", "balloon", "match", "truefalse", "bonds", "choice", "letters"]).toContain(g.kind);
+      expect(["quiz", "balloon", "match", "truefalse", "bonds", "choice", "letters", "boss", "race", "ladder", "sort"]).toContain(g.kind);
       expect(g.seconds).toBeGreaterThan(0);
     }
     expect(findGame("times-blitz")?.skill).toBe("multiplication");

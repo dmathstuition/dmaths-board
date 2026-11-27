@@ -7,7 +7,13 @@ import type { Difficulty, Skill } from "@/lib/games/generators";
 // To add a game: add an entry here. `kind` picks the engine
 // (components/games/engines); `skill` picks the questions (lib/games/generators).
 
-export type GameKind = "quiz" | "balloon" | "match" | "truefalse" | "bonds" | "choice" | "letters";
+// quiz/balloon/match/truefalse/bonds/choice/letters: the original arcade games. The newer
+// formats play any numeric or multiple-choice skill (lib/games/source.ts):
+//   boss — hit a boss with right answers, lose hearts for wrong ones
+//   race — drive a car round a track against three animal rivals
+//   ladder — climb ten rungs, safe rungs on the way, 50:50 and skip
+//   sort — sort things falling into the right box (lib/games/sorting.ts, `sort`)
+export type GameKind = "quiz" | "balloon" | "match" | "truefalse" | "bonds" | "choice" | "letters" | "boss" | "race" | "ladder" | "sort";
 export type GameSubject = "maths" | "english" | "science";
 export const SUBJECT_LABEL: Record<GameSubject, string> = { maths: "Maths", english: "English", science: "Science" };
 // Primary 4–6, JSS 1–3, or SSS 1–3 (and A-Level) — the admin filters by this.
@@ -28,6 +34,7 @@ export type ClassGame = {
   stage: Stage;
   subject?: GameSubject;    // omitted = maths
   howTo: string;
+  sort?: string;            // a Speed Sort game's set (lib/games/sorting.ts)
 };
 
 export const CLASS_GAMES: ClassGame[] = [
@@ -257,6 +264,82 @@ export const CLASS_GAMES: ClassGame[] = [
   { id: "odd-one-out", stage: "primary", subject: "english", title: "Odd One Out", emoji: "🦄", kind: "choice", skill: "oddOneOut", seconds: 60,
     colors: ["#A855F7", "#F43F5E"], band: "Primary 4 – SSS 1",
     tagline: "Three words belong together. Which one doesn't?", howTo: "Spot the word that isn't in the same group. Hard mode groups words by grammar." },
+  // ── New formats: Boss Battle, Race Track, Money Ladder, Speed Sort ──
+  { id: "times-dragon", stage: "primary", title: "Times Table Dragon", emoji: "🐉", kind: "boss", skill: "multiplication", seconds: 90,
+    colors: ["#B91C1C", "#F97316"], band: "Primary 4 – JSS 2",
+    tagline: "Fight the dragon with times-table facts. Wrong answers cost a heart!", howTo: "Pick the right answer to hit the dragon — a streak hits harder. Three wrong answers and you're out. Beat it and a bigger dragon comes." },
+  { id: "fraction-golem", stage: "junior", title: "Fraction Golem", emoji: "🗿", kind: "boss", skill: "fractions", seconds: 90,
+    colors: ["#475569", "#0EA5E9"], band: "JSS 1 – SSS 1",
+    tagline: "Crack the stone giant with fraction know-how.", howTo: "Right answers hit the golem; wrong answers cost a heart. Keep a streak for big hits." },
+  { id: "algebra-ogre", stage: "junior", title: "Algebra Ogre", emoji: "👹", kind: "boss", skill: "linear", seconds: 90,
+    colors: ["#7F1D1D", "#7C3AED"], band: "JSS 2 – SSS 1",
+    tagline: "Solve for x to bash the ogre before it bashes you.", howTo: "Work out x and tap the answer. Right = a hit. Wrong = a lost heart." },
+  { id: "percent-kraken", stage: "junior", title: "Percent Kraken", emoji: "🦑", kind: "boss", skill: "percent", seconds: 90,
+    colors: ["#0E7490", "#4F46E5"], band: "JSS 1 – SSS 2",
+    tagline: "Tame the kraken with percentages of amounts and changes.", howTo: "Pick the right percentage answer to hit the kraken. Three misses and it wins." },
+  { id: "grammar-giant", stage: "junior", subject: "english", title: "Grammar Giant", emoji: "🧙", kind: "boss", skill: "partsOfSpeech", seconds: 90,
+    colors: ["#6D28D9", "#DB2777"], band: "Primary 5 – SSS 2",
+    tagline: "Topple the giant by naming every part of speech.", howTo: "Choose the part of speech of the word in quotes. Right answers hit the giant." },
+  { id: "addition-grand-prix", stage: "primary", title: "Addition Grand Prix", emoji: "🏎️", kind: "race", skill: "addition", seconds: 90,
+    colors: ["#DC2626", "#F59E0B"], band: "Primary 4 – JSS 1",
+    tagline: "Race the Tortoise, the Gazelle and the Cheetah to the finish line.", howTo: "Every right answer moves your car one step. A wrong answer stalls you for a moment. Reach the line first!" },
+  { id: "division-derby", stage: "primary", title: "Division Derby", emoji: "🐎", kind: "race", skill: "division", seconds: 90,
+    colors: ["#16A34A", "#CA8A04"], band: "Primary 5 – JSS 3",
+    tagline: "Gallop round the track with quick division.", howTo: "Pick the right answer to take a step. Beat the animals to the line." },
+  { id: "equation-speedway", stage: "junior", title: "Equation Speedway", emoji: "🏁", kind: "race", skill: "missing", seconds: 90,
+    colors: ["#1D4ED8", "#06B6D4"], band: "Primary 6 – JSS 3",
+    tagline: "Find the missing number to speed round the circuit.", howTo: "Work out what ? must be. Right answers move you forward." },
+  { id: "bodmas-circuit", stage: "junior", title: "BODMAS Circuit", emoji: "🛣️", kind: "race", skill: "bodmas", seconds: 120,
+    colors: ["#4338CA", "#EC4899"], band: "JSS 1 – SSS 2",
+    tagline: "Brackets first! Race on the road of order of operations.", howTo: "Follow BODMAS, pick the answer and drive on. Wrong answers stall your engine." },
+  { id: "ratio-rally", stage: "senior", title: "Ratio Rally", emoji: "🚙", kind: "race", skill: "ratio", seconds: 120,
+    colors: ["#0F766E", "#F97316"], band: "JSS 3 – SSS 2",
+    tagline: "Rally through ratio and proportion problems.", howTo: "Solve the ratio question, choose the answer and move up the track." },
+  { id: "vocabulary-sprint", stage: "junior", subject: "english", title: "Vocabulary Sprint", emoji: "👟", kind: "race", skill: "vocabulary", seconds: 120,
+    colors: ["#9333EA", "#0EA5E9"], band: "Primary 5 – SSS 3",
+    tagline: "Sprint round the track on the meanings of words.", howTo: "Choose the meaning closest to the word shown. Right answers take you forward." },
+  { id: "ladder-maths", stage: "junior", title: "Naira Ladder: Maths", emoji: "💰", kind: "ladder", skill: "mixed", seconds: 150,
+    colors: ["#B45309", "#EAB308"], band: "Primary 5 – JSS 3",
+    tagline: "Climb ten rungs of maths. Safe rungs keep your prize!", howTo: "Answer to climb. Reach ₦1,000 and the top rung to be safe. A wrong answer drops you to the last safe rung. Use 50:50 or Skip once each." },
+  { id: "ladder-algebra", stage: "senior", title: "Naira Ladder: Algebra", emoji: "🪙", kind: "ladder", skill: "linear", seconds: 150,
+    colors: ["#92400E", "#16A34A"], band: "JSS 2 – SSS 2",
+    tagline: "Ten rungs of equations to the top prize.", howTo: "Solve for x and climb. Safe rungs hold your prize if you slip." },
+  { id: "ladder-percent", stage: "senior", title: "Naira Ladder: Percentages", emoji: "💵", kind: "ladder", skill: "percent", seconds: 150,
+    colors: ["#047857", "#CA8A04"], band: "JSS 1 – SSS 2",
+    tagline: "Climb the ladder one percentage at a time.", howTo: "Pick the right answer. Use 50:50 when stuck — once!" },
+  { id: "ladder-grammar", stage: "senior", subject: "english", title: "Naira Ladder: Grammar", emoji: "📚", kind: "ladder", skill: "concord", seconds: 150,
+    colors: ["#0F766E", "#7C3AED"], band: "JSS 2 – SSS 3 · WAEC",
+    tagline: "Ten rungs of WAEC-style grammar.", howTo: "Choose the correct verb to climb. Safe rungs keep your prize." },
+  { id: "sort-odd-even", stage: "primary", title: "Odd or Even Sort", emoji: "🎲", kind: "sort", sort: "odd-even", skill: "mixed", seconds: 45,
+    colors: ["#2563EB", "#22C55E"], band: "Primary 4 – Primary 6",
+    tagline: "Sort the numbers into odd and even — fast!", howTo: "A number appears. Tap the box it belongs in before it runs out of time." },
+  { id: "sort-multiples", stage: "primary", title: "Multiples Sort", emoji: "✖️", kind: "sort", sort: "multiples", skill: "mixed", seconds: 60,
+    colors: ["#7C3AED", "#F97316"], band: "Primary 5 – JSS 1",
+    tagline: "Is it in the 3 times table, the 4, or neither?", howTo: "Tap Multiple of 3, Multiple of 4 or Neither." },
+  { id: "sort-half", stage: "primary", title: "Bigger or Smaller than ½", emoji: "🍕", kind: "sort", sort: "half", skill: "mixed", seconds: 60,
+    colors: ["#E11D48", "#F59E0B"], band: "Primary 5 – JSS 1",
+    tagline: "Compare each fraction with a half in a flash.", howTo: "Tap Less than ½, Equal to ½ or More than ½." },
+  { id: "sort-prime", stage: "junior", title: "Prime or Not Sort", emoji: "🔢", kind: "sort", sort: "prime-not", skill: "mixed", seconds: 60,
+    colors: ["#0891B2", "#7C3AED"], band: "Primary 6 – JSS 2",
+    tagline: "Spot the primes among the crowd.", howTo: "Tap Prime or Not prime. Remember: 1 isn't prime, and 2 is the only even prime." },
+  { id: "sort-squares", stage: "junior", title: "Square or Not Sort", emoji: "🟦", kind: "sort", sort: "squares", skill: "mixed", seconds: 60,
+    colors: ["#1D4ED8", "#10B981"], band: "JSS 1 – JSS 3",
+    tagline: "Is it a square number? Decide quickly.", howTo: "Tap Square number or Not a square." },
+  { id: "sort-angles", stage: "junior", title: "Angle Types Sort", emoji: "📐", kind: "sort", sort: "angles", skill: "mixed", seconds: 75,
+    colors: ["#BE185D", "#6366F1"], band: "Primary 6 – JSS 2",
+    tagline: "Acute, right, obtuse or reflex — sort each angle.", howTo: "Tap the box for the angle: under 90°, exactly 90°, 90–180° or over 180°." },
+  { id: "sort-word-class", stage: "primary", subject: "english", title: "Noun, Verb or Adjective", emoji: "🏷️", kind: "sort", sort: "word-class", skill: "mixed", seconds: 60,
+    colors: ["#DB2777", "#F59E0B"], band: "Primary 4 – JSS 1",
+    tagline: "Sort each word by what it does in a sentence.", howTo: "Tap Noun, Verb or Adjective for the word that appears." },
+  { id: "sort-states", stage: "primary", subject: "science", title: "Solid, Liquid or Gas", emoji: "💧", kind: "sort", sort: "states", skill: "mixed", seconds: 60,
+    colors: ["#0EA5E9", "#10B981"], band: "Primary 4 – JSS 1",
+    tagline: "Sort the materials by their state of matter.", howTo: "Tap Solid, Liquid or Gas for each material at room temperature." },
+  { id: "sort-living", stage: "primary", subject: "science", title: "Living or Non-living", emoji: "🌱", kind: "sort", sort: "living", skill: "mixed", seconds: 45,
+    colors: ["#16A34A", "#84CC16"], band: "Primary 3 – JSS 1",
+    tagline: "Is it alive? Sort living things from non-living.", howTo: "Tap Living or Non-living for each thing." },
+  { id: "sort-metals", stage: "junior", subject: "science", title: "Metal or Non-metal", emoji: "🔩", kind: "sort", sort: "metals", skill: "mixed", seconds: 60,
+    colors: ["#475569", "#F59E0B"], band: "JSS 1 – JSS 3",
+    tagline: "Sort the elements into metals and non-metals.", howTo: "Tap Metal or Non-metal for the element shown." },
 ];
 
 export const DIFFICULTY_LABEL: Record<Difficulty, string> = { easy: "Easy", medium: "Medium", hard: "Hard" };

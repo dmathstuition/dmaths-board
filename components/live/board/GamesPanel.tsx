@@ -7,6 +7,9 @@ import GamePlayer from "@/components/games/GamePlayer";
 import { CLASS_GAMES, STAGE_LABEL, findGame, subjectOf, type ClassGame, type GameSubject, type Stage } from "@/lib/games/catalog";
 import type { Difficulty } from "@/lib/games/generators";
 import { UK_SETS, UK_STAGE_LABEL, findUKSet, gameItems, quizQuestions, type UKSet, type UKStage, type UKSubject } from "@/lib/ukPrimary";
+import GameWatch from "@/components/live/board/GameWatch";
+import { addToFeed, cleanSnap, isStale, type Live, type LiveSnap, type RoundRow } from "@/lib/games/watch";
+import { playableAsFormat, quizFromSkill } from "@/lib/games/source";
 import { useKeptState, type KeepStore } from "@/lib/keptState";
 
 // Games and ready-made quizzes on the board, for early years and primary
@@ -46,7 +49,34 @@ function parsePick(v: unknown): Pick | null {
   if (kind === "arcade" && findGame(id) && (d === "easy" || d === "medium" || d === "hard")) return { kind, id, difficulty: d };
   return null;
 }
-function Player({ pick, onExit, exitLabel, sessionId }: { pick: Pick; onExit: () => void; exitLabel: string; sessionId?: string }) {
+// A learner's game tells the teacher how it's going (lib/games/watch): a small
+// snapshot every few seconds — and the question on screen, every second or so,
+// only while the teacher is watching this learner.
+type Reporter = { id: string; name: string; watched: () => boolean; scale: number };
+function useReporter(pick: Pick, rep: Reporter | undefined) {
+  const send = useLive();
+  const snap = useRef<LiveSnap | null>(null), sent = useRef({ at: 0, key: "", phase: "" });
+  const r = useRef(rep); r.current = rep;
+  const game = pickKey(pick);
+  useEffect(() => {
+    if (!rep) return;
+    const t = setInterval(() => {
+      const s = snap.current, c = r.current;
+      if (!s || !c) return;
+      const now = Date.now(), watched = c.watched();
+      const body = watched ? s : { ...s, now: undefined, last: undefined };
+      const key = JSON.stringify([body.phase, body.score, body.correct, body.attempts, body.streak, body.now?.prompt, body.last?.n]);
+      const every = (watched ? 1300 : 5000 * c.scale), changed = key !== sent.current.key, phaseNew = s.phase !== sent.current.phase;
+      if (!(phaseNew && now - sent.current.at > 700) && !(changed && now - sent.current.at >= every) && now - sent.current.at < 8000) return;
+      sent.current = { at: now, key, phase: s.phase };
+      send("game-live", { by: c.id, name: c.name, game, ...body });
+    }, 700);
+    return () => clearInterval(t);
+  }, [!!rep, game, send]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (s: LiveSnap) => { snap.current = s; };
+}
+function Player({ pick, onExit, exitLabel, sessionId, reporter }: { pick: Pick; onExit: () => void; exitLabel: string; sessionId?: string; reporter?: Reporter }) {
+  const onLive = useReporter(pick, pick.kind === "arcade" ? reporter : undefined);
   // A learner's arcade round counts for their stars on the class leaderboard.
   const onRound = sessionId && pick.kind === "arcade" ? (r: { score: number; correct: number; attempts: number }) => {
     fetch("/api/board/stars", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, gameId: pick.id, difficulty: pick.difficulty, ...r }) }).catch(() => {});
@@ -55,13 +85,19 @@ function Player({ pick, onExit, exitLabel, sessionId }: { pick: Pick; onExit: ()
     const s = findUKSet(pick.id)!;
     return <GamePlayer key={pickKey(pick)} game={ukGame(s)} items={gameItems(s)} difficulty="medium" mode="preview" backHref="#" backLabel={exitLabel} onExit={onExit} />;
   }
-  return <GamePlayer key={pickKey(pick)} game={findGame(pick.id)!} difficulty={pick.difficulty} mode="preview" backHref="#" backLabel={exitLabel} onExit={onExit} onRound={onRound} />;
+  return <GamePlayer key={pickKey(pick)} game={findGame(pick.id)!} difficulty={pick.difficulty} mode="preview" backHref="#" backLabel={exitLabel} onExit={onExit} onRound={onRound} onLive={reporter ? onLive : undefined} />;
 }
+const QUIZ_SKILLS = (() => {
+  const seen = new Map<string, { skill: string; label: string; stage: Stage }>();
+  for (const g of CLASS_GAMES) if (!g.sort && g.skill !== "mixed" && playableAsFormat(g.skill) && !seen.has(g.skill)) seen.set(g.skill, { skill: g.skill, label: g.title.replace(/ (Blitz|Rush|Dash|Run|Sprint|Quest)$/i, ""), stage: g.stage });
+  return [...seen.values()];
+})();
 const titleOf = (p: Pick) => (p.kind === "uk" ? findUKSet(p.id)?.title : findGame(p.id)?.title) ?? "Game";
 
-export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunchQuiz, keep, sessionId }: {
+export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunchQuiz, keep, sessionId, myId, myName, people = [] }: {
   host: boolean; open: boolean; onOpen: () => void; onClose: () => void;
   sessionId?: string; // learners' game rounds earn stars in this class
+  myId?: string; myName?: string; people?: { id: string; name: string }[];
   live: boolean; // in a class (not preparing a lesson)
   onLaunchQuiz?: (title: string, questions: ReturnType<typeof quizQuestions>) => Promise<string | null>; // null = launched
   keep?: KeepStore;
@@ -76,8 +112,30 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
   const [difficulty, setDifficulty] = useKeptState<Difficulty>(keep, "games:difficulty", "easy");
   const [note, setNote] = useState<string | null>(null);
   const [launching, setLaunching] = useState<string | null>(null);
+  // "Quiz from any skill": a fresh live quiz made on the spot, no A.I. needed.
+  const [qSkill, setQSkill] = useState("multiplication");
+  const [qCount, setQCount] = useState(8);
+  const [qSecs, setQSecs] = useState(20);
 
+  const [lives, setLives] = useState<Record<string, Live>>({});
+  const [watching, setWatching] = useState<string | null>(null);   // teacher: whose game is open
+  const [watchOn, setWatchOn] = useState(false);                    // teacher: the learners panel
+  const [rounds, setRounds] = useState<RoundRow[] | null>(null);
+  const [roundsErr, setRoundsErr] = useState<string | null>(null);
+  const watchedRef = useRef<string | null>(null);                    // learner: who the teacher is watching
   const send = useLive({
+    "game-live": (p) => {
+      if (!host) return;
+      const snap = cleanSnap(p), by = String(p?.by ?? "").slice(0, 64);
+      if (!snap || !by) return;
+      const game = String(p?.game ?? "").slice(0, 80), name = String(p?.name ?? "Learner").slice(0, 60);
+      setLives((m) => {
+        const prev = m[by];
+        const feed = addToFeed(prev && prev.game === game ? prev.feed : [], snap.last);
+        return { ...m, [by]: { ...snap, by, name, game, at: Date.now(), feed } };
+      });
+    },
+    "game-watch": (p) => { if (!host && p?.host) watchedRef.current = p.by ? String(p.by) : null; },
     "game-open": (p) => {
       if (host || !p?.host) return;
       const g = parsePick(p.game) ? String(p.game) : null;
@@ -95,6 +153,26 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
     const t = setInterval(tell, 4000 * scale);
     return () => clearInterval(t);
   }, [host, live, shared, playing, send, scale]);
+
+  useEffect(() => {
+    if (!host || !live || !shared) return;
+    const tell = () => send("game-watch", { host: true, by: watching });
+    tell();
+    const t = setInterval(tell, 6000 * scale);
+    return () => clearInterval(t);
+  }, [host, live, shared, watching, send, scale]);
+  async function loadRounds() {
+    if (!sessionId) return;
+    try {
+      const r = await fetch(`/api/board/stars?sessionId=${encodeURIComponent(sessionId)}&rounds=1`, { cache: "no-store" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setRoundsErr(j.error ?? "Couldn't load the scores."); return; }
+      setRoundsErr(null); setRounds(j.rounds ?? []);
+    } catch { setRoundsErr("Couldn't load the scores."); }
+  }
+  const here = useMemo(() => Object.values(lives).filter((l) => l.game === playing && l.phase !== "over" && !isStale(l)).length, [lives, playing]);
+  const liveHere = useMemo(() => Object.fromEntries(Object.entries(lives).filter(([, l]) => l.game === playing)), [lives, playing]);
+  useEffect(() => { if (watchOn && watching) void loadRounds(); }, [watchOn, watching]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Esc hides the panel (and never reaches the board behind it).
   const showing = host ? open : !!theirs && !hidden;
@@ -127,7 +205,8 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
     }
     return (
       <div role="dialog" aria-label={`Game: ${titleOf(pick)}`} data-board-overlay className="fixed inset-0 z-[96] overflow-y-auto overscroll-contain bg-[#0A3B3E]">
-        <Player pick={pick} onExit={() => setHidden(true)} exitLabel="Back to the class board" sessionId={live ? sessionId : undefined} />
+        <Player pick={pick} onExit={() => setHidden(true)} exitLabel="Back to the class board" sessionId={live ? sessionId : undefined}
+          reporter={live && myId ? { id: myId, name: myName ?? "Learner", watched: () => watchedRef.current === myId, scale } : undefined} />
       </div>
     );
   }
@@ -157,6 +236,14 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
     setLaunching(null);
     if (err) setNote(err); else onClose();
   }
+  async function launchSkill() {
+    if (!onLaunchQuiz) return;
+    setLaunching("skill"); setNote(null);
+    const label = QUIZ_SKILLS.find((x) => x.skill === qSkill)?.label ?? qSkill;
+    const err = await onLaunchQuiz(`${label} quiz (${difficulty})`, quizFromSkill(qSkill, difficulty, qCount, qSecs));
+    setLaunching(null);
+    if (err) setNote(err); else onClose();
+  }
   return (
     <div role="dialog" aria-modal="true" aria-label="Games and quizzes" data-board-overlay className="fixed inset-0 z-[96] flex flex-col bg-[#0A3B3E] text-white">
       <div className="flex items-center gap-2 border-b border-white/10 px-2 py-1.5 sm:px-3">
@@ -167,6 +254,9 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
             <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} className="h-4 w-4 accent-amber-400" /> Let learners play
           </label>
         )}
+        {current && live && shared && (
+          <button type="button" onClick={() => { setWatchOn((v) => !v); void loadRounds(); }} aria-pressed={watchOn} aria-label={`Watch learners play, ${here} playing`} className={`${btn} ${watchOn ? "bg-amber-400 text-[#0A3B3E]" : "bg-white/10 hover:bg-white/15"}`}>👀 Watch · {here}</button>
+        )}
         {current && <button type="button" onClick={() => { setPlaying(null); setShared(false); }} className={`${btn} bg-white/10 hover:bg-white/15`}>All games</button>}
         <button type="button" onClick={onClose} aria-label="Hide games" title="Hide — back to the board"
           className={`${btn} bg-white/10 hover:bg-white/15`}><BoardIcon name="down" className="h-4 w-4" /><span className="hidden sm:inline">Hide</span></button>
@@ -175,8 +265,12 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
       </div>
 
       {current ? (
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <Player pick={current} onExit={() => { setPlaying(null); setShared(false); }} exitLabel="All games" />
+          {watchOn && shared && (
+            <GameWatch live={liveHere} people={people} watching={watching} onWatch={setWatching} rounds={rounds} roundsErr={roundsErr}
+              onRefresh={loadRounds} onClose={() => { setWatchOn(false); setWatching(null); }} />
+          )}
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
@@ -256,6 +350,34 @@ export default function GamesPanel({ host, open, onOpen, onClose, live, onLaunch
             ) : (
               <>
                 {!live && <p className="mt-4 rounded-xl bg-white/5 px-3 py-2 text-sm text-white/70">Live quizzes run in a class — open these from the board during a live class. You can still play any of them as a game.</p>}
+                {live && onLaunchQuiz && (
+                  <section aria-label="Quiz from any skill" className="mt-4 rounded-2xl bg-white/5 p-3 ring-1 ring-amber-300/40">
+                    <p className="text-sm font-black">⚡ Make a quiz from any skill <span className="text-xs font-bold text-white/55">· fresh questions each time</span></p>
+                    <div className="mt-2 flex flex-wrap items-end gap-2 text-xs font-bold">
+                      <label className="grid gap-1">Skill
+                        <select value={qSkill} onChange={(e) => setQSkill(e.target.value)} className="min-h-[40px] rounded-lg bg-[#0A3B3E] px-2 text-sm text-white ring-1 ring-white/20">
+                          {QUIZ_SKILLS.map((x) => <option key={x.skill} value={x.skill}>{x.label}</option>)}
+                        </select>
+                      </label>
+                      <label className="grid gap-1">Level
+                        <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as Difficulty)} className="min-h-[40px] rounded-lg bg-[#0A3B3E] px-2 text-sm capitalize text-white ring-1 ring-white/20">
+                          {(["easy", "medium", "hard"] as const).map((d) => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </label>
+                      <label className="grid gap-1">Questions
+                        <select value={qCount} onChange={(e) => setQCount(Number(e.target.value))} className="min-h-[40px] rounded-lg bg-[#0A3B3E] px-2 text-sm text-white ring-1 ring-white/20">
+                          {[5, 8, 10, 15, 20].map((n) => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                      </label>
+                      <label className="grid gap-1">Seconds each
+                        <select value={qSecs} onChange={(e) => setQSecs(Number(e.target.value))} className="min-h-[40px] rounded-lg bg-[#0A3B3E] px-2 text-sm text-white ring-1 ring-white/20">
+                          {[10, 15, 20, 30, 45].map((n) => <option key={n} value={n}>{n}s</option>)}
+                        </select>
+                      </label>
+                      <button type="button" disabled={!!launching} onClick={launchSkill} className={`${btn} bg-amber-400 text-[#0A3B3E] hover:bg-amber-300`}>{launching === "skill" ? "Launching…" : "Launch live quiz"}</button>
+                    </div>
+                  </section>
+                )}
                 <ul className="mt-4 grid gap-2 sm:grid-cols-2">
                   {sets.map((s) => (
                     <li key={s.id} className="flex items-center gap-3 rounded-2xl bg-white/5 p-3 ring-1 ring-white/10">

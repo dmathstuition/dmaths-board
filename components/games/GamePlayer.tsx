@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState, type ComponentType } from "re
 import Confetti from "@/components/ui/Confetti";
 import type { Difficulty, Rng } from "@/lib/games/generators";
 import type { MistakeItem } from "@/lib/games/mistakes";
+import type { LiveSnap, Now } from "@/lib/games/watch";
 import type { ChoiceQ } from "@/lib/games/senior";
 import { DIFFICULTY_LABEL, starsFor, type ClassGame, type GameKind } from "@/lib/games/catalog";
 import QuizEngine from "@/components/games/engines/QuizEngine";
@@ -20,6 +21,10 @@ import { answer, isLightning, newPowerState, type Chest, type PowerEvent } from 
 import { useGameFx } from "@/lib/games/fx";
 import ChoiceEngine from "@/components/games/engines/ChoiceEngine";
 import LettersEngine from "@/components/games/engines/LettersEngine";
+import BossEngine from "@/components/games/engines/BossEngine";
+import RaceEngine from "@/components/games/engines/RaceEngine";
+import LadderEngine from "@/components/games/engines/LadderEngine";
+import SortEngine from "@/components/games/engines/SortEngine";
 
 // The arcade shell every class game runs inside: intro → 3-2-1 → play →
 // results. Engines only report right/wrong; scoring, combo and the clock live
@@ -34,10 +39,13 @@ export type EngineProps = {
   game: ClassGame; difficulty: Difficulty;
   report: (correct: boolean, tags?: string[], item?: ReportItem) => void;
   rng?: Rng; items?: ChoiceQ[];
+  end?: () => void; // the round is won or lost before the clock runs out
+  show?: (now: { lead?: string; prompt: string; options?: string[]; status?: string }) => void; // what's on the screen now (a teacher can watch)
 };
 
 export const ENGINES: Record<GameKind, ComponentType<EngineProps>> = {
   quiz: QuizEngine, balloon: BalloonEngine, match: MatchEngine, truefalse: TrueFalseEngine, bonds: BondsEngine, choice: ChoiceEngine, letters: LettersEngine,
+  boss: BossEngine, race: RaceEngine, ladder: LadderEngine, sort: SortEngine,
 };
 
 type Phase = "intro" | "countdown" | "playing" | "over";
@@ -45,7 +53,7 @@ type Phase = "intro" | "countdown" | "playing" | "over";
 const stars = starsFor;
 
 export default function GamePlayer({
-  game, difficulty, mode, initialBest = 0, backHref, backLabel = "All games", saveTo, items, onSaved, title, onExit, onRound,
+  game, difficulty, mode, initialBest = 0, backHref, backLabel = "All games", saveTo, items, onSaved, title, onExit, onRound, onLive,
 }: {
   game: ClassGame; difficulty: Difficulty; mode: "play" | "preview"; initialBest?: number; backHref: string; backLabel?: string;
   saveTo?: { url: string; body?: Record<string, unknown> }; // where the round is saved (adventure stop, recap game)
@@ -54,6 +62,7 @@ export default function GamePlayer({
   title?: string;
   onExit?: () => void; // played inside a board: a button closes it instead of the links away
   onRound?: (r: { score: number; correct: number; attempts: number }) => void; // a round finished (board stars)
+  onLive?: (s: LiveSnap) => void; // what's happening now — score, clock, the question on screen — so a teacher can watch
 }) {
   const [phase, setPhase] = useState<Phase>("intro");
   const [count, setCount] = useState(3);
@@ -86,6 +95,20 @@ export default function GamePlayer({
   const [roundTags, setRoundTags] = useState<TagTally>({});
 
   const Engine = ENGINES[game.kind];
+  // Watching: a snapshot goes out on every answer, when the question changes, when the phase changes, and about once a second.
+  const phaseRef = useRef<Phase>("intro"); phaseRef.current = phase;
+  const nowRef = useRef<Now | undefined>(undefined), lastRef = useRef<LiveSnap["last"]>(undefined);
+  const liveRef = useRef(onLive); liveRef.current = onLive;
+  const bestRef = useRef(best); bestRef.current = best;
+  const emit = useCallback(() => {
+    const t = tally.current, ph = phaseRef.current;
+    liveRef.current?.({ phase: ph, left: ph === "playing" ? Math.max(0, Math.ceil((endAt.current - Date.now()) / 1000)) : 0, score: t.score, correct: t.correct, attempts: t.attempts,
+      streak: t.streak, best: bestRef.current, now: ph === "playing" ? nowRef.current : undefined, last: lastRef.current });
+  }, []);
+  const show = useCallback((n: Now) => { nowRef.current = n; emit(); }, [emit]);
+  useEffect(() => { if (phase !== "playing") nowRef.current = undefined; emit(); }, [phase, emit]);
+  const finishRef = useRef<() => void>(() => {});
+  const endEarly = useCallback(() => { if (phaseRef.current === "playing") finishRef.current(); }, []);
 
   // Word & grammar games: fetch fresh A.I-written items while the intro shows
   // and mix them into the bank. Each item is re-checked here too; if anything
@@ -153,17 +176,20 @@ export default function GamePlayer({
     if (j.tierUp && j.tier) { setLevelUp(String(j.tier)); fx("levelUp"); }
     else if (j.chapterComplete || j.newBest) fx("best");
   }, [best, mode, game.id, saveTo, onSaved, fx, onExit, onRound]);
+  finishRef.current = finish;
 
   // The clock
   useEffect(() => {
     if (phase !== "playing") return;
+    let ticks = 0;
     const id = setInterval(() => {
       const ms = endAt.current - Date.now();
       setLeft(Math.max(0, Math.ceil(ms / 1000)));
-      if (ms <= 0) { clearInterval(id); finish(); }
+      if (ms <= 0) { clearInterval(id); finish(); return; }
+      if (++ticks % 5 === 0) emit();
     }, 200);
     return () => clearInterval(id);
-  }, [phase, finish]);
+  }, [phase, finish, emit]);
 
   const celebrate = useCallback((emoji: string, title: string, tone: string, sub?: string) => {
     setMoment((m) => ({ k: (m?.k ?? 0) + 1, emoji, title, sub, tone }));
@@ -194,10 +220,12 @@ export default function GamePlayer({
       fx("best");
     }
     setLightning(isLightning(r.state)); setComeback(r.state.comeback); setShield(r.state.shield);
+    lastRef.current = item ? { n: t.attempts, ok, prompt: item.prompt, answer: item.answer } : { n: t.attempts, ok, prompt: `Question ${t.attempts}` };
     setScore(t.score); setCorrect(t.correct); setAttempts(t.attempts); setStreak(t.streak);
+    emit();
     setBestStreak((b) => Math.max(b, t.streak));
     setFlash({ ok, pts: r.points, k: t.attempts, x: r.multiplier });
-  }, [game, fx, celebrate]);
+  }, [game, fx, celebrate, emit]);
 
   // Banners fade on their own.
   useEffect(() => {
@@ -321,7 +349,7 @@ export default function GamePlayer({
                   {moment.sub && <p className="text-xs font-bold opacity-80">{moment.sub}</p>}
                 </div>
               )}
-              <Engine key={round} game={game} difficulty={difficulty} report={report} items={items} />
+              <Engine key={round} game={game} difficulty={difficulty} report={report} items={items} end={endEarly} show={show} />
             </div>
           </div>
         )}

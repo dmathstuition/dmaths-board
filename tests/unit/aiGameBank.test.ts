@@ -107,7 +107,7 @@ describe("extras registry and decks", () => {
   });
 
   it("every word/grammar game skill maps to a bank; maths skills don't", () => {
-    for (const g of CLASS_GAMES.filter((x) => x.subject === "english")) expect(aiKindFor(g.skill), g.id).not.toBeNull();
+    for (const g of CLASS_GAMES.filter((x) => x.subject === "english" && x.kind !== "sort")) expect(aiKindFor(g.skill), g.id).not.toBeNull(); // sorting games have their own word lists
     expect(aiKindFor("multiplication")).toBeNull();
     expect(aiKindFor("quadratics")).toBeNull();
     expect(Object.values(SKILL_KIND).every((k) => k in BANKS)).toBe(true);
