@@ -9,7 +9,8 @@ import { siteBaseUrl } from "@/lib/siteUrl";
 // the live classroom, games and labs.
 const display = Outfit({ subsets: ["latin"], variable: "--font-dmb-display", weight: ["300", "400", "500", "600", "700"] });
 const body = Manrope({ subsets: ["latin"], variable: "--font-dmb-body", weight: ["400", "500", "600", "700", "800"] });
-const hand = Caveat({ subsets: ["latin"], variable: "--font-dmb-hand", weight: ["600", "700"] });
+// Variable font (no fixed weights): Google now serves the fixed-weight files from URLs next/font cannot read.
+const hand = Caveat({ subsets: ["latin"], variable: "--font-dmb-hand" });
 const poppins = Poppins({ subsets: ["latin"], variable: "--font-poppins", weight: ["400", "500", "600", "700", "800"] });
 // Easy-read: made for low vision, and easier for many dyslexic readers (learners switch it on: lib/reading).
 const easy = Atkinson_Hyperlegible({ subsets: ["latin"], variable: "--font-easy", weight: ["400", "700"], display: "swap", preload: false });

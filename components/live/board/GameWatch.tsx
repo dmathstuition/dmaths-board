@@ -28,7 +28,7 @@ export default function GameWatch({ live, people, watching, onWatch, rounds, rou
   const chip = (on: boolean) => `min-h-[36px] rounded-full px-3 text-xs font-black ${on ? "bg-white text-[#0A3B3E]" : "bg-white/10 text-white/80"}`;
 
   return (
-    <aside role="complementary" aria-label="Learners playing" className="fixed right-2 top-14 z-[97] flex max-h-[calc(100%-4rem)] w-[min(26rem,calc(100%-1rem))] flex-col overflow-hidden rounded-2xl bg-[#0F2A2D] text-white shadow-2xl ring-1 ring-white/15">
+    <aside aria-label="Learners playing" className="fixed right-2 top-14 z-[97] flex max-h-[calc(100%-4rem)] w-[min(26rem,calc(100%-1rem))] flex-col overflow-hidden rounded-2xl bg-[#0F2A2D] text-white shadow-2xl ring-1 ring-white/15">
       <div className="flex items-center gap-1.5 border-b border-white/10 p-2">
         <p className="mr-auto pl-1 text-sm font-black">👀 Learners playing <span className="text-white/50">· {playing}</span></p>
         <button type="button" role="tab" aria-selected={tab === "live"} onClick={() => setTab("live")} className={chip(tab === "live")}>Live</button>
