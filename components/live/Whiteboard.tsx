@@ -1280,7 +1280,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
     await drawSlide(ctx, bgsRef.current[page], out.width, out.height);
     ctx.drawImage(c, 0, 0);
     try {
-      const a = document.createElement("a"); a.href = out.toDataURL("image/png"); a.download = `novelia-board-page-${page + 1}.png`; a.click();
+      const a = document.createElement("a"); a.href = out.toDataURL("image/png"); a.download = `dmaths-board-page-${page + 1}.png`; a.click();
     } catch { setStatus("Couldn't save this page"); }
   }
 
@@ -1310,7 +1310,7 @@ export default function Whiteboard({ sessionId, lessonId, host, myId, myName = "
       }
       const bytes = await pdf.save();
       const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/pdf" }));
-      const a = document.createElement("a"); a.href = url; a.download = "novelia-board.pdf"; a.click();
+      const a = document.createElement("a"); a.href = url; a.download = "dmaths-board.pdf"; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       setNotice("PDF downloaded");
     } catch { setNotice("Couldn't make the PDF"); }

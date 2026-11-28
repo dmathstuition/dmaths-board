@@ -95,7 +95,7 @@ function Host({ id, base }: { id: string; base: HostBase }) {
   const s = room.session;
   const ended = s.status === "ended";
   const link = typeof window !== "undefined" ? `${window.location.origin}${s.link}` : s.link;
-  const invite = `Join our interactive class "${s.title}" on ${base === "/app" ? "D-Maths Board" : "Novelia"}: ${link} (PIN ${formatCode(s.code)})`;
+  const invite = `Join our interactive class "${s.title}" on ${base === "/app" ? "D-Maths Board" : "D-Maths Board"}: ${link} (PIN ${formatCode(s.code)})`;
   const here = room.people.filter((p) => p.online).length;
   const hands = room.people.filter((p) => p.handAt).length;
 
